@@ -1,0 +1,9 @@
+﻿-r ../../requirements-base.txt
+numpy==2.2.1
+pandas==2.2.3
+pyarrow==18.1.0
+rasterio==1.4.3
+rioxarray==0.18.1
+xarray==2024.11.0
+dask==2024.12.1
+h3==4.1.2
