@@ -1,37 +1,37 @@
-import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
-import { useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { useEffect, useState } from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { getMe } from "@/lib/api/auth";
+import { clearSession, getAccessToken, getStoredUser, saveSession } from "@/lib/auth/session";
+import { canAccess } from "@/lib/rbac/permissions";
 
-const DefaultFallback = () => (
-  <div className="fixed inset-0 flex items-center justify-center">
-    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
-  </div>
-);
-
-export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement }) {
-  const { isAuthenticated, isLoadingAuth, authChecked, authError, checkUserAuth } = useAuth();
+export default function ProtectedRoute({ permission }) {
+  const location = useLocation();
+  const [state, setState] = useState({ loading: true, user: getStoredUser(), allowed: false });
 
   useEffect(() => {
-    if (!authChecked && !isLoadingAuth) {
-      checkUserAuth();
+    const token = getAccessToken();
+    if (!token) {
+      setState({ loading: false, user: null, allowed: false });
+      return;
     }
-  }, [authChecked, isLoadingAuth, checkUserAuth]);
+    let cancelled = false;
+    getMe()
+      .then((user) => {
+        if (cancelled) return;
+        const session = JSON.parse(localStorage.getItem("maatitrace_session") || "null");
+        if (session) saveSession({ access_token: session.accessToken, refresh_token: session.refreshToken, user });
+        setState({ loading: false, user, allowed: canAccess(user, permission) });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearSession();
+        setState({ loading: false, user: null, allowed: false });
+      });
+    return () => { cancelled = true; };
+  }, [permission]);
 
-  if (isLoadingAuth || !authChecked) {
-    return fallback;
-  }
-
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    }
-    return unauthenticatedElement;
-  }
-
-  if (!isAuthenticated) {
-    return unauthenticatedElement;
-  }
-
+  if (state.loading) return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Checking session...</div>;
+  if (!state.user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!state.allowed) return <Navigate to="/login" replace />;
   return <Outlet />;
 }

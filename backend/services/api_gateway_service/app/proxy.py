@@ -16,12 +16,14 @@ class GatewayProxyError(RuntimeError):
 ROUTE_TARGETS = {
     "auth": settings.auth_service_url,
     "location": settings.district_boundary_service_url,
+    "h3": settings.boundary_index_service_url,
     "fpos": settings.farm_registry_service_url,
     "farmers": settings.farm_registry_service_url,
     "farms": settings.farm_registry_service_url,
     "stac": settings.stac_catalog_service_url,
     "raster": settings.raster_processor_service_url,
     "lakehouse": settings.lakehouse_writer_service_url,
+    "hot-stream": settings.hot_stream_orchestrator_service_url,
     "farm-analysis": settings.hot_stream_orchestrator_service_url,
     "analytics": settings.analytics_query_service_url,
 }
