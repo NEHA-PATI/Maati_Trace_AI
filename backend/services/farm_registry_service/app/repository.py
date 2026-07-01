@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from uuid import UUID
 
@@ -628,6 +629,104 @@ def get_farm(farm_id: UUID) -> dict | None:
 
     with engine.connect() as conn:
         row = conn.execute(query, {"farm_id": str(farm_id)}).mappings().first()
+
+    return dict(row) if row else None
+
+
+def get_farm_for_repair(farm_id: UUID | str) -> dict | None:
+    query = text(
+        """
+        SELECT
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cells,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active
+        FROM farms
+        WHERE farm_id = :farm_id
+          AND is_active = TRUE
+        LIMIT 1;
+        """
+    )
+
+    with engine.connect() as conn:
+        row = conn.execute(query, {"farm_id": str(farm_id)}).mappings().first()
+
+    return dict(row) if row else None
+
+
+def update_farm_derived_fields(
+    farm_id: UUID | str,
+    *,
+    district_code: int | None = None,
+    block_code: int | None = None,
+    h3_resolution: int | None = None,
+    h3_cells: list[int] | None = None,
+    h3_cell_count: int | None = None,
+    area_acres: float | None = None,
+    bbox: list[float] | None = None,
+) -> dict | None:
+    query = text(
+        """
+        UPDATE farms
+        SET
+            district_code = COALESCE(:district_code, district_code),
+            block_code = COALESCE(:block_code, block_code),
+            h3_resolution = COALESCE(:h3_resolution, h3_resolution),
+            h3_cells = COALESCE(:h3_cells, h3_cells),
+            h3_cell_count = COALESCE(:h3_cell_count, h3_cell_count),
+            area_acres = COALESCE(:area_acres, area_acres),
+            bbox = COALESCE(CAST(:bbox AS JSONB), bbox),
+            updated_at = now()
+        WHERE farm_id = :farm_id
+          AND is_active = TRUE
+        RETURNING
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active;
+        """
+    )
+
+    payload = {
+        "farm_id": str(farm_id),
+        "district_code": district_code,
+        "block_code": block_code,
+        "h3_resolution": h3_resolution,
+        "h3_cells": h3_cells,
+        "h3_cell_count": h3_cell_count,
+        "area_acres": area_acres,
+        "bbox": json.dumps(bbox) if bbox is not None else None,
+    }
+
+    with engine.begin() as conn:
+        row = conn.execute(query, payload).mappings().first()
 
     return dict(row) if row else None
 

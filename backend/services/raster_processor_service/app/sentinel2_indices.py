@@ -536,6 +536,7 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
+from pyproj import Transformer
 
 
 class RasterProcessorError(RuntimeError):
@@ -1017,33 +1018,183 @@ def _aggregate_whole_bbox(
     return [row]
 
 
+def _sample_bands_at_point(
+    asset_map: dict[str, str],
+    lon: float,
+    lat: float,
+) -> dict[str, float | None]:
+    sample_values: dict[str, float | None] = {}
+    with rasterio.Env(
+        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        CPL_VSIL_CURL_USE_HEAD="NO",
+        GTIFF_SRS_SOURCE="EPSG",
+        VSI_CACHE="TRUE",
+        GDAL_HTTP_MAX_RETRY="3",
+        GDAL_HTTP_RETRY_DELAY="1",
+        GDAL_HTTP_TIMEOUT="120",
+    ):
+        with rasterio.open(asset_map["red"]) as ref_dataset:
+            if ref_dataset.crs is None:
+                raise RasterProcessorError("Raster asset has no CRS.")
+            transformer = Transformer.from_crs("EPSG:4326", ref_dataset.crs, always_xy=True)
+            x, y = transformer.transform(lon, lat)
+
+            band_names = {
+                "mean_blue": "blue",
+                "mean_green": "green",
+                "mean_red": "red",
+                "mean_rededge1": "rededge1",
+                "mean_rededge2": "rededge2",
+                "mean_rededge3": "rededge3",
+                "mean_nir": "nir",
+                "mean_nir08": "nir08",
+                "mean_swir16": "swir16",
+                "mean_swir22": "swir22",
+            }
+
+            band_samples: dict[str, float | None] = {}
+            for out_name, band_name in band_names.items():
+                href = asset_map.get(band_name)
+                if not href:
+                    band_samples[out_name] = None
+                    continue
+                with rasterio.open(href) as dataset:
+                    sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
+                    value = sample[0]
+                    band_samples[out_name] = _clean_float(float(value) / 10000.0) if np.isfinite(value) else None
+
+            with rasterio.open(asset_map["scl"]) as dataset:
+                sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
+                scl_value = float(sample[0]) if np.isfinite(sample[0]) else np.nan
+
+    blue = band_samples.get("mean_blue")
+    green = band_samples.get("mean_green")
+    red = band_samples.get("mean_red")
+    nir = band_samples.get("mean_nir")
+    swir16 = band_samples.get("mean_swir16")
+    swir22 = band_samples.get("mean_swir22")
+    rededge1 = band_samples.get("mean_rededge1")
+
+    def div(a: float | None, b: float | None) -> float | None:
+        if a is None or b is None:
+            return None
+        if abs(a + b) < 1e-6:
+            return None
+        return _clean_float((a - b) / (a + b))
+
+    ndvi = div(nir, red)
+    gndvi = div(nir, green)
+    evi = None
+    if None not in (nir, red, blue):
+        denom = nir + (6.0 * red) - (7.5 * blue) + 1.0
+        if abs(denom) > 1e-6:
+            evi = _clean_float(2.5 * (nir - red) / denom)
+    savi = None
+    if None not in (nir, red):
+        denom = nir + red + 0.5
+        if abs(denom) > 1e-6:
+            savi = _clean_float(1.5 * (nir - red) / denom)
+    ndmi = div(nir, swir16)
+    ndwi = div(green, nir)
+    mndwi = div(green, swir16)
+    msi = _clean_float((swir16 / nir) if nir not in (None, 0) and swir16 is not None else None)
+    bsi = None
+    if None not in (swir16, red, nir, blue):
+        denom = (swir16 + red) + (nir + blue)
+        if abs(denom) > 1e-6:
+            bsi = _clean_float(((swir16 + red) - (nir + blue)) / denom)
+    nbr = div(nir, swir22)
+    nbr2 = div(swir16, swir22)
+    ndre = div(nir, rededge1)
+    reci = _clean_float((nir / rededge1) - 1.0) if nir is not None and rededge1 not in (None, 0) else None
+
+    cloud_percentage = 0.0 if np.isnan(scl_value) else (100.0 if scl_value in {3, 8, 9, 10, 11} else 0.0)
+    valid_pixel_count = 1 if not np.isnan(scl_value) and scl_value not in {0, 1, 2, 3, 8, 9, 10, 11} else 0
+    cloud_pixel_count = 1 if scl_value in {3, 8, 9, 10, 11} else 0
+    nodata_pixel_count = 1 if np.isnan(scl_value) or scl_value == 0 else 0
+
+    return {
+        "pixel_count": 1,
+        "valid_pixel_count": valid_pixel_count,
+        "cloud_pixel_count": cloud_pixel_count,
+        "nodata_pixel_count": nodata_pixel_count,
+        "cloud_percentage": cloud_percentage,
+        "mean_blue": blue,
+        "mean_green": green,
+        "mean_red": red,
+        "mean_rededge1": rededge1,
+        "mean_rededge2": band_samples.get("mean_rededge2"),
+        "mean_rededge3": band_samples.get("mean_rededge3"),
+        "mean_nir": nir,
+        "mean_nir08": band_samples.get("mean_nir08"),
+        "mean_swir16": swir16,
+        "mean_swir22": swir22,
+        "ndvi": ndvi,
+        "gndvi": gndvi,
+        "evi": evi,
+        "savi": savi,
+        "ndmi": ndmi,
+        "ndwi": ndwi,
+        "mndwi": mndwi,
+        "msi": msi,
+        "bsi": bsi,
+        "nbr": nbr,
+        "nbr2": nbr2,
+        "ndre": ndre,
+        "reci": reci,
+    }
+
+
+def _aggregate_by_h3_cells(
+    scene: dict[str, Any],
+    asset_map: dict[str, str],
+    h3_cells_bigint: list[int],
+) -> list[dict[str, Any]]:
+    features: list[dict[str, Any]] = []
+    for cell_bigint in sorted({int(v) for v in h3_cells_bigint if v is not None}):
+        h3_cell = h3.int_to_str(cell_bigint)
+        lat, lon = h3.cell_to_latlng(h3_cell)
+        sampled = _sample_bands_at_point(asset_map, lon=lon, lat=lat)
+        sampled["h3_index"] = cell_bigint
+        sampled["cloud_percentage"] = sampled.get("cloud_percentage", 0.0)
+        features.append(sampled)
+    return features
+
+
 def process_sentinel2_indices(
     scene: dict[str, Any],
     bbox: list[float],
     h3_resolution: int,
+    h3_cells_bigint: list[int] | None = None,
 ) -> dict[str, Any]:
     asset_map = _build_asset_map(scene["assets"])
     _validate_required_assets(asset_map)
 
-    bands, _transform = _read_all_required_bands(
-        asset_map=asset_map,
-        bbox=bbox,
-    )
+    if h3_cells_bigint:
+        features = _aggregate_by_h3_cells(scene, asset_map, h3_cells_bigint)
+        total_pixels = len(features)
+        total_valid = sum(int(row.get("valid_pixel_count") or 0) for row in features)
+        total_cloud = sum(int(row.get("cloud_pixel_count") or 0) for row in features)
+    else:
+        bands, _transform = _read_all_required_bands(
+            asset_map=asset_map,
+            bbox=bbox,
+        )
 
-    masks = _build_quality_masks(bands)
-    indices = _calculate_index_arrays(bands)
+        masks = _build_quality_masks(bands)
+        indices = _calculate_index_arrays(bands)
 
-    features = _aggregate_whole_bbox(
-        bands=bands,
-        indices=indices,
-        masks=masks,
-        h3_resolution=h3_resolution,
-        bbox=bbox,
-    )
+        features = _aggregate_whole_bbox(
+            bands=bands,
+            indices=indices,
+            masks=masks,
+            h3_resolution=h3_resolution,
+            bbox=bbox,
+        )
 
-    total_pixels = int(bands["red"].size)
-    total_valid = int(np.sum(masks["valid"]))
-    total_cloud = int(np.sum(masks["cloud"]))
+        total_pixels = int(bands["red"].size)
+        total_valid = int(np.sum(masks["valid"]))
+        total_cloud = int(np.sum(masks["cloud"]))
 
     return {
         "source_assets_used": sorted(asset_map.keys()),

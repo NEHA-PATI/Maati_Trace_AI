@@ -40,3 +40,4 @@ Analytics/model notes:
 Known gaps:
 - If the raster processor writes identical per-H3 values upstream, grid variation will still appear flat until that pipeline is fixed
 - Full read/write persistence for grid materialization still depends on the upstream hot-stream job path
+- `POST /api/hot-stream/farms/:farmId/repair` now backfills missing farm metadata before analysis, so DB-inserted farms can be repaired before `Run Latest Analysis`

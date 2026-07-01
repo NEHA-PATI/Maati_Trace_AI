@@ -64,6 +64,7 @@ def run_raster_preview_from_search(
     end_date: str,
     max_cloud_cover: float | None,
     h3_resolution: int,
+    h3_cells_bigint: list[int] | None = None,
 ) -> dict[str, Any]:
     url = (
         f"{settings.raster_processor_service_url}"
@@ -80,6 +81,9 @@ def run_raster_preview_from_search(
         "end_date": end_date,
         "max_cloud_cover": max_cloud_cover,
     }
+
+    if h3_cells_bigint is not None:
+        body["h3_cells_bigint"] = h3_cells_bigint
 
     return _post_json(url, body, timeout=300)
 

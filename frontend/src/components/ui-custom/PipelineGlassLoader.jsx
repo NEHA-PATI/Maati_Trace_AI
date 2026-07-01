@@ -2,7 +2,7 @@ import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Loader2, Satellite, Grid3x3 } from "lucide-react";
 
-export default function PipelineGlassLoader({ open, title = "Processing pipeline", steps = [], currentStep = 0, status = "", details = [], failure = null }) {
+export default function PipelineGlassLoader({ open, title = "Processing pipeline", steps = [], currentStep = 0, status = "", details = [], failure = null, actions = [] }) {
   return (
     <AnimatePresence>
       {open && (
@@ -58,6 +58,21 @@ export default function PipelineGlassLoader({ open, title = "Processing pipeline
             </div>
 
             {failure && <div className="mt-4 rounded-2xl border border-rose-300/30 bg-rose-500/10 p-3 text-sm text-rose-100">{failure}</div>}
+
+            {actions.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {actions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.onClick}
+                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${action.variant === "primary" ? "bg-white text-slate-950 hover:bg-white/90" : "border border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

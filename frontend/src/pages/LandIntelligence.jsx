@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import PipelineStepper from "@/components/ui-custom/PipelineStepper";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import StatStrip from "@/components/ui-custom/StatStrip";
+import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
 import { getFarm } from "@/lib/api/farm";
 import {
@@ -18,7 +19,7 @@ import {
   getLatestSentinel2,
   getSentinel2History,
 } from "@/lib/api/analytics";
-import { materializeFarmAnalysis, materializeFarmGrid, materializeFarmTrends } from "@/lib/api/hotStream";
+import { materializeFarmAnalysis, materializeFarmGrid, materializeFarmTrends, repairFarm } from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/lib/rbac/permissions";
 import { getStoredUser } from "@/lib/auth/session";
 
@@ -34,6 +35,19 @@ const PARAMETERS = [
   { key: "temperature", label: "Surface Temp" },
   { key: "cloud", label: "Cloud" },
   { key: "valid_pixels", label: "Valid Pixels" },
+];
+
+const PIPELINE_STEPS = [
+  "Repairing farm metadata",
+  "Computing H3 cells",
+  "Searching latest satellite scene",
+  "Computing per-H3 satellite indices",
+  "Writing H3 analytics",
+  "Computing trends",
+  "Building 10m grid",
+  "Computing H3-to-grid coverage %",
+  "Computing weighted grid values",
+  "Refreshing land intelligence",
 ];
 
 function normalizeList(payload) {
@@ -66,18 +80,30 @@ function pickTrend(summary, trends, key) {
 function valueFor(cell, param) {
   const fallback = (a, b, c) => a ?? b ?? c ?? null;
   switch (param) {
-    case "ndvi": return fallback(cell.ndvi, cell.weighted_ndvi);
-    case "evi": return fallback(cell.evi, cell.weighted_evi);
-    case "savi": return fallback(cell.savi, cell.weighted_savi);
-    case "ndre": return fallback(cell.ndre, cell.weighted_ndre);
-    case "ndmi": return fallback(cell.ndmi, cell.weighted_ndmi);
-    case "ndwi": return fallback(cell.ndwi, cell.weighted_ndwi);
-    case "msi": return fallback(cell.msi, cell.weighted_msi);
-    case "bsi": return fallback(cell.bsi, cell.weighted_bsi);
-    case "temperature": return fallback(cell.surface_temp_c, cell.weighted_surface_temp_c);
-    case "cloud": return fallback(cell.cloud_percentage, cell.avg_cloud_percentage);
-    case "valid_pixels": return fallback(cell.valid_pixel_percentage);
-    default: return null;
+    case "ndvi":
+      return fallback(cell.ndvi, cell.weighted_ndvi);
+    case "evi":
+      return fallback(cell.evi, cell.weighted_evi);
+    case "savi":
+      return fallback(cell.savi, cell.weighted_savi);
+    case "ndre":
+      return fallback(cell.ndre, cell.weighted_ndre);
+    case "ndmi":
+      return fallback(cell.ndmi, cell.weighted_ndmi);
+    case "ndwi":
+      return fallback(cell.ndwi, cell.weighted_ndwi);
+    case "msi":
+      return fallback(cell.msi, cell.weighted_msi);
+    case "bsi":
+      return fallback(cell.bsi, cell.weighted_bsi);
+    case "temperature":
+      return fallback(cell.surface_temp_c, cell.weighted_surface_temp_c);
+    case "cloud":
+      return fallback(cell.cloud_percentage, cell.avg_cloud_percentage);
+    case "valid_pixels":
+      return fallback(cell.valid_pixel_percentage);
+    default:
+      return null;
   }
 }
 
@@ -118,6 +144,17 @@ export default function LandIntelligence() {
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [hoveredCell, setHoveredCell] = useState(null);
   const [showH3, setShowH3] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineStage, setPipelineStage] = useState(0);
+  const [pipelineStatus, setPipelineStatus] = useState("");
+  const [pipelineFailure, setPipelineFailure] = useState("");
+  const [pipelineDetails, setPipelineDetails] = useState([]);
+
+  function updatePipelineStage(stage, status, details = []) {
+    setPipelineStage(stage);
+    setPipelineStatus(status);
+    setPipelineDetails(details.filter(Boolean));
+  }
 
   async function loadLandIntelligence() {
     const [farmPayload, summaryPayload, latestPayload, historyPayload, trendsPayload, gridCellsPayload, gridValuesPayload, h3Payload] = await Promise.all([
@@ -158,7 +195,9 @@ export default function LandIntelligence() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [farmId]);
 
   useEffect(() => {
@@ -172,7 +211,9 @@ export default function LandIntelligence() {
       if (!cancelled) setSelectedDetails(details);
     }
     loadDetails();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [farmId, selectedCell?.grid_cell_id]);
 
   const mergedGridCells = useMemo(() => {
@@ -187,19 +228,39 @@ export default function LandIntelligence() {
   const displaySelected = selectedDetails?.grid_cell || selectedCell || null;
   const latestSummary = summary || {};
   const h3Enabled = showH3 && canViewTechnicalH3Layer(user);
+  const latestSceneDate = latestSentinel?.scene_datetime || latestSentinel?.observation_date || latestSummary.latest_snapshot_date;
+  const latestSceneId = latestSentinel?.scene_id || latestSummary.latest_scene_id;
+  const hasAnalysis = Boolean(latestSummary.has_analysis || latestSummary.latest_snapshot_date || latestSentinel?.scene_id);
   const stats = [
     { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "—", unit: "ac" },
     { label: "Grid cells", value: displayCells.length || "—", unit: "" },
     { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "—", unit: "" },
-    { label: "Latest scene", value: formatDate(latestSentinel?.scene_datetime || latestSentinel?.observation_date || latestSummary.latest_snapshot_date), unit: "" },
+    { label: "Latest scene", value: latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet", unit: "" },
     { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "—", unit: "%" },
     { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "—", unit: "%" },
   ];
 
   async function runLatestAnalysis() {
     setRefreshing(true);
+    setPipelineOpen(true);
+    setPipelineFailure("");
+    setPipelineDetails([]);
     try {
-      await materializeFarmAnalysis(farmId, {
+      updatePipelineStage(0, "Repairing farm metadata", [
+        farm?.farm_name ? `Farm: ${farm.farm_name}` : `Farm ID: ${farmId}`,
+      ]);
+
+      const repair = await repairFarm(farmId);
+      updatePipelineStage(1, "Computing H3 cells", [
+        `H3 cells: ${repair?.h3_cell_count ?? farm?.h3_cell_count ?? "—"}`,
+        repair?.area_acres ? `Area: ${pretty(repair.area_acres, 2)} ac` : null,
+      ]);
+
+      updatePipelineStage(2, "Searching latest satellite scene", [
+        "Using repaired polygon and farm metadata.",
+      ]);
+
+      const analysis = await materializeFarmAnalysis(farmId, {
         start_date: "2025-12-01",
         end_date: "2025-12-31",
         max_cloud_cover: 30,
@@ -208,10 +269,47 @@ export default function LandIntelligence() {
         collection_id: "sentinel-2-l2a",
         use_tiny_preview_bbox: true,
         tiny_bbox_size_deg: 0.0002,
-      }).catch(() => null);
-      await materializeFarmTrends(farmId, {}).catch(() => null);
-      await materializeFarmGrid(farmId, {}).catch(() => null);
-      await loadLandIntelligence();
+      });
+
+      updatePipelineStage(3, "Computing per-H3 satellite indices", [
+        analysis?.scene_id ? `Scene: ${analysis.scene_id}` : null,
+        analysis?.raster_row_count ? `Raster rows: ${analysis.raster_row_count}` : null,
+      ]);
+
+      updatePipelineStage(4, "Writing H3 analytics", [
+        analysis?.lakehouse_row_count ? `Rows written: ${analysis.lakehouse_row_count}` : null,
+        analysis?.parquet_uri ? `Lakehouse: ${analysis.parquet_uri}` : null,
+      ]);
+
+      updatePipelineStage(5, "Computing trends", ["Refreshing vegetation, moisture and soil trend snapshots."]);
+      await materializeFarmTrends(farmId, {}).catch((err) => {
+        console.warn("Trend materialization warning", err);
+        return null;
+      });
+
+      updatePipelineStage(6, "Building 10m grid", ["Generating or refreshing 10m visual cells."]);
+      await materializeFarmGrid(farmId, {}).catch((err) => {
+        console.warn("Grid materialization warning", err);
+        return null;
+      });
+
+      updatePipelineStage(7, "Computing H3-to-grid coverage %", ["Crosswalk rows are derived from repaired farm geometry."]);
+      updatePipelineStage(8, "Computing weighted grid values", ["Weighted grid values are refreshed from latest H3 features."]);
+      updatePipelineStage(9, "Refreshing land intelligence", ["Reloading farm, H3, grid and summary data."]);
+      try {
+        await loadLandIntelligence();
+      } catch (refreshErr) {
+        console.warn("Land intelligence refresh warning", refreshErr);
+        setError(refreshErr?.message || "Analysis completed, but the page refresh failed. Please retry.");
+      }
+      setPipelineStatus("Analysis complete");
+      setPipelineOpen(false);
+    } catch (err) {
+      const message = err?.payload?.detail?.message || err?.message || "Analysis failed.";
+      setPipelineFailure(message);
+      setPipelineOpen(true);
+      setPipelineStage(PIPELINE_STEPS.length - 1);
+      setPipelineStatus("Pipeline failed");
     } finally {
       setRefreshing(false);
     }
@@ -219,14 +317,46 @@ export default function LandIntelligence() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+      <PipelineGlassLoader
+        open={pipelineOpen}
+        title="Land analysis pipeline"
+        currentStep={pipelineStage}
+        status={pipelineStatus}
+        details={pipelineDetails}
+        failure={pipelineFailure}
+        actions={
+          pipelineFailure
+            ? [
+                {
+                  label: "Retry Analysis",
+                  variant: "primary",
+                  onClick: () => {
+                    setPipelineFailure("");
+                    runLatestAnalysis();
+                  },
+                },
+                {
+                  label: "Close",
+                  onClick: () => setPipelineOpen(false),
+                },
+              ]
+            : []
+        }
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-emerald-600">Land Intelligence</p>
-          <h1 className="mt-1 text-2xl font-black text-gray-900">{farm?.farm_name || "Farm"} {farm?.survey_number ? `· ${farm.survey_number}` : ""}</h1>
-          <p className="text-sm text-gray-500">{farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}</p>
+          <h1 className="mt-1 text-2xl font-black text-gray-900">
+            {farm?.farm_name || "Farm"}
+            {farm?.survey_number ? ` · ${farm.survey_number}` : ""}
+          </h1>
+          <p className="text-sm text-gray-500">
+            {farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene date: {formatDate(latestSentinel?.scene_datetime || latestSentinel?.observation_date || latestSummary.latest_snapshot_date)}</span>
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene ID: {latestSentinel?.scene_id || latestSummary.latest_scene_id || "—"}</span>
+            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene date: {latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet"}</span>
+            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene ID: {latestSceneId || "No scene processed yet"}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -246,7 +376,7 @@ export default function LandIntelligence() {
       {loading && <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">Loading land intelligence...</div>}
       {error && <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
 
-      <StatStrip items={stats.map((item) => ({ ...item, icon: item.label === "Cloud cover" ? Cloud : item.label === "Valid pixels" ? Waves : item.label === "Farm area" ? Mountain : item.label === "H3 cells" ? Hexagon : item.label === "Latest scene" ? RefreshCw : item.label === "Farm area" ? Mountain : Leaf }))} />
+      <StatStrip items={stats.map((item) => ({ ...item, icon: item.label === "Cloud cover" ? Cloud : item.label === "Valid pixels" ? Waves : item.label === "Farm area" ? Mountain : item.label === "H3 cells" ? Hexagon : item.label === "Latest scene" ? RefreshCw : Leaf }))} />
 
       <PipelineStepper steps={["Location", "Farmer", "Boundary", "Grid", "Satellite", "Raster", "Intelligence"]} currentStep={7} />
 
@@ -384,6 +514,21 @@ export default function LandIntelligence() {
                 <div><span className="block text-gray-400">Grid cells</span><span className="font-semibold">{latestSummary.total_grid_cells ?? displayCells.length ?? "—"}</span></div>
                 <div><span className="block text-gray-400">Grid cells with values</span><span className="font-semibold">{latestSummary.grid_cells_with_values ?? displayCells.length ?? "—"}</span></div>
                 <div className="col-span-2 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">Vegetation: {pickTrend(latestSummary, trends, "vegetation_trend")} · Moisture: {pickTrend(latestSummary, trends, "moisture_trend")} · Soil: {pickTrend(latestSummary, trends, "soil_exposure_trend")}</div>
+                {!hasAnalysis && (
+                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    Analysis not yet computed for this farm. Click Run Latest Analysis.
+                  </div>
+                )}
+                {Number(latestSummary.total_grid_cells || displayCells.length || 0) > 0 && Number(latestSummary.grid_cells_with_values || 0) === 0 && (
+                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    Grid geometry exists, but weighted satellite values are not computed yet.
+                  </div>
+                )}
+                {!latestSummary.latest_snapshot_date && (
+                  <div className="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                    No scene processed yet.
+                  </div>
+                )}
               </div>
             )}
           </div>
