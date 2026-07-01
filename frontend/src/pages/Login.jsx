@@ -1,14 +1,17 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+import { login } from "@/lib/api/auth";
+import { getDefaultRouteForRole, saveSession } from "@/lib/auth/session";
 
 export default function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -19,8 +22,10 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await base44.auth.loginViaEmailPassword(email, password);
-      window.location.href = "/";
+      const authResponse = await login({ email, password });
+      saveSession(authResponse);
+      const redirectTarget = getDefaultRouteForRole(authResponse?.user?.role);
+      navigate(location.state?.from || redirectTarget, { replace: true });
     } catch (err) {
       setError(err.message || "Invalid email or password");
     } finally {
@@ -29,7 +34,7 @@ export default function Login() {
   };
 
   const handleGoogle = () => {
-    base44.auth.loginWithProvider("google", "/");
+    setError("Google sign-in is not connected in the current backend flow.");
   };
 
   return (
@@ -46,6 +51,12 @@ export default function Login() {
         </>
       }
     >
+      {location.state?.signupSuccess && (
+        <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
+          {location.state.signupSuccess}
+        </div>
+      )}
+
       <Button
         variant="outline"
         className="w-full h-12 text-sm font-medium mb-6"

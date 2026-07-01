@@ -1,176 +1,302 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { 
-  Server, Users, MapPin, Hexagon, BarChart3, AlertTriangle,
-  CheckCircle, XCircle, Activity, Database, Satellite, Layers,
-  ChevronRight, RefreshCw
+import {
+  Users, MapPin, AlertTriangle,
+  Activity, Database, Satellite, Layers,
+  CheckCircle, XCircle, RefreshCw,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
-import { motion } from "framer-motion";
+import { apiRequest } from "@/lib/api/client";
+import { getFpoFarmers, getFpoFarms, getFpos } from "@/lib/api/fpo";
 
-const SERVICES = [
-  { name: "District Boundary Service", port: 8005, status: "healthy", uptime: "99.8%", icon: MapPin },
-  { name: "Farm Registry Service", port: 8006, status: "healthy", uptime: "99.9%", icon: Database },
-  { name: "Boundary Index Service", port: 8004, status: "healthy", uptime: "99.7%", icon: Hexagon },
-  { name: "STAC Catalog Service", port: 8007, status: "healthy", uptime: "99.5%", icon: Satellite },
-  { name: "Raster Processor Service", port: 8008, status: "degraded", uptime: "97.2%", icon: Layers },
-];
-
-const DISTRICTS = [
-  { name: "Puri", fpos: 3, farmers: 447, farms: 978, hectares: 2647, coverage: 72 },
-  { name: "Khurda", fpos: 2, farmers: 312, farms: 689, hectares: 1834, coverage: 58 },
-  { name: "Nayagarh", fpos: 2, farmers: 234, farms: 512, hectares: 1389, coverage: 45 },
-  { name: "Cuttack", fpos: 4, farmers: 567, farms: 1234, hectares: 3456, coverage: 65 },
-  { name: "Ganjam", fpos: 3, farmers: 389, farms: 845, hectares: 2234, coverage: 52 },
-];
+const SERVICE_ICON_MAP = {
+  location: MapPin,
+  farmers: Database,
+  farms: Database,
+  fpos: Users,
+  h3: Layers,
+  stac: Satellite,
+  raster: Layers,
+  analytics: Activity,
+  "farm-analysis": Layers,
+  "hot-stream": Layers,
+  auth: Users,
+};
 
 export default function AdminDashboard() {
+  const [routesPayload, setRoutesPayload] = useState(null);
+  const [fpos, setFpos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+      try {
+        const [routesResult, fpoList] = await Promise.all([
+          apiRequest("/api/routes").catch(() => null),
+          getFpos().catch(() => []),
+        ]);
+
+        const enrichedFpos = await Promise.all(
+          (fpoList || []).map(async (fpo) => {
+            const [farmers, farms] = await Promise.all([
+              getFpoFarmers(fpo.fpo_id).catch(() => []),
+              getFpoFarms(fpo.fpo_id).catch(() => []),
+            ]);
+            return { ...fpo, farmers, farms };
+          }),
+        );
+
+        if (cancelled) return;
+        setRoutesPayload(routesResult);
+        setFpos(enrichedFpos);
+      } catch (err) {
+        if (cancelled) return;
+        setError(typeof err?.message === "string" ? err.message : "Unable to load admin dashboard.");
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const services = useMemo(() => {
+    const routes = routesPayload?.routes || {};
+    return Object.entries(routes).map(([name, target]) => ({
+      name,
+      target,
+      status: target ? "healthy" : "pending",
+      icon: SERVICE_ICON_MAP[name] || Database,
+    }));
+  }, [routesPayload]);
+
+  const totals = useMemo(() => {
+    const farmers = fpos.reduce((sum, fpo) => sum + (fpo.farmers?.length || 0), 0);
+    const farms = fpos.reduce((sum, fpo) => sum + (fpo.farms?.length || 0), 0);
+    const hectares = fpos.reduce(
+      (sum, fpo) => sum + (fpo.farms || []).reduce((farmSum, farm) => farmSum + Number(farm.area_acres || 0), 0),
+      0,
+    );
+    return { farmers, farms, hectares };
+  }, [fpos]);
+
+  const districts = useMemo(() => {
+    const grouped = new Map();
+    fpos.forEach((fpo) => {
+      const key = fpo.district_name || "Unknown";
+      if (!grouped.has(key)) {
+        grouped.set(key, { name: key, fpos: 0, farmers: 0, farms: 0, hectares: 0, coverage: 0 });
+      }
+      const bucket = grouped.get(key);
+      bucket.fpos += 1;
+      bucket.farmers += fpo.farmers?.length || 0;
+      bucket.farms += fpo.farms?.length || 0;
+      bucket.hectares += (fpo.farms || []).reduce((sum, farm) => sum + Number(farm.area_acres || 0), 0);
+    });
+    return Array.from(grouped.values()).map((bucket) => ({
+      ...bucket,
+      coverage: Math.min(100, Math.round((bucket.farms / Math.max(bucket.farmers, 1)) * 20)),
+    }));
+  }, [fpos]);
+
+  const recentProcessing = [
+    { batch: "Gateway", farms: totals.farms, status: routesPayload ? "completed" : "pending", time: "Live", failed: 0 },
+    { batch: "Analytics", farms: totals.farmers, status: "completed", time: "Linked", failed: 0 },
+    { batch: "Grid", farms: 0, status: "pending", time: "Endpoint pending", failed: 0 },
+    { batch: "Raster", farms: 0, status: "pending", time: "Endpoint pending", failed: 0 },
+  ];
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Admin Command Center</h1>
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mt-0.5">Platform-wide overview — MaatiTrace Operations</p>
+          <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-gray-400">Platform-wide overview - MaatiTrace Operations</p>
         </div>
-        <Button size="sm" variant="outline" className="h-9 text-xs font-semibold rounded-xl border-gray-200 hover:bg-gray-50">
-          <RefreshCw className="w-3 h-3 mr-1 text-blue-500" />Refresh
+        <Button size="sm" variant="outline" className="h-9 rounded-xl border-gray-200 text-xs font-semibold hover:bg-gray-50" onClick={() => window.location.reload()}>
+          <RefreshCw className="mr-1 h-3 w-3 text-blue-500" />
+          Refresh
         </Button>
       </div>
 
+      {loading && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-sm">
+          Loading admin dashboard...
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-6 text-sm text-rose-600 shadow-sm">
+          {error}
+        </div>
+      )}
+
       <StatStrip items={[
-        { label: "Total FPOs", value: "14", icon: Users },
-        { label: "Registered Farmers", value: "1,949", icon: Users },
-        { label: "Total Farms", value: "4,258", icon: MapPin },
-        { label: "Total Hectares", value: "11,560", unit: "ha", icon: Layers },
-        { label: "Failed Jobs", value: "7", icon: AlertTriangle, sub: "Last 24h" },
+        { label: "Total FPOs", value: fpos.length, icon: Users },
+        { label: "Registered Farmers", value: totals.farmers, icon: Users },
+        { label: "Total Farms", value: totals.farms, icon: MapPin },
+        { label: "Total Area", value: totals.hectares.toFixed(1), unit: "ac", icon: Layers },
+        { label: "Failed Jobs", value: services.filter((service) => service.status !== "healthy").length, icon: AlertTriangle, sub: "Pending routes" },
       ]} />
 
-      {/* Service Health */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-emerald-500" />Service Health
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <Activity className="h-4 w-4 text-emerald-500" />
+            Service Health
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">All Systems Monitored</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Gateway Route Inventory</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 divide-x divide-gray-50">
-          {SERVICES.map((svc, i) => {
-            const Icon = svc.icon;
-            const isHealthy = svc.status === "healthy";
+        <div className="grid grid-cols-1 divide-x divide-gray-50 md:grid-cols-5">
+          {services.map((service, index) => {
+            const Icon = service.icon;
+            const isHealthy = service.status === "healthy";
             return (
               <motion.div
-                key={i}
+                key={`${service.name}-${index}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: index * 0.05 }}
                 className="p-4"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isHealthy ? "bg-emerald-50" : "bg-amber-50"}`}>
-                    <Icon className={`w-3.5 h-3.5 ${isHealthy ? "text-emerald-500" : "text-amber-500"}`} />
+                <div className="mb-2 flex items-center gap-2">
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isHealthy ? "bg-emerald-50" : "bg-amber-50"}`}>
+                    <Icon className={`h-3.5 w-3.5 ${isHealthy ? "text-emerald-500" : "text-amber-500"}`} />
                   </div>
-                  <div className={`w-1.5 h-1.5 rounded-full ${isHealthy ? "bg-emerald-400" : "bg-amber-400"} ${!isHealthy ? "pulse-live" : ""}`} />
+                  <div className={`h-1.5 w-1.5 rounded-full ${isHealthy ? "bg-emerald-400" : "bg-amber-400"}`} />
                 </div>
-                <p className="text-[10px] font-semibold text-gray-700 leading-tight mb-1">{svc.name}</p>
+                <p className="mb-1 text-[10px] font-semibold capitalize leading-tight text-gray-700">{service.name.replaceAll("-", " ")}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-400 font-mono">:{svc.port}</span>
-                  <VerificationStamp label={svc.status.toUpperCase()} type={isHealthy ? "success" : "warning"} compact />
+                  <span className="max-w-[120px] truncate text-[9px] text-gray-400">{service.target || "Unavailable"}</span>
+                  <VerificationStamp label={service.status.toUpperCase()} type={isHealthy ? "success" : "warning"} compact />
                 </div>
-                <p className="text-[9px] text-gray-400 mt-1">Uptime: {svc.uptime}</p>
               </motion.div>
             );
           })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* District Coverage */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <span className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-500" />District Coverage — Odisha
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <MapPin className="h-4 w-4 text-blue-500" />
+                District Coverage - Odisha
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80">
-                    {["District", "FPOs", "Farmers", "Farms", "Hectares", "Coverage"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 font-semibold uppercase tracking-wider text-[9px] text-gray-400">{h}</th>
+                    {["District", "FPOs", "Farmers", "Farms", "Area", "Coverage"].map((header) => (
+                      <th key={header} className="px-4 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider text-gray-400">{header}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {DISTRICTS.map(d => (
-                    <tr key={d.name} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
-                      <td className="px-4 py-2.5 font-bold text-gray-700">{d.name}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{d.fpos}</td>
-                      <td className="px-4 py-2.5 font-bold text-gray-700">{d.farmers}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{d.farms}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{d.hectares.toLocaleString()}</td>
+                  {districts.map((district) => (
+                    <tr key={district.name} className="border-b border-gray-50 transition-colors hover:bg-gray-50/60 last:border-0">
+                      <td className="px-4 py-2.5 font-bold text-gray-700">{district.name}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{district.fpos}</td>
+                      <td className="px-4 py-2.5 font-bold text-gray-700">{district.farmers}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{district.farms}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{district.hectares.toFixed(1)}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full" style={{ width: `${d.coverage}%` }} />
+                          <div className="h-2 w-16 overflow-hidden rounded-full bg-gray-100">
+                            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width: `${district.coverage}%` }} />
                           </div>
-                          <span className="font-bold text-emerald-600">{d.coverage}%</span>
+                          <span className="font-bold text-emerald-600">{district.coverage}%</span>
                         </div>
                       </td>
                     </tr>
                   ))}
+                  {!loading && !error && districts.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="px-4 py-6 text-center text-sm text-gray-500">
+                        District coverage will appear after FPO records are available.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Recent Processing */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <span className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-violet-500" />Recent Raster Processing
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <Layers className="h-4 w-4 text-violet-500" />
+                Recent Processing
               </span>
             </div>
-            <div className="p-4 space-y-2">
-              {[
-                { batch: "B-0034", farms: 34, status: "completed", time: "12 min ago", failed: 2 },
-                { batch: "B-0033", farms: 28, status: "completed", time: "1 hr ago", failed: 0 },
-                { batch: "B-0032", farms: 45, status: "completed", time: "3 hrs ago", failed: 5 },
-                { batch: "B-0031", farms: 12, status: "failed", time: "4 hrs ago", failed: 12 },
-              ].map(b => (
-                <div key={b.batch} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50/70 transition-colors">
+            <div className="space-y-2 p-4">
+              {recentProcessing.map((item) => (
+                <div key={item.batch} className="flex items-center justify-between rounded-xl border border-gray-100 p-3 transition-colors hover:bg-gray-50/70">
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.status === "completed" ? "bg-emerald-50" : "bg-rose-50"}`}>
-                      {b.status === "completed"
-                        ? <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        : <XCircle className="w-4 h-4 text-rose-500" />}
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${item.status === "completed" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                      {item.status === "completed"
+                        ? <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        : <XCircle className="h-4 w-4 text-rose-500" />}
                     </div>
                     <div>
-                      <span className="text-xs font-bold text-gray-700">{b.batch}</span>
-                      <span className="text-[10px] text-gray-400 ml-2">{b.farms} farms</span>
+                      <span className="text-xs font-bold text-gray-700">{item.batch}</span>
+                      <span className="ml-2 text-[10px] text-gray-400">{item.farms} records</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                    {b.failed > 0 && <span className="text-rose-500 font-medium">{b.failed} failed</span>}
-                    <span>{b.time}</span>
+                    {item.failed > 0 && <span className="font-medium text-rose-500">{item.failed} failed</span>}
+                    <span>{item.time}</span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-4 py-3">
+              <span className="text-sm font-semibold text-gray-800">FPO Registry</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {fpos.map((fpo) => (
+                <Link key={fpo.fpo_id} to={`/fpo/${fpo.fpo_id}`} className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{fpo.fpo_name}</p>
+                    <p className="text-xs text-gray-500">{fpo.district_name}, {fpo.state_name}</p>
+                  </div>
+                  <div className="text-right text-xs text-gray-500">
+                    <p>{fpo.farmers?.length || 0} farmers</p>
+                    <p>{fpo.farms?.length || 0} farms</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Right panel */}
         <div className="space-y-5">
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-400" />System Alerts
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <AlertTriangle className="h-4 w-4 text-rose-400" />
+                System Alerts
               </span>
-              <span className="w-2 h-2 bg-rose-400 rounded-full pulse-live" />
+              <span className="pulse-live h-2 w-2 rounded-full bg-rose-400" />
             </div>
             <div className="p-2">
               <NotificationStack limit={5} />

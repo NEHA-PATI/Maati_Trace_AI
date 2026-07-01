@@ -17,6 +17,7 @@ Page to gateway mapping:
 - `FarmerProfile.jsx` -> `/api/farmers/me`, `/api/farmers/:farmerId`, `/api/farmers/:farmerId/summary`, `/api/farmers/:farmerId/farms`
 - `LandIntelligence.jsx` -> `/api/farms/:farmId`, `/api/analytics/farms/:farmId/*`, `/api/farm-analysis/:farmId/materialize`, `/api/hot-stream/farms/:farmId/*`
 - `FarmRegister.jsx` -> `/api/location/*`, `/api/farmers`, `/api/farms/register`
+- `FarmRegister.jsx` now normalizes `states`, `districts`, and `blocks` payloads and renders only `state_name`, `district_name`, and `block_name` fields
 
 Backend mapping:
 - Gateway `/api/auth/*` -> `auth_service`
@@ -28,9 +29,11 @@ Backend mapping:
 Visual map note:
 - Current launch page keeps the red-boundary grid visual through `FarmMapView`
 - Technical H3 access is reserved for admin/FPO roles
+- Sidebar items are role-filtered through `getSidebarItemsForRole(role)`
 - Grid/H3 data is surfaced safely even when materialized grid rows are not yet present
 
 Known gaps:
 - Grid cells are not yet rendered from live polygon coordinates
 - Trend and grid materialize endpoints are wired but still need full background job logic
 - Bulk upload screen still needs backend endpoint completion for real CSV processing
+- Farm snapshot upload is attempted client-side and remains pending if backend snapshot endpoint is absent

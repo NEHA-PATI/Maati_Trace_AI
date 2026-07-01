@@ -1,93 +1,66 @@
-import React, { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { 
-  MapPin, Hexagon, User, Calendar, Satellite, Leaf, Droplets, 
-  Mountain, Cloud, Layers, Grid3X3, ChevronRight, Download,
-  RefreshCw, Eye, Thermometer, Sun, Check
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  MapPin, Hexagon, User, Satellite, Leaf, Droplets,
+  Mountain, Cloud, Layers, RefreshCw, Thermometer, Sun, Check,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import StatStrip from "@/components/ui-custom/StatStrip";
 import PipelineStepper from "@/components/ui-custom/PipelineStepper";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import IndexReadout from "@/components/ui-custom/IndexReadout";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { motion } from "framer-motion";
-
-const FARM_DATA = {
-  id: "MF-0042",
-  farmerId: "FR-001",
-  farmerName: "Ramesh Sahoo",
-  village: "Baliguali",
-  block: "Puri Sadar",
-  district: "Puri",
-  state: "Odisha",
-  surveyNumber: "RS-1204/56",
-  area: 2.4,
-  h3Resolution: 10,
-  h3CellCount: 18,
-  crop: "Paddy (Kharif)",
-  registeredDate: "2024-03-15",
-};
-
-const SATELLITE_DATA = {
-  sceneId: "S2B_MSIL2A_20250115T044121_N0400_R033",
-  date: "2025-01-15",
-  cloudCover: 12.4,
-  provider: "Sentinel-2B",
-  processingLevel: "L2A",
-  validPixels: 94,
-};
-
-const H3_CELLS = Array.from({ length: 18 }, (_, i) => ({
-  id: `8a2a1072b59${String(i).padStart(4, "0")}fff`,
-  ndvi: 0.42 + Math.random() * 0.35,
-  moisture: 0.28 + Math.random() * 0.3,
-  bareSoil: Math.random() * 0.25,
-  heat: 28 + Math.random() * 6,
-  validPixels: 85 + Math.floor(Math.random() * 15),
-  cloudFree: Math.random() > 0.15,
-}));
-
-const avgNdvi = H3_CELLS.reduce((s, c) => s + c.ndvi, 0) / H3_CELLS.length;
-const avgMoisture = H3_CELLS.reduce((s, c) => s + c.moisture, 0) / H3_CELLS.length;
-const avgBareSoil = H3_CELLS.reduce((s, c) => s + c.bareSoil, 0) / H3_CELLS.length;
-const avgHeat = H3_CELLS.reduce((s, c) => s + c.heat, 0) / H3_CELLS.length;
+import { getFarm } from "@/lib/api/farm";
+import {
+  getFarmGridCells,
+  getFarmH3Cells,
+  getFarmSummary,
+  getFarmTrends,
+  getLatestGridValues,
+  getLatestSentinel2,
+  getSentinel2History,
+} from "@/lib/api/analytics";
+import {
+  materializeFarmAnalysis,
+  materializeFarmGrid,
+  materializeFarmTrends,
+} from "@/lib/api/hotStream";
+import { canViewTechnicalH3Layer } from "@/lib/rbac/permissions";
+import { getStoredUser } from "@/lib/auth/session";
 
 function HexGrid({ cells, hoveredCell, setHoveredCell, selectedCell, setSelectedCell }) {
   const cols = 6;
   return (
     <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-      {cells.map((cell, i) => {
-        const green = Math.floor(cell.ndvi * 255);
-        const bg = `rgb(${255 - green}, ${100 + green * 0.6}, ${80})`;
-        const isHovered = hoveredCell === i;
-        const isSelected = selectedCell === i;
+      {cells.map((cell, index) => {
+        const normalized = Math.max(0, Math.min(1, Number(cell.ndvi || cell.avg_ndvi || 0)));
+        const green = Math.floor(normalized * 255);
+        const bg = `rgb(${255 - green}, ${100 + green * 0.6}, 80)`;
+        const isHovered = hoveredCell === index;
+        const isSelected = selectedCell === index;
         return (
           <motion.div
-            key={i}
+            key={cell.id || index}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: i * 0.02 }}
-            onMouseEnter={() => setHoveredCell(i)}
+            transition={{ delay: index * 0.02 }}
+            onMouseEnter={() => setHoveredCell(index)}
             onMouseLeave={() => setHoveredCell(null)}
-            onClick={() => setSelectedCell(isSelected ? null : i)}
-            className={`relative aspect-square rounded-sm cursor-pointer transition-all ${
+            onClick={() => setSelectedCell(isSelected ? null : index)}
+            className={`relative aspect-square cursor-pointer rounded-sm transition-all ${
               isSelected ? "ring-2 ring-foreground ring-offset-1" :
               isHovered ? "ring-1 ring-primary ring-offset-1" : ""
             }`}
             style={{ backgroundColor: bg }}
           >
-            {!cell.cloudFree && (
-              <Cloud className="absolute top-0.5 right-0.5 w-2.5 h-2.5 text-white/70" />
-            )}
+            {!cell.cloudFree && <Cloud className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-white/70" />}
             {isHovered && (
-              <div className="absolute z-20 bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 p-2 bg-card border border-border rounded-sm shadow-lg">
+              <div className="absolute bottom-full left-1/2 z-20 mb-2 w-40 -translate-x-1/2 rounded-sm border border-border bg-card p-2 shadow-lg">
                 <div className="space-y-1 text-[9px]">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Cell</span><span className="font-mono">{i + 1}/{cells.length}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">NDVI</span><span className="font-display font-bold text-primary">{cell.ndvi.toFixed(3)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Moisture</span><span className="font-display font-bold text-blue-600">{cell.moisture.toFixed(3)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Bare Soil</span><span className="font-display font-bold">{(cell.bareSoil * 100).toFixed(1)}%</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Valid Px</span><span>{cell.validPixels}%</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Cell</span><span className="font-mono">{index + 1}/{cells.length}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">NDVI</span><span className="font-display font-bold text-primary">{Number(cell.ndvi || cell.avg_ndvi || 0).toFixed(3)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Moisture</span><span className="font-display font-bold text-blue-600">{Number(cell.moisture || cell.ndmi || cell.avg_ndmi || 0).toFixed(3)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Bare Soil</span><span className="font-display font-bold">{(Number(cell.bareSoil || cell.bsi || 0) * 100).toFixed(1)}%</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valid Px</span><span>{Math.round(Number(cell.validPixels || cell.valid_pixels_pct || 0))}%</span></div>
                 </div>
               </div>
             )}
@@ -100,177 +73,286 @@ function HexGrid({ cells, hoveredCell, setHoveredCell, selectedCell, setSelected
 
 export default function LandIntelligence() {
   const { farmId } = useParams();
+  const user = getStoredUser();
   const [hoveredCell, setHoveredCell] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [viewMode, setViewMode] = useState("h3");
+  const [viewMode, setViewMode] = useState(canViewTechnicalH3Layer(user) ? "h3" : "grid");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [farm, setFarm] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [latestScene, setLatestScene] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [trends, setTrends] = useState(null);
+  const [gridCells, setGridCells] = useState([]);
+  const [gridValues, setGridValues] = useState([]);
+  const [h3Cells, setH3Cells] = useState([]);
 
-  const activeCell = selectedCell !== null ? H3_CELLS[selectedCell] : null;
+  async function loadData() {
+    setError("");
+    try {
+      const [
+        farmPayload,
+        summaryPayload,
+        latestScenePayload,
+        historyPayload,
+        trendsPayload,
+        gridCellsPayload,
+        gridValuesPayload,
+        h3CellsPayload,
+      ] = await Promise.all([
+        getFarm(farmId),
+        getFarmSummary(farmId).catch(() => null),
+        getLatestSentinel2(farmId).catch(() => null),
+        getSentinel2History(farmId, 10).catch(() => []),
+        getFarmTrends(farmId).catch(() => null),
+        getFarmGridCells(farmId).catch(() => []),
+        getLatestGridValues(farmId).catch(() => []),
+        getFarmH3Cells(farmId).catch(() => []),
+      ]);
+
+      setFarm(farmPayload);
+      setSummary(summaryPayload);
+      setLatestScene(latestScenePayload);
+      setHistory(Array.isArray(historyPayload) ? historyPayload : []);
+      setTrends(trendsPayload);
+      setGridCells(Array.isArray(gridCellsPayload) ? gridCellsPayload : []);
+      setGridValues(Array.isArray(gridValuesPayload) ? gridValuesPayload : []);
+      setH3Cells(Array.isArray(h3CellsPayload) ? h3CellsPayload : []);
+    } catch (err) {
+      setError(typeof err?.message === "string" ? err.message : "Unable to load land intelligence.");
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    loadData().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [farmId]);
+
+  const displayCells = useMemo(() => {
+    const source = viewMode === "grid" && gridValues.length ? gridValues : h3Cells;
+    return source.map((item, index) => ({
+      id: item.grid_cell_id || item.h3_index || index,
+      ndvi: item.ndvi,
+      moisture: item.ndmi || item.ndwi,
+      bareSoil: item.bsi,
+      heat: item.temperature_c || 30,
+      validPixels: item.valid_pixels_pct || latestScene?.valid_pixels_pct || 0,
+      cloudFree: Number(latestScene?.cloud_percentage || 0) < 40,
+    }));
+  }, [gridValues, h3Cells, latestScene, viewMode]);
+
+  const activeCell = selectedCell !== null ? displayCells[selectedCell] : null;
+  const avgNdvi = Number(summary?.avg_ndvi ?? latestScene?.ndvi ?? 0);
+  const avgMoisture = Number(summary?.avg_ndmi ?? latestScene?.ndmi ?? 0);
+  const avgBareSoil = Number(summary?.avg_bsi ?? latestScene?.bsi ?? 0);
+  const avgHeat = Number(summary?.avg_temperature_c ?? 30);
+  const cloudFreeCount = displayCells.filter((cell) => cell.cloudFree).length;
+  const avgValidPixels = displayCells.length
+    ? Math.round(displayCells.reduce((sum, cell) => sum + Number(cell.validPixels || 0), 0) / displayCells.length)
+    : Math.round(Number(latestScene?.valid_pixels_pct || 0));
+  const vegetationTrend = trends?.vegetation_trend || "pending";
+  const moistureTrend = trends?.moisture_trend || "pending";
+  const soilTrend = trends?.soil_exposure_trend || "pending";
+  const sceneQuality = Number(latestScene?.cloud_percentage || 0) <= 20 ? "clear" : Number(latestScene?.cloud_percentage || 0) <= 40 ? "usable" : "cloudy";
+  const satelliteStats = [
+    { label: "Vegetation health", value: avgNdvi, unit: "NDVI", tone: "bg-primary" },
+    { label: "Moisture health", value: avgMoisture, unit: "NDMI", tone: "bg-blue-500" },
+    { label: "Bare soil exposure", value: avgBareSoil, unit: "BSI", tone: "bg-amber-600" },
+    { label: "Surface warmth", value: avgHeat, unit: "°C", tone: "bg-red-500" },
+    { label: "Cloud cover", value: Number(latestScene?.cloud_percentage || 0), unit: "%", tone: "bg-slate-500" },
+    { label: "Valid pixels", value: avgValidPixels, unit: "%", tone: "bg-emerald-500" },
+  ];
+
+  async function runLatestAnalysis() {
+    setRefreshing(true);
+    try {
+      await materializeFarmAnalysis(farmId, {
+        start_date: "2025-12-01",
+        end_date: "2025-12-31",
+        max_cloud_cover: 30,
+        h3_resolution: 12,
+        provider: "planetary_computer",
+        collection_id: "sentinel-2-l2a",
+        use_tiny_preview_bbox: true,
+        tiny_bbox_size_deg: 0.0002,
+      }).catch(() => null);
+      await materializeFarmTrends(farmId, {}).catch(() => null);
+      await materializeFarmGrid(farmId, {}).catch(() => null);
+      await loadData();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto">
-      {/* Farm Identity Strip */}
-      <div className="bg-card border border-border rounded-sm p-3">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
+      {loading && (
+        <div className="rounded-sm border border-border bg-card p-4 text-sm text-muted-foreground">
+          Loading land intelligence...
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-sm border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+          {error}
+        </div>
+      )}
+
+      <div className="rounded-sm border border-border bg-card p-3">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] font-display uppercase tracking-widest text-muted-foreground">Farm</span>
-            <span className="font-display font-bold text-foreground">{FARM_DATA.id}</span>
+            <span className="font-display font-bold text-foreground">{farm?.farm_id || farmId}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <User className="w-3 h-3 text-muted-foreground" />
-            <Link to={`/farmer-profile/${FARM_DATA.farmerId}`} className="text-foreground hover:text-primary transition-colors">
-              {FARM_DATA.farmerName}
+            <User className="h-3 w-3 text-muted-foreground" />
+            <Link to={farm?.farmer_id ? `/farmers/${farm.farmer_id}` : "#"} className="transition-colors hover:text-primary">
+              {summary?.farmer_name || "Farmer profile"}
             </Link>
           </div>
           <div className="flex items-center gap-1.5">
-            <MapPin className="w-3 h-3 text-muted-foreground" />
-            <span>{FARM_DATA.village}, {FARM_DATA.block}, {FARM_DATA.district}</span>
+            <MapPin className="h-3 w-3 text-muted-foreground" />
+            <span>{farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Hexagon className="w-3 h-3 text-muted-foreground" />
-            <span>{FARM_DATA.area} ha · {FARM_DATA.h3CellCount} cells · Res {FARM_DATA.h3Resolution}</span>
+            <Hexagon className="h-3 w-3 text-muted-foreground" />
+            <span>{Number(farm?.area_acres || 0).toFixed(1)} ac · {farm?.h3_cell_count || h3Cells.length} cells · Res {farm?.h3_resolution || 12}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Satellite className="w-3 h-3 text-muted-foreground" />
-            <span>{SATELLITE_DATA.date} · {SATELLITE_DATA.cloudCover}% cloud</span>
+            <Satellite className="h-3 w-3 text-muted-foreground" />
+            <span>{latestScene?.observation_date || "No scene"} · {Number(latestScene?.cloud_percentage || 0).toFixed(1)}% cloud</span>
           </div>
-          <VerificationStamp label="VERIFIED" type="success" compact />
+          <VerificationStamp label={farm?.is_active ? "VERIFIED" : "PENDING"} type={farm?.is_active ? "success" : "pending"} compact />
         </div>
       </div>
 
-      {/* Pipeline */}
       <PipelineStepper
         steps={["Location", "Farmer", "Boundary", "H3 Grid", "Satellite", "Raster", "Intelligence"]}
-        currentStep={7}
+        currentStep={farm ? 7 : 4}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Main — Map + Grid */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Map with boundary */}
-          <div className="bg-card border border-border rounded-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <div className="overflow-hidden rounded-sm border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-3">
                 <span className="text-xs font-display font-bold uppercase tracking-wider text-foreground">Land View</span>
-                <div className="flex items-center gap-1 bg-muted rounded-sm p-0.5">
+                <div className="flex items-center gap-1 rounded-sm bg-muted p-0.5">
+                  {canViewTechnicalH3Layer(user) && (
+                    <button
+                      onClick={() => setViewMode("h3")}
+                      className={`rounded-sm px-2 py-1 text-[10px] font-display uppercase tracking-wider transition-colors ${viewMode === "h3" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                    >
+                      <Hexagon className="mr-1 inline h-3 w-3" />
+                      H3 Grid
+                    </button>
+                  )}
                   <button
-                    onClick={() => setViewMode("h3")}
-                    className={`px-2 py-1 rounded-sm text-[10px] font-display uppercase tracking-wider transition-colors ${viewMode === "h3" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                    onClick={() => setViewMode("grid")}
+                    className={`rounded-sm px-2 py-1 text-[10px] font-display uppercase tracking-wider transition-colors ${viewMode === "grid" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
                   >
-                    <Hexagon className="w-3 h-3 inline mr-1" />H3 Grid
-                  </button>
-                  <button
-                    onClick={() => setViewMode("map")}
-                    className={`px-2 py-1 rounded-sm text-[10px] font-display uppercase tracking-wider transition-colors ${viewMode === "map" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
-                  >
-                    <Layers className="w-3 h-3 inline mr-1" />Satellite
+                    <Layers className="mr-1 inline h-3 w-3" />
+                    Visual Grid
                   </button>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-display uppercase tracking-wider rounded-sm">
-                  <RefreshCw className="w-3 h-3 mr-1" />Latest Scene
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-display uppercase tracking-wider rounded-sm">
-                  <Download className="w-3 h-3 mr-1" />Export
+                <Button size="sm" variant="outline" onClick={runLatestAnalysis} disabled={refreshing} className="h-7 rounded-sm text-[10px] font-display uppercase tracking-wider">
+                  <RefreshCw className={`mr-1 h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+                  Run Latest Analysis
                 </Button>
               </div>
             </div>
 
-            <div className="p-4 bg-muted/30 topo-texture">
-              {viewMode === "h3" ? (
-                <div className="max-w-md mx-auto">
+            <div className="topo-texture bg-muted/30 p-4">
+              {displayCells.length ? (
+                <div className="mx-auto max-w-md">
                   <HexGrid
-                    cells={H3_CELLS}
+                    cells={displayCells}
                     hoveredCell={hoveredCell}
                     setHoveredCell={setHoveredCell}
                     selectedCell={selectedCell}
                     setSelectedCell={setSelectedCell}
                   />
-                  {/* Legend */}
-                  <div className="flex items-center justify-center gap-2 mt-3">
-                    <span className="text-[8px] font-display uppercase tracking-wider text-muted-foreground">Low NDVI</span>
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    <span className="text-[8px] font-display uppercase tracking-wider text-muted-foreground">Low health</span>
                     <div className="flex gap-0.5">
-                      {[0.2, 0.35, 0.5, 0.65, 0.8].map(v => (
-                        <div key={v} className="w-5 h-2 rounded-sm" style={{ backgroundColor: `rgb(${255 - v * 255}, ${100 + v * 153}, 80)` }} />
+                      {[0.2, 0.35, 0.5, 0.65, 0.8].map((value) => (
+                        <div key={value} className="h-2 w-5 rounded-sm" style={{ backgroundColor: `rgb(${255 - value * 255}, ${100 + value * 153}, 80)` }} />
                       ))}
                     </div>
-                    <span className="text-[8px] font-display uppercase tracking-wider text-muted-foreground">High NDVI</span>
+                    <span className="text-[8px] font-display uppercase tracking-wider text-muted-foreground">High health</span>
                   </div>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center">
+                <div className="flex h-64 items-center justify-center">
                   <div className="text-center">
-                    <Satellite className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">Satellite composite view</p>
-                    <p className="text-[10px] text-muted-foreground/60">{SATELLITE_DATA.sceneId}</p>
+                    <Layers className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
+                    <p className="text-xs text-muted-foreground">Grid values are not available yet for this farm.</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Selected Cell Detail */}
           {activeCell && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-card border border-primary/30 rounded-sm overflow-hidden"
-            >
-              <div className="px-4 py-2.5 border-b border-border bg-primary/5 flex items-center justify-between">
-                <span className="text-xs font-display font-bold uppercase tracking-wider text-primary">Cell {selectedCell + 1} — Detailed Analysis</span>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-sm border border-primary/30 bg-card">
+              <div className="flex items-center justify-between border-b border-border bg-primary/5 px-4 py-2.5">
+                <span className="text-xs font-display font-bold uppercase tracking-wider text-primary">Cell {selectedCell + 1} - Detailed Analysis</span>
                 <button onClick={() => setSelectedCell(null)} className="text-[10px] text-muted-foreground hover:text-foreground">Close</button>
               </div>
-              <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <IndexReadout label="Vegetation" value={activeCell.ndvi} icon={<Leaf />} color="bg-primary" />
-                </div>
-                <div className="space-y-1">
-                  <IndexReadout label="Moisture" value={activeCell.moisture} icon={<Droplets />} color="bg-blue-500" />
-                </div>
-                <div className="space-y-1">
-                  <IndexReadout label="Bare Soil" value={activeCell.bareSoil} icon={<Mountain />} color="bg-amber-600" />
-                </div>
-                <div className="space-y-1">
-                  <IndexReadout label="Surface Temp" value={activeCell.heat} unit="°C" min={25} max={40} icon={<Thermometer />} color="bg-red-500" />
-                </div>
+              <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-4">
+                <IndexReadout label="Vegetation" value={Number(activeCell.ndvi || 0)} icon={<Leaf />} color="bg-primary" />
+                <IndexReadout label="Moisture" value={Number(activeCell.moisture || 0)} icon={<Droplets />} color="bg-blue-500" />
+                <IndexReadout label="Bare Soil" value={Number(activeCell.bareSoil || 0)} icon={<Mountain />} color="bg-amber-600" />
+                <IndexReadout label="Surface Temp" value={Number(activeCell.heat || 30)} unit="°C" min={25} max={40} icon={<Thermometer />} color="bg-red-500" />
               </div>
-              <div className="px-4 pb-3 flex items-center gap-4 text-[9px] font-display uppercase tracking-wider text-muted-foreground">
-                <span>Valid pixels: {activeCell.validPixels}%</span>
+              <div className="flex items-center gap-4 px-4 pb-3 text-[9px] font-display uppercase tracking-wider text-muted-foreground">
+                <span>Valid pixels: {Math.round(Number(activeCell.validPixels || 0))}%</span>
                 <span>Cloud-free: {activeCell.cloudFree ? "Yes" : "No"}</span>
-                <span>H3 ID: ...{activeCell.id.slice(-8)}</span>
+                <span>Cell source: {viewMode.toUpperCase()}</span>
               </div>
             </motion.div>
           )}
 
-          {/* H3 Feature Table */}
-          <div className="bg-card border border-border rounded-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-              <span className="text-xs font-display font-bold uppercase tracking-wider text-foreground">H3 Cell Feature Table</span>
-              <span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">{H3_CELLS.length} cells · Resolution {FARM_DATA.h3Resolution}</span>
+          <div className="overflow-hidden rounded-sm border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <span className="text-xs font-display font-bold uppercase tracking-wider text-foreground">
+                {viewMode === "grid" ? "Grid Cell Feature Table" : "H3 Cell Feature Table"}
+              </span>
+              <span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">{displayCells.length} cells</span>
             </div>
-            <div className="overflow-x-auto max-h-64 overflow-y-auto scrollbar-hide">
+            <div className="scrollbar-hide max-h-64 overflow-x-auto overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
                   <tr className="border-b border-border">
-                    {["Cell", "NDVI", "Moisture", "Bare Soil", "Temp °C", "Valid Px %", "Cloud"].map(h => (
-                      <th key={h} className="text-left px-3 py-2 font-display font-semibold uppercase tracking-wider text-[9px] text-muted-foreground">{h}</th>
+                    {["Cell", "NDVI", "Moisture", "Bare Soil", "Temp °C", "Valid Px %", "Cloud"].map((header) => (
+                      <th key={header} className="px-3 py-2 text-left text-[9px] font-display font-semibold uppercase tracking-wider text-muted-foreground">{header}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {H3_CELLS.map((cell, i) => (
+                  {displayCells.map((cell, index) => (
                     <tr
-                      key={i}
-                      onClick={() => setSelectedCell(i)}
-                      className={`border-b border-border last:border-0 cursor-pointer transition-colors ${selectedCell === i ? "bg-primary/5" : "hover:bg-muted/30"}`}
+                      key={cell.id || index}
+                      onClick={() => setSelectedCell(index)}
+                      className={`cursor-pointer border-b border-border transition-colors last:border-0 ${selectedCell === index ? "bg-primary/5" : "hover:bg-muted/30"}`}
                     >
-                      <td className="px-3 py-1.5 font-display font-bold">{String(i + 1).padStart(2, "0")}</td>
-                      <td className={`px-3 py-1.5 font-display font-bold ${cell.ndvi > 0.5 ? "text-primary" : cell.ndvi > 0.3 ? "text-amber-600" : "text-destructive"}`}>{cell.ndvi.toFixed(3)}</td>
-                      <td className="px-3 py-1.5 font-display font-bold text-blue-600">{cell.moisture.toFixed(3)}</td>
-                      <td className="px-3 py-1.5">{(cell.bareSoil * 100).toFixed(1)}%</td>
-                      <td className="px-3 py-1.5">{cell.heat.toFixed(1)}</td>
-                      <td className="px-3 py-1.5">{cell.validPixels}</td>
-                      <td className="px-3 py-1.5">{cell.cloudFree ? <Check className="w-3 h-3 text-primary" /> : <Cloud className="w-3 h-3 text-muted-foreground" />}</td>
+                      <td className="px-3 py-1.5 font-display font-bold">{String(index + 1).padStart(2, "0")}</td>
+                      <td className="px-3 py-1.5 font-display font-bold text-primary">{Number(cell.ndvi || 0).toFixed(3)}</td>
+                      <td className="px-3 py-1.5 font-display font-bold text-blue-600">{Number(cell.moisture || 0).toFixed(3)}</td>
+                      <td className="px-3 py-1.5">{(Number(cell.bareSoil || 0) * 100).toFixed(1)}%</td>
+                      <td className="px-3 py-1.5">{Number(cell.heat || 30).toFixed(1)}</td>
+                      <td className="px-3 py-1.5">{Math.round(Number(cell.validPixels || 0))}</td>
+                      <td className="px-3 py-1.5">{cell.cloudFree ? <Check className="h-3 w-3 text-primary" /> : <Cloud className="h-3 w-3 text-muted-foreground" />}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -279,66 +361,74 @@ export default function LandIntelligence() {
           </div>
         </div>
 
-        {/* Right Panel — Index Readouts */}
         <div className="space-y-4">
-          {/* Farm-level index readouts */}
-          <div className="bg-card border border-border rounded-sm p-4 space-y-4">
-            <span className="text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground block">Farm-Level Indices</span>
+          <div className="space-y-4 rounded-sm border border-border bg-card p-4">
+            <span className="block text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground">Farm-Level Indices</span>
+            <div className="grid grid-cols-2 gap-3">
+              {satelliteStats.map((stat) => (
+                <div key={stat.label} className="rounded-sm border border-border bg-background p-3">
+                  <p className="text-[9px] font-display uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                  <div className="mt-1 flex items-end justify-between gap-2">
+                    <span className="text-lg font-display font-bold text-foreground">
+                      {typeof stat.value === "number" ? stat.value.toFixed(stat.unit === "%" ? 0 : 2) : stat.value}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold text-white ${stat.tone}`}>{stat.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
             <IndexReadout label="Vegetation (NDVI)" value={avgNdvi} icon={<Leaf />} color="bg-primary" />
             <IndexReadout label="Moisture (NDMI)" value={avgMoisture} icon={<Droplets />} color="bg-blue-500" />
             <IndexReadout label="Bare Soil Index" value={avgBareSoil} icon={<Mountain />} color="bg-amber-600" />
             <IndexReadout label="Avg. Surface Temp" value={avgHeat} unit="°C" min={25} max={40} icon={<Thermometer />} color="bg-red-500" />
           </div>
 
-          {/* Satellite Scene Card */}
-          <div className="bg-card border border-border rounded-sm p-4 space-y-3">
-            <span className="text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground block">Satellite Scene</span>
+          <div className="space-y-3 rounded-sm border border-border bg-card p-4">
+            <span className="block text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground">Satellite Scene</span>
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Scene ID</span><span className="font-mono text-[9px]">...{SATELLITE_DATA.sceneId.slice(-16)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Date</span><span className="font-display font-bold">{SATELLITE_DATA.date}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Provider</span><span>{SATELLITE_DATA.provider}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Cloud Cover</span><span className="font-display font-bold">{SATELLITE_DATA.cloudCover}%</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Valid Pixels</span><span className="font-display font-bold text-primary">{SATELLITE_DATA.validPixels}%</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground font-display uppercase tracking-wider text-[9px]">Processing</span><span>{SATELLITE_DATA.processingLevel}</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">Scene ID</span><span className="font-mono text-[9px]">{latestScene?.scene_id ? `...${latestScene.scene_id.slice(-16)}` : "Pending"}</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">Date</span><span className="font-display font-bold">{latestScene?.observation_date || "Pending"}</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">Provider</span><span>{latestScene?.provider || "Sentinel"}</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">Cloud Cover</span><span className="font-display font-bold">{Number(latestScene?.cloud_percentage || 0).toFixed(1)}% ({sceneQuality})</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">Valid Pixels</span><span className="font-display font-bold text-primary">{Math.round(Number(latestScene?.valid_pixels_pct || 0))}%</span></div>
+              <div className="flex justify-between"><span className="text-[9px] font-display uppercase tracking-wider text-muted-foreground">History Points</span><span>{history.length}</span></div>
             </div>
           </div>
 
-          {/* Data Quality */}
-          <div className="bg-card border border-border rounded-sm p-4 space-y-3">
-            <span className="text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground block">Data Quality</span>
+          <div className="space-y-3 rounded-sm border border-border bg-card p-4">
+            <span className="block text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground">Data Quality</span>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Cloud-free cells</span>
-                <span className="font-display font-bold">{H3_CELLS.filter(c => c.cloudFree).length}/{H3_CELLS.length}</span>
+                <span className="font-display font-bold">{cloudFreeCount}/{displayCells.length || 0}</span>
               </div>
-              <div className="h-2 bg-muted rounded-sm overflow-hidden">
-                <div className="h-full bg-primary rounded-sm" style={{ width: `${(H3_CELLS.filter(c => c.cloudFree).length / H3_CELLS.length) * 100}%` }} />
+              <div className="h-2 overflow-hidden rounded-sm bg-muted">
+                <div className="h-full rounded-sm bg-primary" style={{ width: `${displayCells.length ? (cloudFreeCount / displayCells.length) * 100 : 0}%` }} />
               </div>
-              <div className="flex items-center justify-between text-xs mt-2">
+              <div className="mt-2 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Avg. valid pixels</span>
-                <span className="font-display font-bold">{Math.round(H3_CELLS.reduce((s, c) => s + c.validPixels, 0) / H3_CELLS.length)}%</span>
+                <span className="font-display font-bold">{avgValidPixels}%</span>
               </div>
-              <div className="h-2 bg-muted rounded-sm overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-sm" style={{ width: `${Math.round(H3_CELLS.reduce((s, c) => s + c.validPixels, 0) / H3_CELLS.length)}%` }} />
+              <div className="h-2 overflow-hidden rounded-sm bg-muted">
+                <div className="h-full rounded-sm bg-blue-500" style={{ width: `${avgValidPixels}%` }} />
               </div>
             </div>
           </div>
 
-          {/* Predictions Placeholder */}
-          <div className="bg-card border border-border rounded-sm p-4 space-y-3">
-            <span className="text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground block">Predictions & Alerts</span>
+          <div className="space-y-3 rounded-sm border border-border bg-card p-4">
+            <span className="block text-[10px] font-display uppercase tracking-[0.2em] text-muted-foreground">Predictions & Alerts</span>
             <div className="space-y-2">
-              <div className="flex items-center gap-2 px-2 py-1.5 bg-destructive/5 border-l-2 border-destructive rounded-r-sm">
-                <span className="w-1.5 h-1.5 bg-destructive rounded-full pulse-live" />
-                <span className="text-[10px] text-destructive font-display font-semibold">Moisture stress in 4 cells — south-east quadrant</span>
+              <div className="flex items-center gap-2 rounded-r-sm border-l-2 border-destructive bg-destructive/5 px-2 py-1.5">
+                <span className="pulse-live h-1.5 w-1.5 rounded-full bg-destructive" />
+                <span className="text-[10px] font-display font-semibold text-destructive">Moisture trend: {moistureTrend}</span>
               </div>
-              <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-500/5 border-l-2 border-amber-500 rounded-r-sm">
-                <Sun className="w-3 h-3 text-amber-600" />
-                <span className="text-[10px] text-amber-700 font-display font-semibold">High surface temperature — 34.2°C peak</span>
+              <div className="flex items-center gap-2 rounded-r-sm border-l-2 border-amber-500 bg-amber-500/5 px-2 py-1.5">
+                <Sun className="h-3 w-3 text-amber-600" />
+                <span className="text-[10px] font-display font-semibold text-amber-700">Soil exposure: {soilTrend}</span>
               </div>
-              <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/5 border-l-2 border-primary rounded-r-sm">
-                <Leaf className="w-3 h-3 text-primary" />
-                <span className="text-[10px] text-primary font-display font-semibold">Vegetation growth trend: +0.08 NDVI over 30 days</span>
+              <div className="flex items-center gap-2 rounded-r-sm border-l-2 border-primary bg-primary/5 px-2 py-1.5">
+                <Leaf className="h-3 w-3 text-primary" />
+                <span className="text-[10px] font-display font-semibold text-primary">Vegetation trend: {vegetationTrend}</span>
               </div>
             </div>
           </div>
