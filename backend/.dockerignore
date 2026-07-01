@@ -1,0 +1,33 @@
+# Virtual envs
+.venv/
+venv/
+**/__pycache__/
+*.pyc
+
+# VCS / editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Local data / generated artifacts (not needed at runtime)
+local_lakehouse/
+data_contracts/
+reports/
+scripts/
+docs/
+
+# Tests
+**/tests/
+**/test_*.py
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db

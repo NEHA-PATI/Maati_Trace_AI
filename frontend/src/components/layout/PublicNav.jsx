@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { to: "/login", label: "Login" },
 ];
 
+const GET_STARTED_ITEM = { to: "/register", label: "Get Started" };
+
 export default function PublicNav() {
   const location = useLocation();
 
@@ -46,6 +48,13 @@ export default function PublicNav() {
               </Link>
             );
           })}
+
+          <Link
+            to={GET_STARTED_ITEM.to}
+            className="rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            {GET_STARTED_ITEM.label}
+          </Link>
         </nav>
       </div>
     </header>
