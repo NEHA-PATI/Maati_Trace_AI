@@ -231,6 +231,58 @@ def get_fpo(fpo_id: UUID) -> dict | None:
     return dict(row) if row else None
 
 
+def list_fpos() -> list[dict]:
+    query = text(
+        """
+        SELECT
+            fpo_id,
+            fpo_name,
+            registration_number,
+            state_name,
+            district_name,
+            block_name,
+            block_code,
+            contact_phone,
+            contact_email,
+            is_active
+        FROM fpos
+        WHERE is_active = TRUE
+        ORDER BY fpo_name ASC;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_fpo_by_user(user_id: UUID | str) -> dict | None:
+    query = text(
+        """
+        SELECT
+            f.fpo_id,
+            f.fpo_name,
+            f.registration_number,
+            f.state_name,
+            f.district_name,
+            f.block_name,
+            f.block_code,
+            f.contact_phone,
+            f.contact_email,
+            f.is_active
+        FROM fpo_users fu
+        JOIN fpos f ON f.fpo_id = fu.fpo_id
+        WHERE fu.user_id = :user_id
+          AND fu.is_active = TRUE
+          AND f.is_active = TRUE
+        ORDER BY fu.created_at DESC
+        LIMIT 1;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"user_id": str(user_id)}).mappings().first()
+    return dict(row) if row else None
+
+
 def create_farmer(data: dict[str, Any]) -> dict:
     validate_user_exists(data.get("user_id"))
     validate_fpo_exists(data.get("fpo_id"))
@@ -333,6 +385,39 @@ def get_farmer(farmer_id: UUID) -> dict | None:
         row = conn.execute(query, {"farmer_id": str(farmer_id)}).mappings().first()
 
     return dict(row) if row else None
+
+
+def get_farmer_by_user_id(user_id: UUID | str) -> dict | None:
+    query = text(
+        """
+        SELECT
+            farmer_id,
+            user_id,
+            fpo_id,
+            full_name,
+            phone_number,
+            gender,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            is_active
+        FROM farmer_profiles
+        WHERE user_id = :user_id
+          AND is_active = TRUE
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"user_id": str(user_id)}).mappings().first()
+    return dict(row) if row else None
+
+
+def get_farmer_by_user(user_id: UUID | str) -> dict | None:
+    return get_farmer_by_user_id(user_id)
 
 
 def create_farm(data: dict[str, Any]) -> dict:
@@ -490,3 +575,105 @@ def list_farms_by_farmer(farmer_id: UUID) -> list[dict]:
         rows = conn.execute(query, {"farmer_id": str(farmer_id)}).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def list_farmers_by_fpo(fpo_id: UUID | str) -> list[dict]:
+    query = text(
+        """
+        SELECT
+            farmer_id,
+            user_id,
+            fpo_id,
+            full_name,
+            phone_number,
+            gender,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            is_active
+        FROM farmer_profiles
+        WHERE fpo_id = :fpo_id
+          AND is_active = TRUE
+        ORDER BY full_name ASC;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"fpo_id": str(fpo_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def list_farms_by_fpo(fpo_id: UUID | str) -> list[dict]:
+    query = text(
+        """
+        SELECT
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active
+        FROM farms
+        WHERE fpo_id = :fpo_id
+          AND is_active = TRUE
+        ORDER BY created_at DESC;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"fpo_id": str(fpo_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_fpo_summary(fpo_id: UUID | str) -> dict:
+    query = text(
+        """
+        SELECT
+            :fpo_id::uuid AS fpo_id,
+            COUNT(DISTINCT fp.farmer_id) AS farmer_count,
+            COUNT(DISTINCT fm.farm_id) AS farm_count,
+            COALESCE(SUM(fm.area_acres), 0) AS total_area_acres
+        FROM fpos f
+        LEFT JOIN farmer_profiles fp ON fp.fpo_id = f.fpo_id AND fp.is_active = TRUE
+        LEFT JOIN farms fm ON fm.fpo_id = f.fpo_id AND fm.is_active = TRUE
+        WHERE f.fpo_id = :fpo_id
+          AND f.is_active = TRUE
+        GROUP BY f.fpo_id;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"fpo_id": str(fpo_id)}).mappings().first()
+    return dict(row) if row else {"fpo_id": str(fpo_id), "farmer_count": 0, "farm_count": 0, "total_area_acres": 0}
+
+
+def get_farmer_summary(farmer_id: UUID | str) -> dict:
+    query = text(
+        """
+        SELECT
+            :farmer_id::uuid AS farmer_id,
+            COUNT(f.farm_id) AS farm_count,
+            COALESCE(SUM(f.area_acres), 0) AS total_area_acres,
+            MAX(f.state_name) AS state_name,
+            MAX(f.district_name) AS district_name,
+            MAX(f.block_name) AS block_name
+        FROM farms f
+        WHERE f.farmer_id = :farmer_id
+          AND f.is_active = TRUE
+        GROUP BY f.farmer_id;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"farmer_id": str(farmer_id)}).mappings().first()
+    return dict(row) if row else {"farmer_id": str(farmer_id), "farm_count": 0, "total_area_acres": 0, "state_name": None, "district_name": None, "block_name": None}

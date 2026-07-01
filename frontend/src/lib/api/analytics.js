@@ -1,0 +1,11 @@
+import { apiRequest } from "./client";
+export const getFarmSummary = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/summary`);
+export const getLatestSentinel2 = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/sentinel2/latest`);
+export const getSentinel2History = (farmId, limit = 10) => apiRequest(`/api/analytics/farms/${farmId}/sentinel2/history?limit=${limit}`);
+export const getFarmTrends = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/trends`);
+export const getFarmH3Cells = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/h3-cells`);
+export const getFarmGridCells = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/grid-cells`);
+export const getLatestGridValues = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/grid-values/latest`);
+export const getGridValueHistory = (farmId, limit = 10) => apiRequest(`/api/analytics/farms/${farmId}/grid-values/history?limit=${limit}`);
+export const getFarmerAnalyticsSummary = (farmerId) => apiRequest(`/api/analytics/farmers/${farmerId}/summary`);
+export const getFpoAnalyticsSummary = (fpoId) => apiRequest(`/api/analytics/fpos/${fpoId}/summary`);

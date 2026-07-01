@@ -1,122 +1,60 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import Home from "@/pages/Home";
+import OurMethod from "@/pages/OurMethod";
+import UseCases from "@/pages/UseCases";
+import Login from "@/pages/Login";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminDashboard from "@/pages/AdminDashboard";
+import FpoDashboard from "@/pages/FpoDashboard";
+import FarmerProfile from "@/pages/FarmerProfile";
+import LandIntelligence from "@/pages/LandIntelligence";
+import FarmRegister from "@/pages/FarmRegister";
+import BulkUpload from "@/pages/BulkUpload";
+import Notifications from "@/pages/Notifications";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import MyFpo from "@/pages/MyFpo";
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/use-cases" element={<UseCases />} />
+        <Route path="/our-method" element={<OurMethod />} />
+        <Route element={<ProtectedRoute permission="/admin" />}>
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/fpo/me" />}>
+          <Route path="/fpo/me" element={<FpoDashboard />} />
+          <Route path="/my-fpo" element={<MyFpo />} />
+          <Route path="/fpo/:fpoId" element={<FpoDashboard />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/farmer/me" />}>
+          <Route path="/farmer/me" element={<FarmerProfile />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/farmers/:farmerId" />}>
+          <Route path="/farmers/:farmerId" element={<FarmerProfile />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/land/:farmId" />}>
+          <Route path="/land/:farmId" element={<LandIntelligence />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/farm-register" />}>
+          <Route path="/farm-register" element={<FarmRegister />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/bulk-upload" />}>
+          <Route path="/bulk-upload" element={<BulkUpload />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/notifications" />}>
+          <Route path="/notifications" element={<Notifications />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
-
-export default App

@@ -97,3 +97,32 @@ def materialize_farm_analysis_endpoint(
             "snapshot_date": lakehouse_result.get("snapshot_date"),
         },
     )
+
+
+@app.post(
+    "/v1/hot-stream/farms/{farm_id}/materialize",
+    response_model=FarmAnalysisMaterializeResponse,
+)
+def materialize_farm_alias_endpoint(
+    farm_id: UUID,
+    payload: FarmAnalysisMaterializeRequest,
+):
+    return materialize_farm_analysis_endpoint(farm_id, payload)
+
+
+@app.post("/v1/hot-stream/farms/{farm_id}/trends/materialize")
+def materialize_farm_trends_endpoint(farm_id: UUID):
+    return {
+        "farm_id": str(farm_id),
+        "status": "pending_materialization_hook",
+        "message": "Trend materialization endpoint is wired. Implement lakehouse-to-trend aggregation job next.",
+    }
+
+
+@app.post("/v1/hot-stream/farms/{farm_id}/grid/materialize")
+def materialize_farm_grid_endpoint(farm_id: UUID):
+    return {
+        "farm_id": str(farm_id),
+        "status": "pending_materialization_hook",
+        "message": "Grid materialization endpoint is wired. Implement polygon-to-grid crosswalk job next.",
+    }

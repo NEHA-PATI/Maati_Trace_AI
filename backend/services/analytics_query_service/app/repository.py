@@ -251,3 +251,158 @@ def get_latest_aggregate(farm_id: UUID | str) -> dict[str, Any] | None:
         ) from exc
 
     return dict(row) if row else None
+
+
+def get_farm_trends(farm_id: UUID | str) -> list[dict[str, Any]]:
+    query = text(
+        """
+        SELECT
+            farm_id,
+            snapshot_date,
+            ROUND(AVG(ndvi)::numeric, 6)::double precision AS avg_ndvi,
+            ROUND(AVG(ndmi)::numeric, 6)::double precision AS avg_ndmi,
+            ROUND(AVG(bsi)::numeric, 6)::double precision AS avg_bsi,
+            ROUND(AVG(evi)::numeric, 6)::double precision AS avg_evi,
+            ROUND(AVG(savi)::numeric, 6)::double precision AS avg_savi,
+            ROUND(AVG(ndwi)::numeric, 6)::double precision AS avg_ndwi,
+            ROUND(AVG(msi)::numeric, 6)::double precision AS avg_msi,
+            ROUND(AVG(nbr)::numeric, 6)::double precision AS avg_nbr,
+            ROUND(AVG(ndre)::numeric, 6)::double precision AS avg_ndre
+        FROM h3_sentinel2_features
+        WHERE farm_id = :farm_id
+        GROUP BY farm_id, snapshot_date
+        ORDER BY snapshot_date DESC
+        LIMIT 30;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"farm_id": str(farm_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_farm_h3_cells(farm_id: UUID | str) -> list[dict[str, Any]]:
+    query = text(
+        f"""
+        SELECT {FEATURE_COLUMNS}
+        FROM h3_sentinel2_features
+        WHERE farm_id = :farm_id
+          AND snapshot_date = (
+            SELECT MAX(snapshot_date)
+            FROM h3_sentinel2_features
+            WHERE farm_id = :farm_id
+          )
+        ORDER BY h3_index;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"farm_id": str(farm_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_farm_grid_cells(farm_id: UUID | str) -> list[dict[str, Any]]:
+    query = text(
+        """
+        SELECT
+            grid_cell_id,
+            farm_id,
+            grid_size_meters,
+            grid_row,
+            grid_col,
+            cell_polygon_geojson,
+            cell_centroid_lon,
+            cell_centroid_lat,
+            coverage_ratio,
+            created_at
+        FROM farm_grid_cells
+        WHERE farm_id = :farm_id
+        ORDER BY grid_row, grid_col;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"farm_id": str(farm_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_latest_grid_values(farm_id: UUID | str) -> list[dict[str, Any]]:
+    query = text(
+        """
+        SELECT
+            gv.*,
+            gc.grid_row,
+            gc.grid_col,
+            gc.cell_polygon_geojson,
+            gc.cell_centroid_lon,
+            gc.cell_centroid_lat
+        FROM farm_grid_daily_values gv
+        JOIN farm_grid_cells gc ON gc.grid_cell_id = gv.grid_cell_id
+        WHERE gv.farm_id = :farm_id
+          AND gv.snapshot_date = (
+            SELECT MAX(snapshot_date)
+            FROM farm_grid_daily_values
+            WHERE farm_id = :farm_id
+          )
+        ORDER BY gc.grid_row, gc.grid_col;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"farm_id": str(farm_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_grid_value_history(farm_id: UUID | str, limit: int = 10) -> list[dict[str, Any]]:
+    query = text(
+        """
+        SELECT
+            snapshot_date,
+            ROUND(AVG(ndvi)::numeric, 6)::double precision AS avg_ndvi,
+            ROUND(AVG(ndmi)::numeric, 6)::double precision AS avg_ndmi,
+            ROUND(AVG(ndwi)::numeric, 6)::double precision AS avg_ndwi,
+            ROUND(AVG(bsi)::numeric, 6)::double precision AS avg_bsi
+        FROM farm_grid_daily_values
+        WHERE farm_id = :farm_id
+        GROUP BY snapshot_date
+        ORDER BY snapshot_date DESC
+        LIMIT :limit;
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"farm_id": str(farm_id), "limit": limit}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_farmer_analytics_summary(farmer_id: UUID | str) -> dict[str, Any]:
+    query = text(
+        """
+        SELECT
+            :farmer_id::uuid AS farmer_id,
+            COUNT(DISTINCT farm_id) AS farm_count,
+            COUNT(*) AS h3_record_count,
+            ROUND(AVG(ndvi)::numeric, 6)::double precision AS avg_ndvi,
+            ROUND(AVG(ndmi)::numeric, 6)::double precision AS avg_ndmi,
+            ROUND(AVG(bsi)::numeric, 6)::double precision AS avg_bsi
+        FROM h3_sentinel2_features
+        WHERE farmer_id = :farmer_id;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"farmer_id": str(farmer_id)}).mappings().first()
+    return dict(row) if row else {"farmer_id": str(farmer_id), "farm_count": 0, "h3_record_count": 0}
+
+
+def get_fpo_analytics_summary(fpo_id: UUID | str) -> dict[str, Any]:
+    query = text(
+        """
+        SELECT
+            :fpo_id::uuid AS fpo_id,
+            COUNT(DISTINCT farm_id) AS farm_count,
+            COUNT(*) AS h3_record_count,
+            ROUND(AVG(ndvi)::numeric, 6)::double precision AS avg_ndvi,
+            ROUND(AVG(ndmi)::numeric, 6)::double precision AS avg_ndmi,
+            ROUND(AVG(bsi)::numeric, 6)::double precision AS avg_bsi
+        FROM h3_sentinel2_features
+        WHERE fpo_id = :fpo_id;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"fpo_id": str(fpo_id)}).mappings().first()
+    return dict(row) if row else {"fpo_id": str(fpo_id), "farm_count": 0, "h3_record_count": 0}
