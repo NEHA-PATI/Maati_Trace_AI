@@ -49,7 +49,7 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const message =
-      (payload && typeof payload === "object" && (payload.detail || payload.message)) ||
+      (payload && typeof payload === "object" && (payload.detail?.message || payload.detail || payload.message)) ||
       `Request failed with status ${response.status}`;
     throw new ApiError(message, response.status, payload);
   }

@@ -191,7 +191,7 @@ export default function Home() {
       <section ref={heroRef} className="relative h-screen overflow-hidden">
         <motion.div style={{ y: heroY }} className="absolute inset-0">
           <video autoPlay muted loop playsInline className="w-full h-full object-cover"
-            src="https://res.cloudinary.com/dkst917dg/video/upload/v1782894887/home_page_vdo_1_vcroju.mp4" />
+            src="https://res.cloudinary.com/dkst917dg/video/upload/v1780464774/vesting_3_rhwasz.mp4" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/70" />
         </motion.div>
 

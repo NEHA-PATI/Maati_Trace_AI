@@ -94,7 +94,11 @@ def get_farmer_for_write(farmer_id: UUID | str) -> dict:
 
 
 def create_fpo(data: dict[str, Any]) -> dict:
+    validate_user_exists(data.get("user_id"))
+
     payload = data.copy()
+    payload["user_id"] = str(payload["user_id"]) if payload.get("user_id") else None
+    payload["fpo_user_role"] = normalize_text(payload.get("fpo_user_role")) or "fpo_admin"
     payload["fpo_name"] = normalize_text(payload.get("fpo_name"))
     payload["registration_number"] = normalize_text(payload.get("registration_number"))
     payload["state_name"] = normalize_text(payload.get("state_name")) or "Odisha"
@@ -183,6 +187,28 @@ def create_fpo(data: dict[str, Any]) -> dict:
         """
     )
 
+    link_user_query = text(
+        """
+        INSERT INTO fpo_users (
+            fpo_id,
+            user_id,
+            role,
+            is_active
+        )
+        VALUES (
+            :fpo_id,
+            :user_id,
+            :fpo_user_role,
+            TRUE
+        )
+        ON CONFLICT (fpo_id, user_id)
+        DO UPDATE SET
+            role = EXCLUDED.role,
+            is_active = TRUE,
+            updated_at = now();
+        """
+    )
+
     try:
         with engine.begin() as conn:
             existing_fpo = None
@@ -199,6 +225,15 @@ def create_fpo(data: dict[str, Any]) -> dict:
             else:
                 row = conn.execute(insert_query, payload).mappings().one()
 
+            if payload.get("user_id"):
+                conn.execute(
+                    link_user_query,
+                    {
+                        "fpo_id": str(row["fpo_id"]),
+                        "user_id": payload["user_id"],
+                        "fpo_user_role": payload["fpo_user_role"],
+                    },
+                )
     except SQLAlchemyError as exc:
         raise FarmRegistryRepositoryError(f"Failed to create FPO: {exc}") from exc
 
@@ -287,7 +322,49 @@ def create_farmer(data: dict[str, Any]) -> dict:
     validate_user_exists(data.get("user_id"))
     validate_fpo_exists(data.get("fpo_id"))
 
-    query = text(
+    existing_by_user_query = text(
+        """
+        SELECT farmer_id
+        FROM farmer_profiles
+        WHERE user_id = :user_id
+        LIMIT 1;
+        """
+    )
+
+    update_query = text(
+        """
+        UPDATE farmer_profiles
+        SET
+            fpo_id = :fpo_id,
+            full_name = :full_name,
+            phone_number = :phone_number,
+            gender = :gender,
+            state_name = :state_name,
+            district_name = :district_name,
+            district_code = :district_code,
+            block_name = :block_name,
+            block_code = :block_code,
+            village_name = :village_name,
+            is_active = TRUE
+        WHERE farmer_id = :farmer_id
+        RETURNING
+            farmer_id,
+            user_id,
+            fpo_id,
+            full_name,
+            phone_number,
+            gender,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            is_active;
+        """
+    )
+
+    insert_query = text(
         """
         INSERT INTO farmer_profiles (
             user_id,
@@ -351,7 +428,19 @@ def create_farmer(data: dict[str, Any]) -> dict:
 
     try:
         with engine.begin() as conn:
-            row = conn.execute(query, payload).mappings().one()
+            existing_by_user = None
+
+            if payload.get("user_id"):
+                existing_by_user = conn.execute(
+                    existing_by_user_query,
+                    {"user_id": payload["user_id"]},
+                ).mappings().first()
+
+            if existing_by_user:
+                payload["farmer_id"] = str(existing_by_user["farmer_id"])
+                row = conn.execute(update_query, payload).mappings().one()
+            else:
+                row = conn.execute(insert_query, payload).mappings().one()
     except SQLAlchemyError as exc:
         raise FarmRegistryRepositoryError(f"Failed to create farmer: {exc}") from exc
 
@@ -641,7 +730,7 @@ def get_fpo_summary(fpo_id: UUID | str) -> dict:
     query = text(
         """
         SELECT
-            :fpo_id::uuid AS fpo_id,
+            :fpo_id AS fpo_id,
             COUNT(DISTINCT fp.farmer_id) AS farmer_count,
             COUNT(DISTINCT fm.farm_id) AS farm_count,
             COALESCE(SUM(fm.area_acres), 0) AS total_area_acres
@@ -662,7 +751,7 @@ def get_farmer_summary(farmer_id: UUID | str) -> dict:
     query = text(
         """
         SELECT
-            :farmer_id::uuid AS farmer_id,
+            :farmer_id AS farmer_id,
             COUNT(f.farm_id) AS farm_count,
             COALESCE(SUM(f.area_acres), 0) AS total_area_acres,
             MAX(f.state_name) AS state_name,

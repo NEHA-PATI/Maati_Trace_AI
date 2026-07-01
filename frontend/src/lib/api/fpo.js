@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+export const createFpo = (payload) => apiRequest("/api/fpos", { method: "POST", body: JSON.stringify(payload) });
 export const getFpos = () => apiRequest("/api/fpos");
 export const getMyFpo = () => apiRequest("/api/fpos/me");
 export const getFpo = (fpoId) => apiRequest(`/api/fpos/${fpoId}`);
