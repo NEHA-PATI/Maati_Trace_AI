@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     boundary_index_service_url: str = "http://localhost:8004"
     district_boundary_service_url: str = "http://localhost:8005"
+    farm_registry_service_url: str = "http://localhost:8006"
     stac_catalog_service_url: str = "http://localhost:8007"
 
     default_stac_provider: str = "planetary_computer"
@@ -38,6 +39,31 @@ class Settings(BaseSettings):
     nasa_cmr_stac_url: str = "https://cmr.earthdata.nasa.gov/stac"
     nasa_cmr_cloudstac_url: str = "https://cmr.earthdata.nasa.gov/cloudstac"
     nasa_cmr_enabled: bool = False
+
+    raster_processor_service_url: str = "http://localhost:8008"
+    raster_http_timeout_seconds: int = 120
+    raster_max_pixels_per_request: int = 250000
+
+    lakehouse_writer_service_url: str = "http://localhost:8009"
+
+    storage_mode: str = "local"
+    local_lakehouse_path: str = "./local_lakehouse"
+    s3_lakehouse_bucket: str | None = None
+    aws_region: str = "ap-south-1"
+
+    hot_stream_orchestrator_service_url: str = "http://localhost:8010"
+
+    analytics_query_service_url: str = "http://localhost:8011"
+
+    auth_service_url: str = "http://localhost:8002"
+
+    jwt_secret: str = "change-this-local-only"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 30
+    password_hash_scheme: str = "bcrypt"
+
+    api_gateway_service_url: str = "http://localhost:8000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

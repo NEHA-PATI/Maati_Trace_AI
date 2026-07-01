@@ -1,1 +1,2 @@
 ﻿-r ../../requirements-base.txt
+requests==2.32.3

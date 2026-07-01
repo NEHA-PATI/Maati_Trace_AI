@@ -1,0 +1,469 @@
+{
+  "services": [
+    {
+      "name": "boundary_index_service",
+      "port": 8004,
+      "status": "active",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "DISTRICT_BOUNDARY_SERVICE",
+      "port": 8005,
+      "status": "active",
+      "db_tables_read": ["states", "districts", "blocks"],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "farm_registry_service",
+      "port": 8006,
+      "status": "active",
+      "db_tables_read": ["users", "fpos", "farmer_profiles", "farms", "districts", "blocks"],
+      "db_tables_written": ["fpos", "farmer_profiles", "farms"],
+      "dependencies": ["DISTRICT_BOUNDARY_SERVICE", "boundary_index_service"]
+    },
+    {
+      "name": "stac_catalog_service",
+      "port": 8007,
+      "status": "active",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": ["external_stac_providers"]
+    },
+    {
+      "name": "raster_processor_service",
+      "port": 8008,
+      "status": "active",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": ["stac_catalog_service", "remote_raster_assets"]
+    },
+    {
+      "name": "api_gateway_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "auth_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "analytics_query_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "alert_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "cold_batch_orchestrator_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "dashboard_bff_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "hot_stream_orchestrator_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "lakehouse_writer_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "ml_inference_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "ml_training_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    },
+    {
+      "name": "observability_service",
+      "status": "health_only",
+      "db_tables_read": [],
+      "db_tables_written": [],
+      "dependencies": []
+    }
+  ],
+  "endpoints": [
+    {
+      "service": "DISTRICT_BOUNDARY_SERVICE",
+      "method": "GET",
+      "path": "/v1/location/stats",
+      "reads": ["states", "districts", "blocks"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "DISTRICT_BOUNDARY_SERVICE",
+      "method": "GET",
+      "path": "/v1/states",
+      "reads": ["states"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "DISTRICT_BOUNDARY_SERVICE",
+      "method": "GET",
+      "path": "/v1/districts",
+      "reads": ["districts"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "DISTRICT_BOUNDARY_SERVICE",
+      "method": "GET",
+      "path": "/v1/blocks",
+      "reads": ["blocks"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "DISTRICT_BOUNDARY_SERVICE",
+      "method": "POST",
+      "path": "/v1/location/validate",
+      "reads": ["districts", "blocks"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "POST",
+      "path": "/v1/fpos",
+      "reads": ["districts", "blocks", "fpos"],
+      "writes": ["fpos"],
+      "calls": ["DISTRICT_BOUNDARY_SERVICE:/v1/location/validate"]
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "GET",
+      "path": "/v1/fpos/{fpo_id}",
+      "reads": ["fpos"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "POST",
+      "path": "/v1/farmers",
+      "reads": ["districts", "blocks", "users", "fpos"],
+      "writes": ["farmer_profiles"],
+      "calls": ["DISTRICT_BOUNDARY_SERVICE:/v1/location/validate"]
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "GET",
+      "path": "/v1/farmers/{farmer_id}",
+      "reads": ["farmer_profiles"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "POST",
+      "path": "/v1/farms/register",
+      "reads": ["districts", "blocks", "farmer_profiles", "fpos"],
+      "writes": ["farms"],
+      "calls": [
+        "DISTRICT_BOUNDARY_SERVICE:/v1/location/validate",
+        "boundary_index_service:/v1/h3/preview"
+      ]
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "GET",
+      "path": "/v1/farms/{farm_id}",
+      "reads": ["farms"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "farm_registry_service",
+      "method": "GET",
+      "path": "/v1/farmers/{farmer_id}/farms",
+      "reads": ["farmer_profiles", "farms"],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "boundary_index_service",
+      "method": "POST",
+      "path": "/v1/h3/preview",
+      "reads": [],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "GET",
+      "path": "/v1/stac/providers",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider_config"]
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "GET",
+      "path": "/v1/stac/datasets",
+      "reads": [],
+      "writes": [],
+      "calls": []
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "GET",
+      "path": "/v1/stac/providers/{provider}/collections",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider"]
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "POST",
+      "path": "/v1/stac/datasets/availability",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider"]
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "GET",
+      "path": "/v1/stac/providers/{provider}/collections/{collection_id}/assets",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider"]
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "POST",
+      "path": "/v1/stac/search",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider"]
+    },
+    {
+      "service": "stac_catalog_service",
+      "method": "POST",
+      "path": "/v1/stac/latest",
+      "reads": [],
+      "writes": [],
+      "calls": ["external_stac_provider"]
+    },
+    {
+      "service": "raster_processor_service",
+      "method": "POST",
+      "path": "/v1/raster/sentinel2/indices/preview",
+      "reads": [],
+      "writes": [],
+      "calls": ["remote_raster_assets"]
+    },
+    {
+      "service": "raster_processor_service",
+      "method": "POST",
+      "path": "/v1/raster/sentinel2/indices/preview-from-search",
+      "reads": [],
+      "writes": [],
+      "calls": [
+        "stac_catalog_service:/v1/stac/search",
+        "remote_raster_assets"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "states",
+      "status": "active",
+      "declared_in_repo_sql": true,
+      "used_by_services": ["DISTRICT_BOUNDARY_SERVICE"],
+      "used_by_scripts": ["ingest_location_master.py"]
+    },
+    {
+      "name": "districts",
+      "status": "active",
+      "declared_in_repo_sql": true,
+      "used_by_services": ["DISTRICT_BOUNDARY_SERVICE", "farm_registry_service"],
+      "used_by_scripts": ["ingest_location_master.py"]
+    },
+    {
+      "name": "blocks",
+      "status": "active",
+      "declared_in_repo_sql": true,
+      "used_by_services": ["DISTRICT_BOUNDARY_SERVICE", "farm_registry_service"],
+      "used_by_scripts": ["ingest_location_master.py"]
+    },
+    {
+      "name": "users",
+      "status": "active",
+      "declared_in_repo_sql": true,
+      "used_by_services": ["farm_registry_service"],
+      "used_by_scripts": []
+    },
+    {
+      "name": "fpos",
+      "status": "active",
+      "declared_in_repo_sql": false,
+      "used_by_services": ["farm_registry_service"],
+      "needs_manual_review": true
+    },
+    {
+      "name": "fpo_users",
+      "status": "future",
+      "declared_in_repo_sql": false,
+      "used_by_services": [],
+      "needs_manual_review": false
+    },
+    {
+      "name": "farmer_profiles",
+      "status": "active",
+      "declared_in_repo_sql": false,
+      "used_by_services": ["farm_registry_service"],
+      "needs_manual_review": true
+    },
+    {
+      "name": "farms",
+      "status": "active",
+      "declared_in_repo_sql": false,
+      "used_by_services": ["farm_registry_service"],
+      "needs_manual_review": true
+    },
+    {
+      "name": "pipeline_jobs",
+      "status": "future",
+      "declared_in_repo_sql": true,
+      "used_by_services": []
+    },
+    {
+      "name": "farm_alerts",
+      "status": "future",
+      "declared_in_repo_sql": true,
+      "used_by_services": []
+    },
+    {
+      "name": "district_boundaries",
+      "status": "future",
+      "declared_in_repo_sql": false,
+      "used_by_services": [],
+      "needs_manual_review": true
+    },
+    {
+      "name": "farmers",
+      "status": "redundant",
+      "declared_in_repo_sql": false,
+      "used_by_services": []
+    },
+    {
+      "name": "registered_farms",
+      "status": "redundant",
+      "declared_in_repo_sql": true,
+      "used_by_services": []
+    }
+  ],
+  "endpoint_table_map": {
+    "GET /v1/location/stats": { "reads": ["states", "districts", "blocks"], "writes": [] },
+    "GET /v1/states": { "reads": ["states"], "writes": [] },
+    "GET /v1/districts": { "reads": ["districts"], "writes": [] },
+    "GET /v1/blocks": { "reads": ["blocks"], "writes": [] },
+    "POST /v1/location/validate": { "reads": ["districts", "blocks"], "writes": [] },
+    "POST /v1/fpos": { "reads": ["districts", "blocks", "fpos"], "writes": ["fpos"] },
+    "GET /v1/fpos/{fpo_id}": { "reads": ["fpos"], "writes": [] },
+    "POST /v1/farmers": { "reads": ["districts", "blocks", "users", "fpos"], "writes": ["farmer_profiles"] },
+    "GET /v1/farmers/{farmer_id}": { "reads": ["farmer_profiles"], "writes": [] },
+    "POST /v1/farms/register": { "reads": ["districts", "blocks", "farmer_profiles", "fpos"], "writes": ["farms"] },
+    "GET /v1/farms/{farm_id}": { "reads": ["farms"], "writes": [] },
+    "GET /v1/farmers/{farmer_id}/farms": { "reads": ["farmer_profiles", "farms"], "writes": [] }
+  },
+  "service_dependencies": [
+    {
+      "from": "farm_registry_service",
+      "to": "DISTRICT_BOUNDARY_SERVICE",
+      "endpoint": "/v1/location/validate",
+      "reason": "location validation before FPO/farmer/farm writes"
+    },
+    {
+      "from": "farm_registry_service",
+      "to": "boundary_index_service",
+      "endpoint": "/v1/h3/preview",
+      "reason": "H3 preview generation during farm registration"
+    },
+    {
+      "from": "raster_processor_service",
+      "to": "stac_catalog_service",
+      "endpoint": "/v1/stac/search",
+      "reason": "scene discovery for preview-from-search"
+    }
+  ],
+  "redundant_tables": [
+    {
+      "table": "registered_farms",
+      "reason": "repo SQL defines it, but active farm API reads/writes farms instead"
+    },
+    {
+      "table": "farmers",
+      "reason": "not referenced in code; farmer_profiles is the active model name"
+    }
+  ],
+  "recommended_actions": [
+    {
+      "action": "adopt_canonical_schema",
+      "tables": ["states", "districts", "blocks", "users", "fpos", "farmer_profiles", "farms"],
+      "priority": "high"
+    },
+    {
+      "action": "create_missing_repo_sql_for_active_tables",
+      "tables": ["fpos", "farmer_profiles", "farms"],
+      "priority": "high",
+      "needs_manual_review": true
+    },
+    {
+      "action": "repoint_future_alert_fk",
+      "table": "farm_alerts",
+      "from_reference": "registered_farms",
+      "to_reference": "farms",
+      "priority": "medium"
+    },
+    {
+      "action": "archive_or_drop_legacy_tables_after_validation",
+      "tables": ["registered_farms", "farmers"],
+      "priority": "medium",
+      "needs_manual_review": true
+    },
+    {
+      "action": "keep_future_tables_unwired_for_now",
+      "tables": ["pipeline_jobs", "farm_alerts", "district_boundaries", "fpo_users"],
+      "priority": "low"
+    }
+  ]
+}

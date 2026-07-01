@@ -1,0 +1,926 @@
+{
+  "pipeline_name": "MaatiTrace Bulk CSV Pipeline Ingestion",
+  "input_csv": "data_contracts\\csv\\maatitrace_bulk_pipeline_template.csv",
+  "health_checks": {
+    "boundary_index_service": {
+      "service": "boundary_index_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "district_boundary_service": {
+      "service": "district_boundary_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "farm_registry_service": {
+      "service": "farm_registry_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "raster_processor_service": {
+      "service": "raster_processor_service",
+      "status": "live",
+      "environment": "local"
+    }
+  },
+  "results": [
+    {
+      "row_id": "ROW-001",
+      "status": "FAILED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "fpo_name": "Puri Agri FPO",
+          "registration_number": "PIPE-PURI-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "block_name": "Pipili",
+          "block_code": 3544,
+          "contact_phone": "9990003544",
+          "contact_email": "puri.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "d7aeda00-5a4b-49d2-aa4c-8dcef21ee23b",
+          "user_id": null,
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "full_name": "Pipeline Farmer Pipili",
+          "phone_number": "9991003544",
+          "gender": "Female",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Pipili",
+          "block_code": 3544,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "61e0f122-8f88-43ac-ad1f-f1fa4bfdf6f0",
+          "farmer_id": "d7aeda00-5a4b-49d2-aa4c-8dcef21ee23b",
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "farm_name": "Pipili Pipeline Farm",
+          "survey_number": "PIPE-FARM-3544",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Pipili",
+          "block_code": 3544,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  85.832,
+                  20.113
+                ],
+                [
+                  85.83278,
+                  20.113
+                ],
+                [
+                  85.83278,
+                  20.11337
+                ],
+                [
+                  85.832,
+                  20.11337
+                ],
+                [
+                  85.832,
+                  20.113
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 8,
+          "area_acres": 0.8256,
+          "bbox": [
+            85.832,
+            20.113,
+            85.83278,
+            20.11337
+          ],
+          "is_active": true
+        }
+      },
+      "error": "POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search\nStatus: 400\nResponse: {\n  \"detail\": {\n    \"code\": \"RASTER_PROCESSING_ERROR\",\n    \"message\": \"Failed to call STAC catalog service: HTTPConnectionPool(host='localhost', port=8007): Read timed out. (read timeout=120)\"\n  }\n}"
+    },
+    {
+      "row_id": "ROW-002",
+      "status": "PASSED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "fpo_name": "Puri Agri FPO",
+          "registration_number": "PIPE-PURI-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "block_name": "Sadar",
+          "block_code": 3545,
+          "contact_phone": "9990003545",
+          "contact_email": "puri.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "c925f154-e0f9-4809-b9fb-0fff4e13b834",
+          "user_id": null,
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "full_name": "Pipeline Farmer Sadar",
+          "phone_number": "9991003545",
+          "gender": "Male",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Sadar",
+          "block_code": 3545,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "86ac2a3b-7fce-4b3d-9605-05f5ec628880",
+          "farmer_id": "c925f154-e0f9-4809-b9fb-0fff4e13b834",
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "farm_name": "Sadar Pipeline Farm",
+          "survey_number": "PIPE-FARM-3545",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Sadar",
+          "block_code": 3545,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  85.824,
+                  19.819
+                ],
+                [
+                  85.82478,
+                  19.819
+                ],
+                [
+                  85.82478,
+                  19.81937
+                ],
+                [
+                  85.824,
+                  19.81937
+                ],
+                [
+                  85.824,
+                  19.819
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 14,
+          "area_acres": 0.8271,
+          "bbox": [
+            85.824,
+            19.819,
+            85.82478,
+            19.81937
+          ],
+          "is_active": true
+        },
+        "raster_preview": {
+          "farm_id": "86ac2a3b-7fce-4b3d-9605-05f5ec628880",
+          "provider": "planetary_computer",
+          "collection_id": "sentinel-2-l2a",
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QUC_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.419109,
+          "bbox": [
+            85.824,
+            19.819,
+            85.8242,
+            19.8192
+          ],
+          "h3_resolution": 12,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "features": [
+            {
+              "h3_index": 631570317724797439,
+              "pixel_count": 4,
+              "valid_pixel_count": 4,
+              "cloud_pixel_count": 0,
+              "nodata_pixel_count": 0,
+              "cloud_percentage": 0.0,
+              "mean_blue": 0.197425,
+              "mean_green": 0.2028,
+              "mean_red": 0.191675,
+              "mean_rededge1": 0.220475,
+              "mean_rededge2": 0.251975,
+              "mean_rededge3": 0.27105,
+              "mean_nir": 0.24045,
+              "mean_nir08": 0.27085,
+              "mean_swir16": 0.206975,
+              "mean_swir22": 0.169925,
+              "ndvi": 0.111432,
+              "gndvi": 0.083444,
+              "evi": 0.132526,
+              "savi": 0.077977,
+              "ndmi": 0.073572,
+              "ndwi": -0.083444,
+              "mndwi": -0.009787,
+              "msi": 0.86846,
+              "bsi": -0.04648,
+              "nbr": 0.170207,
+              "nbr2": 0.098062,
+              "ndre": 0.041863,
+              "reci": 0.091964
+            }
+          ]
+        }
+      },
+      "summary": {
+        "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+        "farmer_id": "c925f154-e0f9-4809-b9fb-0fff4e13b834",
+        "farm_id": "86ac2a3b-7fce-4b3d-9605-05f5ec628880",
+        "area_acres": 0.8271,
+        "h3_cell_count": 14,
+        "raster_row_count": 1,
+        "raster_valid_pixels": 4,
+        "ndvi": 0.111432,
+        "ndmi": 0.073572,
+        "bsi": -0.04648
+      }
+    },
+    {
+      "row_id": "ROW-003",
+      "status": "PASSED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "fpo_name": "Puri Agri FPO",
+          "registration_number": "PIPE-PURI-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "block_name": "Satyabadi",
+          "block_code": 3546,
+          "contact_phone": "9990003546",
+          "contact_email": "puri.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "6bd97292-3213-4023-97ae-1ce2da05dc79",
+          "user_id": null,
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "full_name": "Pipeline Farmer Satyabadi",
+          "phone_number": "9991003546",
+          "gender": "Female",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Satyabadi",
+          "block_code": 3546,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "1d09e2bf-d3a7-4bda-aaa6-c1490525aa80",
+          "farmer_id": "6bd97292-3213-4023-97ae-1ce2da05dc79",
+          "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+          "farm_name": "Satyabadi Pipeline Farm",
+          "survey_number": "PIPE-FARM-3546",
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Satyabadi",
+          "block_code": 3546,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  85.8205,
+                  19.99
+                ],
+                [
+                  85.82128,
+                  19.99
+                ],
+                [
+                  85.82128,
+                  19.99037
+                ],
+                [
+                  85.8205,
+                  19.99037
+                ],
+                [
+                  85.8205,
+                  19.99
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 9,
+          "area_acres": 0.8262,
+          "bbox": [
+            85.8205,
+            19.99,
+            85.82128,
+            19.99037
+          ],
+          "is_active": true
+        },
+        "raster_preview": {
+          "farm_id": "1d09e2bf-d3a7-4bda-aaa6-c1490525aa80",
+          "provider": "planetary_computer",
+          "collection_id": "sentinel-2-l2a",
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QUC_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.419109,
+          "bbox": [
+            85.8205,
+            19.99,
+            85.8207,
+            19.990199999999998
+          ],
+          "h3_resolution": 12,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "features": [
+            {
+              "h3_index": 631570303531806207,
+              "pixel_count": 4,
+              "valid_pixel_count": 4,
+              "cloud_pixel_count": 0,
+              "nodata_pixel_count": 0,
+              "cloud_percentage": 0.0,
+              "mean_blue": 0.196,
+              "mean_green": 0.2024,
+              "mean_red": 0.193475,
+              "mean_rededge1": 0.233275,
+              "mean_rededge2": 0.3101,
+              "mean_rededge3": 0.340325,
+              "mean_nir": 0.3327,
+              "mean_nir08": 0.346725,
+              "mean_swir16": 0.271,
+              "mean_swir22": 0.200375,
+              "ndvi": 0.264636,
+              "gndvi": 0.243423,
+              "evi": 0.340138,
+              "savi": 0.203481,
+              "ndmi": 0.102061,
+              "ndwi": -0.243423,
+              "mndwi": -0.144957,
+              "msi": 0.81489,
+              "bsi": -0.064639,
+              "nbr": 0.248161,
+              "nbr2": 0.149896,
+              "ndre": 0.175449,
+              "reci": 0.426222
+            }
+          ]
+        }
+      },
+      "summary": {
+        "fpo_id": "067adf09-8b99-40aa-a9e3-13ddeff2f1f1",
+        "farmer_id": "6bd97292-3213-4023-97ae-1ce2da05dc79",
+        "farm_id": "1d09e2bf-d3a7-4bda-aaa6-c1490525aa80",
+        "area_acres": 0.8262,
+        "h3_cell_count": 9,
+        "raster_row_count": 1,
+        "raster_valid_pixels": 4,
+        "ndvi": 0.264636,
+        "ndmi": 0.102061,
+        "bsi": -0.064639
+      }
+    },
+    {
+      "row_id": "ROW-004",
+      "status": "FAILED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "fpo_name": "Sambalpur Agri FPO",
+          "registration_number": "PIPE-SAMBALPUR-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "block_name": "Bamra",
+          "block_code": 3558,
+          "contact_phone": "9990003558",
+          "contact_email": "sambalpur.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "babbc6e0-9f0f-4c75-b85d-4d3358d17b46",
+          "user_id": null,
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "full_name": "Pipeline Farmer Bamra",
+          "phone_number": "9991003558",
+          "gender": "Male",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Bamra",
+          "block_code": 3558,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "f06c4f3f-fda9-4ca3-99a2-f6785102c5c9",
+          "farmer_id": "babbc6e0-9f0f-4c75-b85d-4d3358d17b46",
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "farm_name": "Bamra Pipeline Farm",
+          "survey_number": "PIPE-FARM-3558",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Bamra",
+          "block_code": 3558,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  84.395,
+                  22.064
+                ],
+                [
+                  84.39578,
+                  22.064
+                ],
+                [
+                  84.39578,
+                  22.06437
+                ],
+                [
+                  84.395,
+                  22.06437
+                ],
+                [
+                  84.395,
+                  22.064
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 9,
+          "area_acres": 0.8151,
+          "bbox": [
+            84.395,
+            22.064,
+            84.39578,
+            22.06437
+          ],
+          "is_active": true
+        }
+      },
+      "error": "POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search\nStatus: 400\nResponse: {\n  \"detail\": {\n    \"code\": \"RASTER_PROCESSING_ERROR\",\n    \"message\": \"Failed to read raster asset: Read failed. See previous exception for details.\"\n  }\n}"
+    },
+    {
+      "row_id": "ROW-005",
+      "status": "PASSED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "fpo_name": "Sambalpur Agri FPO",
+          "registration_number": "PIPE-SAMBALPUR-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "block_name": "Dhankauda",
+          "block_code": 3559,
+          "contact_phone": "9990003559",
+          "contact_email": "sambalpur.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "451c4952-0e64-4fd6-be8f-690ce57a0e96",
+          "user_id": null,
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "full_name": "Pipeline Farmer Dhankauda",
+          "phone_number": "9991003559",
+          "gender": "Female",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Dhankauda",
+          "block_code": 3559,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "1f7798c5-f31d-4976-a4cd-379d928b953f",
+          "farmer_id": "451c4952-0e64-4fd6-be8f-690ce57a0e96",
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "farm_name": "Dhankauda Pipeline Farm",
+          "survey_number": "PIPE-FARM-3559",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Dhankauda",
+          "block_code": 3559,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  83.966,
+                  21.47
+                ],
+                [
+                  83.96678,
+                  21.47
+                ],
+                [
+                  83.96678,
+                  21.47037
+                ],
+                [
+                  83.966,
+                  21.47037
+                ],
+                [
+                  83.966,
+                  21.47
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 12,
+          "area_acres": 0.8184,
+          "bbox": [
+            83.966,
+            21.47,
+            83.96678,
+            21.47037
+          ],
+          "is_active": true
+        },
+        "raster_preview": {
+          "farm_id": "1f7798c5-f31d-4976-a4cd-379d928b953f",
+          "provider": "planetary_computer",
+          "collection_id": "sentinel-2-l2a",
+          "scene_id": "S2B_MSIL2A_20251230T050119_R119_T44QRJ_20251230T072458",
+          "scene_datetime": "2025-12-30T05:01:19.024000+00:00",
+          "scene_cloud_cover": 0.003454,
+          "bbox": [
+            83.966,
+            21.47,
+            83.9662,
+            21.4702
+          ],
+          "h3_resolution": 12,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "features": [
+            {
+              "h3_index": 631568311351513599,
+              "pixel_count": 4,
+              "valid_pixel_count": 4,
+              "cloud_pixel_count": 0,
+              "nodata_pixel_count": 0,
+              "cloud_percentage": 0.0,
+              "mean_blue": 0.18055,
+              "mean_green": 0.186025,
+              "mean_red": 0.18955,
+              "mean_rededge1": 0.21025,
+              "mean_rededge2": 0.23005,
+              "mean_rededge3": 0.2463,
+              "mean_nir": 0.2509,
+              "mean_nir08": 0.254925,
+              "mean_swir16": 0.2641,
+              "mean_swir22": 0.243625,
+              "ndvi": 0.139116,
+              "gndvi": 0.148311,
+              "evi": 0.148698,
+              "savi": 0.097786,
+              "ndmi": -0.025818,
+              "ndwi": -0.148311,
+              "mndwi": -0.173478,
+              "msi": 1.053336,
+              "bsi": 0.025229,
+              "nbr": 0.014524,
+              "nbr2": 0.040333,
+              "ndre": 0.087946,
+              "reci": 0.193279
+            }
+          ]
+        }
+      },
+      "summary": {
+        "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+        "farmer_id": "451c4952-0e64-4fd6-be8f-690ce57a0e96",
+        "farm_id": "1f7798c5-f31d-4976-a4cd-379d928b953f",
+        "area_acres": 0.8184,
+        "h3_cell_count": 12,
+        "raster_row_count": 1,
+        "raster_valid_pixels": 4,
+        "ndvi": 0.139116,
+        "ndmi": -0.025818,
+        "bsi": 0.025229
+      }
+    },
+    {
+      "row_id": "ROW-006",
+      "status": "FAILED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "fpo_name": "Sambalpur Agri FPO",
+          "registration_number": "PIPE-SAMBALPUR-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "block_name": "Jamankira",
+          "block_code": 3560,
+          "contact_phone": "9990003560",
+          "contact_email": "sambalpur.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "356fc4b5-83e8-47ca-a054-6b0593832400",
+          "user_id": null,
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "full_name": "Pipeline Farmer Jamankira",
+          "phone_number": "9991003560",
+          "gender": "Male",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Jamankira",
+          "block_code": 3560,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "e2a53689-64be-4e06-972c-35e5b55815ee",
+          "farmer_id": "356fc4b5-83e8-47ca-a054-6b0593832400",
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "farm_name": "Jamankira Pipeline Farm",
+          "survey_number": "PIPE-FARM-3560",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Jamankira",
+          "block_code": 3560,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  84.366,
+                  21.54
+                ],
+                [
+                  84.36678,
+                  21.54
+                ],
+                [
+                  84.36678,
+                  21.54037
+                ],
+                [
+                  84.366,
+                  21.54037
+                ],
+                [
+                  84.366,
+                  21.54
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 9,
+          "area_acres": 0.818,
+          "bbox": [
+            84.366,
+            21.54,
+            84.36678,
+            21.54037
+          ],
+          "is_active": true
+        }
+      },
+      "error": "POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search\nStatus: 400\nResponse: {\n  \"detail\": {\n    \"code\": \"RASTER_PROCESSING_ERROR\",\n    \"message\": \"Failed to read raster asset: Read failed. See previous exception for details.\"\n  }\n}"
+    },
+    {
+      "row_id": "ROW-007",
+      "status": "PASSED",
+      "steps": {
+        "fpo": {
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "fpo_name": "Sambalpur Agri FPO",
+          "registration_number": "PIPE-SAMBALPUR-FPO-001",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "block_name": "Jujomura",
+          "block_code": 3561,
+          "contact_phone": "9990003561",
+          "contact_email": "sambalpur.fpo@example.com",
+          "is_active": true
+        },
+        "farmer": {
+          "farmer_id": "5adc010c-f4ff-4659-b621-f9122be7f91d",
+          "user_id": null,
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "full_name": "Pipeline Farmer Jujomura",
+          "phone_number": "9991003561",
+          "gender": "Female",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Jujomura",
+          "block_code": 3561,
+          "village_name": "Pipeline Test Village",
+          "is_active": true
+        },
+        "farm": {
+          "farm_id": "e98ead33-3652-43bd-a129-1f5be5acdd5e",
+          "farmer_id": "5adc010c-f4ff-4659-b621-f9122be7f91d",
+          "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+          "farm_name": "Jujomura Pipeline Farm",
+          "survey_number": "PIPE-FARM-3561",
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Jujomura",
+          "block_code": 3561,
+          "village_name": "Pipeline Test Village",
+          "polygon_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  84.044,
+                  21.36
+                ],
+                [
+                  84.04478,
+                  21.36
+                ],
+                [
+                  84.04478,
+                  21.36037
+                ],
+                [
+                  84.044,
+                  21.36037
+                ],
+                [
+                  84.044,
+                  21.36
+                ]
+              ]
+            ]
+          },
+          "h3_resolution": 12,
+          "h3_cell_count": 12,
+          "area_acres": 0.819,
+          "bbox": [
+            84.044,
+            21.36,
+            84.04478,
+            21.36037
+          ],
+          "is_active": true
+        },
+        "raster_preview": {
+          "farm_id": "e98ead33-3652-43bd-a129-1f5be5acdd5e",
+          "provider": "planetary_computer",
+          "collection_id": "sentinel-2-l2a",
+          "scene_id": "S2B_MSIL2A_20251230T050119_R119_T44QRJ_20251230T072458",
+          "scene_datetime": "2025-12-30T05:01:19.024000+00:00",
+          "scene_cloud_cover": 0.003454,
+          "bbox": [
+            84.044,
+            21.36,
+            84.0442,
+            21.3602
+          ],
+          "h3_resolution": 12,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "features": [
+            {
+              "h3_index": 631568313358785023,
+              "pixel_count": 4,
+              "valid_pixel_count": 4,
+              "cloud_pixel_count": 0,
+              "nodata_pixel_count": 0,
+              "cloud_percentage": 0.0,
+              "mean_blue": 0.126775,
+              "mean_green": 0.1367,
+              "mean_red": 0.125525,
+              "mean_rededge1": 0.160625,
+              "mean_rededge2": 0.253975,
+              "mean_rededge3": 0.2877,
+              "mean_nir": 0.2998,
+              "mean_nir08": 0.3054,
+              "mean_swir16": 0.219325,
+              "mean_swir22": 0.155875,
+              "ndvi": 0.409823,
+              "gndvi": 0.373617,
+              "evi": 0.395518,
+              "savi": 0.28251,
+              "ndmi": 0.154947,
+              "ndwi": -0.373617,
+              "mndwi": -0.232086,
+              "msi": 0.731817,
+              "bsi": -0.10591,
+              "nbr": 0.315765,
+              "nbr2": 0.169106,
+              "ndre": 0.302188,
+              "reci": 0.866617
+            }
+          ]
+        }
+      },
+      "summary": {
+        "fpo_id": "52225427-49cb-44ac-aeb0-beb816a7fd38",
+        "farmer_id": "5adc010c-f4ff-4659-b621-f9122be7f91d",
+        "farm_id": "e98ead33-3652-43bd-a129-1f5be5acdd5e",
+        "area_acres": 0.819,
+        "h3_cell_count": 12,
+        "raster_row_count": 1,
+        "raster_valid_pixels": 4,
+        "ndvi": 0.409823,
+        "ndmi": 0.154947,
+        "bsi": -0.10591
+      }
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "passed": 4,
+    "failed": 3,
+    "skipped": 0
+  }
+}

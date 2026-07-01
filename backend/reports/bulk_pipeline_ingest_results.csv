@@ -1,0 +1,29 @@
+row_id,status,fpo_id,farmer_id,farm_id,area_acres,h3_cell_count,raster_row_count,raster_valid_pixels,ndvi,ndmi,bsi,error
+ROW-001,FAILED,,,,,,,,,,,"POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search
+Status: 400
+Response: {
+  ""detail"": {
+    ""code"": ""RASTER_PROCESSING_ERROR"",
+    ""message"": ""Failed to call STAC catalog service: HTTPConnectionPool(host='localhost', port=8007): Read timed out. (read timeout=120)""
+  }
+}"
+ROW-002,PASSED,067adf09-8b99-40aa-a9e3-13ddeff2f1f1,c925f154-e0f9-4809-b9fb-0fff4e13b834,86ac2a3b-7fce-4b3d-9605-05f5ec628880,0.8271,14,1,4,0.111432,0.073572,-0.04648,
+ROW-003,PASSED,067adf09-8b99-40aa-a9e3-13ddeff2f1f1,6bd97292-3213-4023-97ae-1ce2da05dc79,1d09e2bf-d3a7-4bda-aaa6-c1490525aa80,0.8262,9,1,4,0.264636,0.102061,-0.064639,
+ROW-004,FAILED,,,,,,,,,,,"POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search
+Status: 400
+Response: {
+  ""detail"": {
+    ""code"": ""RASTER_PROCESSING_ERROR"",
+    ""message"": ""Failed to read raster asset: Read failed. See previous exception for details.""
+  }
+}"
+ROW-005,PASSED,52225427-49cb-44ac-aeb0-beb816a7fd38,451c4952-0e64-4fd6-be8f-690ce57a0e96,1f7798c5-f31d-4976-a4cd-379d928b953f,0.8184,12,1,4,0.139116,-0.025818,0.025229,
+ROW-006,FAILED,,,,,,,,,,,"POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview-from-search
+Status: 400
+Response: {
+  ""detail"": {
+    ""code"": ""RASTER_PROCESSING_ERROR"",
+    ""message"": ""Failed to read raster asset: Read failed. See previous exception for details.""
+  }
+}"
+ROW-007,PASSED,52225427-49cb-44ac-aeb0-beb816a7fd38,5adc010c-f4ff-4659-b621-f9122be7f91d,e98ead33-3652-43bd-a129-1f5be5acdd5e,0.819,12,1,4,0.409823,0.154947,-0.10591,

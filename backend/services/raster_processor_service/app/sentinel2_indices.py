@@ -1,0 +1,1055 @@
+# from __future__ import annotations
+
+# import math
+# import os
+# from collections import defaultdict
+# from typing import Any
+
+# import pyproj
+
+# _proj_data_dir = pyproj.datadir.get_data_dir()
+# os.environ["PROJ_LIB"] = _proj_data_dir
+# os.environ["PROJ_DATA"] = _proj_data_dir
+
+
+
+# import h3
+# import numpy as np
+# import rasterio
+# from rasterio.warp import transform_bounds
+# from rasterio.windows import from_bounds
+
+
+# class RasterProcessorError(RuntimeError):
+#     pass
+
+
+# S2_KEY_ALIASES = {
+#     "blue": ["B02", "blue"],
+#     "green": ["B03", "green"],
+#     "red": ["B04", "red"],
+#     "rededge1": ["B05", "rededge1"],
+#     "rededge2": ["B06", "rededge2"],
+#     "rededge3": ["B07", "rededge3"],
+#     "nir": ["B08", "nir"],
+#     "nir08": ["B8A", "nir08"],
+#     "swir16": ["B11", "swir16"],
+#     "swir22": ["B12", "swir22"],
+#     "scl": ["SCL", "scl"],
+# }
+
+
+# REQUIRED_BANDS = [
+#     "blue",
+#     "green",
+#     "red",
+#     "nir",
+#     "swir16",
+#     "swir22",
+#     "scl",
+# ]
+
+
+# OPTIONAL_BANDS = [
+#     "rededge1",
+#     "rededge2",
+#     "rededge3",
+#     "nir08",
+# ]
+
+
+# def _safe_divide(
+#     numerator: np.ndarray,
+#     denominator: np.ndarray,
+# ) -> np.ndarray:
+#     result = np.full(numerator.shape, np.nan, dtype=np.float32)
+#     mask = np.abs(denominator) > 1e-6
+#     result[mask] = numerator[mask] / denominator[mask]
+#     return result
+
+
+# def _mean_or_none(values: np.ndarray) -> float | None:
+#     if values.size == 0:
+#         return None
+
+#     valid = values[np.isfinite(values)]
+#     if valid.size == 0:
+#         return None
+
+#     return round(float(np.mean(valid)), 6)
+
+
+# def _clean_float(value: float | None) -> float | None:
+#     if value is None:
+#         return None
+
+#     if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+#         return None
+
+#     return round(float(value), 6)
+
+
+# def _build_asset_map(assets: list[dict[str, Any]]) -> dict[str, str]:
+#     raw_by_key = {}
+#     raw_by_common_name = {}
+
+#     for asset in assets:
+#         key = str(asset.get("key") or "").strip()
+#         common_name = str(asset.get("common_name") or "").strip()
+
+#         if key:
+#             raw_by_key[key.lower()] = asset["href"]
+
+#         if common_name:
+#             raw_by_common_name[common_name.lower()] = asset["href"]
+
+#     normalized: dict[str, str] = {}
+
+#     for normalized_name, aliases in S2_KEY_ALIASES.items():
+#         for alias in aliases:
+#             alias_lower = alias.lower()
+
+#             if alias_lower in raw_by_key:
+#                 normalized[normalized_name] = raw_by_key[alias_lower]
+#                 break
+
+#             if alias_lower in raw_by_common_name:
+#                 normalized[normalized_name] = raw_by_common_name[alias_lower]
+#                 break
+
+#     return normalized
+
+
+# def _validate_required_assets(asset_map: dict[str, str]) -> None:
+#     missing = [band for band in REQUIRED_BANDS if band not in asset_map]
+
+#     if missing:
+#         raise RasterProcessorError(
+#             "Missing required Sentinel-2 assets: " + ", ".join(missing)
+#         )
+
+
+# def _read_band_window(
+#     href: str,
+#     bbox: list[float],
+#     out_shape: tuple[int, int] | None = None,
+# ) -> tuple[np.ndarray, Any]:
+#     with rasterio.Env(
+#         GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+#         CPL_VSIL_CURL_USE_HEAD="NO",
+#     ):
+#         with rasterio.open(href) as dataset:
+#             if dataset.crs is None:
+#                 raise RasterProcessorError("Raster asset has no CRS.")
+
+#             asset_bounds = dataset.bounds
+
+#             bbox_in_asset_crs = transform_bounds(
+#                 src_crs="EPSG:4326",
+#                 dst_crs=dataset.crs,
+#                 left=bbox[0],
+#                 bottom=bbox[1],
+#                 right=bbox[2],
+#                 top=bbox[3],
+#                 densify_pts=21,
+#             )
+
+#             left, bottom, right, top = bbox_in_asset_crs
+
+#             overlaps = not (
+#                 right <= asset_bounds.left
+#                 or left >= asset_bounds.right
+#                 or top <= asset_bounds.bottom
+#                 or bottom >= asset_bounds.top
+#             )
+
+#             if not overlaps:
+#                 raise RasterProcessorError(
+#                     "Requested bbox does not overlap raster asset after CRS transform. "
+#                     f"Input bbox EPSG:4326={bbox}; "
+#                     f"bbox_in_asset_crs={bbox_in_asset_crs}; "
+#                     f"asset_crs={dataset.crs}; "
+#                     f"asset_bounds={asset_bounds}."
+#                 )
+
+#             window = from_bounds(
+#                 left=left,
+#                 bottom=bottom,
+#                 right=right,
+#                 top=top,
+#                 transform=dataset.transform,
+#             )
+
+#             window = window.round_offsets().round_lengths()
+
+#             if window.width <= 0 or window.height <= 0:
+#                 raise RasterProcessorError(
+#                     "Requested bbox produced an empty raster window. "
+#                     "Try a slightly larger bbox for this test farm."
+#                 )
+
+#             if out_shape is None:
+#                 data = dataset.read(1, window=window, masked=True)
+#             else:
+#                 data = dataset.read(
+#                     1,
+#                     window=window,
+#                     out_shape=out_shape,
+#                     masked=True,
+#                     resampling=rasterio.enums.Resampling.bilinear,
+#                 )
+
+#             return data, dataset.window_transform(window)
+
+
+# def _read_all_required_bands(
+#     asset_map: dict[str, str],
+#     bbox: list[float],
+# ) -> tuple[dict[str, np.ndarray], Any]:
+#     red_raw, transform = _read_band_window(asset_map["red"], bbox)
+#     target_shape = red_raw.shape
+
+#     bands: dict[str, np.ndarray] = {
+#         "red": red_raw.astype("float32").filled(np.nan) / 10000.0,
+#     }
+
+#     for band_name in [
+#         "blue",
+#         "green",
+#         "nir",
+#         "swir16",
+#         "swir22",
+#         "rededge1",
+#         "rededge2",
+#         "rededge3",
+#         "nir08",
+#     ]:
+#         href = asset_map.get(band_name)
+#         if not href:
+#             continue
+
+#         band_raw, _ = _read_band_window(
+#             href=href,
+#             bbox=bbox,
+#             out_shape=target_shape,
+#         )
+#         bands[band_name] = band_raw.astype("float32").filled(np.nan) / 10000.0
+
+#     scl_raw, _ = _read_band_window(
+#         href=asset_map["scl"],
+#         bbox=bbox,
+#         out_shape=target_shape,
+#     )
+#     bands["scl"] = scl_raw.astype("float32").filled(np.nan)
+
+#     return bands, transform
+
+
+# def _build_quality_masks(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+#     scl = bands["scl"]
+
+#     nodata_mask = np.isnan(scl) | (scl == 0)
+
+#     cloud_mask = np.isin(
+#         scl,
+#         [
+#             3,   # cloud shadow
+#             8,   # medium probability cloud
+#             9,   # high probability cloud
+#             10,  # thin cirrus
+#             11,  # snow / ice
+#         ],
+#     )
+
+#     invalid_scl_mask = np.isin(
+#         scl,
+#         [
+#             0,  # no data
+#             1,  # saturated / defective
+#             2,  # dark area pixels
+#         ],
+#     )
+
+#     required_band_mask = (
+#         np.isfinite(bands["blue"])
+#         & np.isfinite(bands["green"])
+#         & np.isfinite(bands["red"])
+#         & np.isfinite(bands["nir"])
+#         & np.isfinite(bands["swir16"])
+#         & np.isfinite(bands["swir22"])
+#     )
+
+#     valid_mask = required_band_mask & ~nodata_mask & ~cloud_mask & ~invalid_scl_mask
+
+#     return {
+#         "nodata": nodata_mask,
+#         "cloud": cloud_mask,
+#         "valid": valid_mask,
+#     }
+
+
+# def _calculate_index_arrays(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+#     blue = bands["blue"]
+#     green = bands["green"]
+#     red = bands["red"]
+#     nir = bands["nir"]
+#     swir16 = bands["swir16"]
+#     swir22 = bands["swir22"]
+
+#     indices = {
+#         "ndvi": _safe_divide(nir - red, nir + red),
+#         "gndvi": _safe_divide(nir - green, nir + green),
+#         "evi": _safe_divide(
+#             2.5 * (nir - red),
+#             nir + (6.0 * red) - (7.5 * blue) + 1.0,
+#         ),
+#         "savi": _safe_divide(
+#             1.5 * (nir - red),
+#             nir + red + 0.5,
+#         ),
+#         "ndmi": _safe_divide(nir - swir16, nir + swir16),
+#         "ndwi": _safe_divide(green - nir, green + nir),
+#         "mndwi": _safe_divide(green - swir16, green + swir16),
+#         "msi": _safe_divide(swir16, nir),
+#         "bsi": _safe_divide(
+#             (swir16 + red) - (nir + blue),
+#             (swir16 + red) + (nir + blue),
+#         ),
+#         "nbr": _safe_divide(nir - swir22, nir + swir22),
+#         "nbr2": _safe_divide(swir16 - swir22, swir16 + swir22),
+#     }
+
+#     if "rededge1" in bands:
+#         rededge1 = bands["rededge1"]
+#         indices["ndre"] = _safe_divide(nir - rededge1, nir + rededge1)
+#         indices["reci"] = _safe_divide(nir, rededge1) - 1.0
+#     else:
+#         indices["ndre"] = np.full(nir.shape, np.nan, dtype=np.float32)
+#         indices["reci"] = np.full(nir.shape, np.nan, dtype=np.float32)
+
+#     return indices
+
+
+# def _pixel_centers_to_h3(
+#     shape: tuple[int, int],
+#     transform: Any,
+#     h3_resolution: int,
+# ) -> np.ndarray:
+#     rows, cols = shape
+#     h3_grid = np.empty(shape, dtype=object)
+
+#     for row in range(rows):
+#         for col in range(cols):
+#             lon, lat = rasterio.transform.xy(
+#                 transform,
+#                 row,
+#                 col,
+#                 offset="center",
+#             )
+#             h3_grid[row, col] = h3.latlng_to_cell(
+#                 lat=float(lat),
+#                 lng=float(lon),
+#                 res=h3_resolution,
+#             )
+
+#     return h3_grid
+
+
+# def _aggregate_by_h3(
+#     bands: dict[str, np.ndarray],
+#     indices: dict[str, np.ndarray],
+#     masks: dict[str, np.ndarray],
+#     h3_grid: np.ndarray,
+# ) -> list[dict[str, Any]]:
+#     buckets: dict[str, dict[str, Any]] = defaultdict(
+#         lambda: {
+#             "pixel_count": 0,
+#             "valid_pixel_count": 0,
+#             "cloud_pixel_count": 0,
+#             "nodata_pixel_count": 0,
+#             "values": defaultdict(list),
+#         }
+#     )
+
+#     rows, cols = bands["red"].shape
+
+#     band_fields = {
+#         "mean_blue": "blue",
+#         "mean_green": "green",
+#         "mean_red": "red",
+#         "mean_rededge1": "rededge1",
+#         "mean_rededge2": "rededge2",
+#         "mean_rededge3": "rededge3",
+#         "mean_nir": "nir",
+#         "mean_nir08": "nir08",
+#         "mean_swir16": "swir16",
+#         "mean_swir22": "swir22",
+#     }
+
+#     for row in range(rows):
+#         for col in range(cols):
+#             h3_cell = h3_grid[row, col]
+#             bucket = buckets[h3_cell]
+
+#             bucket["pixel_count"] += 1
+
+#             if bool(masks["cloud"][row, col]):
+#                 bucket["cloud_pixel_count"] += 1
+
+#             if bool(masks["nodata"][row, col]):
+#                 bucket["nodata_pixel_count"] += 1
+
+#             if not bool(masks["valid"][row, col]):
+#                 continue
+
+#             bucket["valid_pixel_count"] += 1
+
+#             for output_name, band_name in band_fields.items():
+#                 if band_name in bands:
+#                     value = bands[band_name][row, col]
+#                     if np.isfinite(value):
+#                         bucket["values"][output_name].append(float(value))
+
+#             for index_name, array in indices.items():
+#                 value = array[row, col]
+#                 if np.isfinite(value):
+#                     bucket["values"][index_name].append(float(value))
+
+#     features: list[dict[str, Any]] = []
+
+#     for h3_cell, bucket in buckets.items():
+#         pixel_count = int(bucket["pixel_count"])
+#         cloud_pixel_count = int(bucket["cloud_pixel_count"])
+#         valid_pixel_count = int(bucket["valid_pixel_count"])
+#         nodata_pixel_count = int(bucket["nodata_pixel_count"])
+
+#         cloud_percentage = (
+#             round((cloud_pixel_count / pixel_count) * 100.0, 4)
+#             if pixel_count > 0
+#             else 0.0
+#         )
+
+#         row = {
+#             "h3_index": h3.str_to_int(h3_cell),
+#             "pixel_count": pixel_count,
+#             "valid_pixel_count": valid_pixel_count,
+#             "cloud_pixel_count": cloud_pixel_count,
+#             "nodata_pixel_count": nodata_pixel_count,
+#             "cloud_percentage": cloud_percentage,
+#         }
+
+#         for field_name, values in bucket["values"].items():
+#             row[field_name] = _clean_float(_mean_or_none(np.array(values)))
+
+#         features.append(row)
+
+#     features.sort(key=lambda item: item["h3_index"])
+
+#     return features
+
+
+# def process_sentinel2_indices(
+#     scene: dict[str, Any],
+#     bbox: list[float],
+#     h3_resolution: int,
+# ) -> dict[str, Any]:
+#     asset_map = _build_asset_map(scene["assets"])
+#     _validate_required_assets(asset_map)
+
+#     bands, transform = _read_all_required_bands(
+#         asset_map=asset_map,
+#         bbox=bbox,
+#     )
+
+#     rows, cols = bands["red"].shape
+#     total_pixels = rows * cols
+
+#     masks = _build_quality_masks(bands)
+#     indices = _calculate_index_arrays(bands)
+
+#     h3_grid = _pixel_centers_to_h3(
+#         shape=bands["red"].shape,
+#         transform=transform,
+#         h3_resolution=h3_resolution,
+#     )
+
+#     features = _aggregate_by_h3(
+#         bands=bands,
+#         indices=indices,
+#         masks=masks,
+#         h3_grid=h3_grid,
+#     )
+
+#     total_valid = int(np.sum(masks["valid"]))
+#     total_cloud = int(np.sum(masks["cloud"]))
+
+#     return {
+#         "source_assets_used": sorted(asset_map.keys()),
+#         "row_count": len(features),
+#         "total_pixel_count": int(total_pixels),
+#         "total_valid_pixel_count": total_valid,
+#         "total_cloud_pixel_count": total_cloud,
+#         "features": features,
+#     }
+
+
+
+
+
+
+from __future__ import annotations
+
+import math
+from collections import defaultdict
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+import importlib.util
+import os
+from pathlib import Path
+
+
+def _force_rasterio_proj_paths() -> None:
+    rasterio_spec = importlib.util.find_spec("rasterio")
+
+    if rasterio_spec is None or rasterio_spec.origin is None:
+        return
+
+    rasterio_dir = Path(rasterio_spec.origin).parent
+    rasterio_proj_dir = rasterio_dir / "proj_data"
+    rasterio_gdal_dir = rasterio_dir / "gdal_data"
+
+    if rasterio_proj_dir.exists():
+        os.environ["PROJ_LIB"] = str(rasterio_proj_dir)
+        os.environ["PROJ_DATA"] = str(rasterio_proj_dir)
+
+    if rasterio_gdal_dir.exists():
+        os.environ["GDAL_DATA"] = str(rasterio_gdal_dir)
+
+
+_force_rasterio_proj_paths()
+
+import h3
+import numpy as np
+import planetary_computer
+import rasterio
+from rasterio.enums import Resampling
+from rasterio.warp import transform_bounds
+from rasterio.windows import from_bounds
+
+
+class RasterProcessorError(RuntimeError):
+    pass
+
+
+S2_KEY_ALIASES = {
+    "blue": ["B02", "blue"],
+    "green": ["B03", "green"],
+    "red": ["B04", "red"],
+    "rededge1": ["B05", "rededge1"],
+    "rededge2": ["B06", "rededge2"],
+    "rededge3": ["B07", "rededge3"],
+    "nir": ["B08", "nir"],
+    "nir08": ["B8A", "nir08"],
+    "swir16": ["B11", "swir16"],
+    "swir22": ["B12", "swir22"],
+    "scl": ["SCL", "scl"],
+}
+
+
+REQUIRED_BANDS = [
+    "blue",
+    "green",
+    "red",
+    "nir",
+    "swir16",
+    "swir22",
+    "scl",
+]
+
+
+MAX_PIXELS_PER_REQUEST = 250000
+
+
+def _refresh_planetary_computer_href(href: str) -> str:
+    """
+    Standard fix:
+    - STAC service may return signed Planetary Computer URLs.
+    - Signed SAS query can expire.
+    - Raster service must remove old query params and re-sign immediately before reading.
+    """
+    if "blob.core.windows.net" not in href:
+        return href
+
+    parsed = urlsplit(href)
+
+    clean_href = urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            "",
+            "",
+        )
+    )
+
+    return planetary_computer.sign(clean_href)
+
+
+def _safe_divide(
+    numerator: np.ndarray,
+    denominator: np.ndarray,
+) -> np.ndarray:
+    result = np.full(numerator.shape, np.nan, dtype=np.float32)
+    mask = np.abs(denominator) > 1e-6
+    result[mask] = numerator[mask] / denominator[mask]
+    return result
+
+
+def _mean_or_none(values: np.ndarray) -> float | None:
+    if values.size == 0:
+        return None
+
+    valid = values[np.isfinite(values)]
+    if valid.size == 0:
+        return None
+
+    return round(float(np.mean(valid)), 6)
+
+
+def _clean_float(value: float | None) -> float | None:
+    if value is None:
+        return None
+
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+
+    return round(float(value), 6)
+
+
+def _build_asset_map(assets: list[dict[str, Any]]) -> dict[str, str]:
+    raw_by_key: dict[str, str] = {}
+    raw_by_common_name: dict[str, str] = {}
+
+    for asset in assets:
+        key = str(asset.get("key") or "").strip()
+        common_name = str(asset.get("common_name") or "").strip()
+        href = str(asset.get("href") or "").strip()
+
+        if not href:
+            continue
+
+        href = _refresh_planetary_computer_href(href)
+
+        if key:
+            raw_by_key[key.lower()] = href
+
+        if common_name:
+            raw_by_common_name[common_name.lower()] = href
+
+    normalized: dict[str, str] = {}
+
+    for normalized_name, aliases in S2_KEY_ALIASES.items():
+        for alias in aliases:
+            alias_lower = alias.lower()
+
+            if alias_lower in raw_by_key:
+                normalized[normalized_name] = raw_by_key[alias_lower]
+                break
+
+            if alias_lower in raw_by_common_name:
+                normalized[normalized_name] = raw_by_common_name[alias_lower]
+                break
+
+    return normalized
+
+
+def _validate_required_assets(asset_map: dict[str, str]) -> None:
+    missing = [band for band in REQUIRED_BANDS if band not in asset_map]
+
+    if missing:
+        raise RasterProcessorError(
+            "Missing required Sentinel-2 assets: " + ", ".join(missing)
+        )
+
+
+def _bbox_to_asset_crs(
+    bbox: list[float],
+    dataset: rasterio.DatasetReader,
+) -> tuple[float, float, float, float]:
+    if dataset.crs is None:
+        raise RasterProcessorError("Raster asset has no CRS.")
+
+    return transform_bounds(
+        src_crs="EPSG:4326",
+        dst_crs=dataset.crs,
+        left=bbox[0],
+        bottom=bbox[1],
+        right=bbox[2],
+        top=bbox[3],
+        densify_pts=21,
+    )
+
+
+def _check_overlap(
+    bbox_in_asset_crs: tuple[float, float, float, float],
+    dataset: rasterio.DatasetReader,
+) -> None:
+    left, bottom, right, top = bbox_in_asset_crs
+    asset_bounds = dataset.bounds
+
+    overlaps = not (
+        right <= asset_bounds.left
+        or left >= asset_bounds.right
+        or top <= asset_bounds.bottom
+        or bottom >= asset_bounds.top
+    )
+
+    if not overlaps:
+        raise RasterProcessorError(
+            "Requested bbox does not overlap raster asset after CRS transform. "
+            f"bbox_in_asset_crs={bbox_in_asset_crs}; "
+            f"asset_crs={dataset.crs}; "
+            f"asset_bounds={asset_bounds}."
+        )
+
+
+def _read_band_window(
+    href: str,
+    bbox: list[float],
+    out_shape: tuple[int, int] | None = None,
+    resampling: Resampling = Resampling.bilinear,
+) -> tuple[np.ndarray, Any]:
+    href = _refresh_planetary_computer_href(href)
+
+    try:
+        with rasterio.Env(
+            GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+            CPL_VSIL_CURL_USE_HEAD="NO",
+            GTIFF_SRS_SOURCE="EPSG",
+            VSI_CACHE="TRUE",
+            GDAL_HTTP_MAX_RETRY="3",
+            GDAL_HTTP_RETRY_DELAY="1",
+            GDAL_HTTP_TIMEOUT="120",
+        ):
+            with rasterio.open(href) as dataset:
+                bbox_in_asset_crs = _bbox_to_asset_crs(bbox, dataset)
+                _check_overlap(bbox_in_asset_crs, dataset)
+
+                left, bottom, right, top = bbox_in_asset_crs
+
+                window = from_bounds(
+                    left=left,
+                    bottom=bottom,
+                    right=right,
+                    top=top,
+                    transform=dataset.transform,
+                )
+
+                window = window.round_offsets().round_lengths()
+
+                if window.width <= 0 or window.height <= 0:
+                    raise RasterProcessorError(
+                        "Requested bbox produced an empty raster window. "
+                        "Use a slightly larger bbox."
+                    )
+
+                pixel_count = int(window.width * window.height)
+
+                if pixel_count > MAX_PIXELS_PER_REQUEST:
+                    raise RasterProcessorError(
+                        f"Raster request too large: {pixel_count} pixels. "
+                        f"Limit is {MAX_PIXELS_PER_REQUEST}. Use a smaller bbox."
+                    )
+
+                if out_shape is None:
+                    data = dataset.read(1, window=window, masked=True)
+                else:
+                    data = dataset.read(
+                        1,
+                        window=window,
+                        out_shape=out_shape,
+                        masked=True,
+                        resampling=resampling,
+                    )
+
+                return data, dataset.window_transform(window)
+
+    except RasterProcessorError:
+        raise
+    except Exception as exc:
+        message = str(exc)
+
+        if "403" in message or "AccessDenied" in message or "AuthenticationFailed" in message:
+            raise RasterProcessorError(
+                "Could not read raster asset because the signed URL was rejected. "
+                "The raster service attempted to refresh the Planetary Computer URL. "
+                "Run STAC search again and retry. Original error: "
+                f"{message}"
+            ) from exc
+
+        raise RasterProcessorError(f"Failed to read raster asset: {message}") from exc
+
+
+def _read_all_required_bands(
+    asset_map: dict[str, str],
+    bbox: list[float],
+) -> tuple[dict[str, np.ndarray], Any]:
+    red_raw, transform = _read_band_window(asset_map["red"], bbox)
+    target_shape = red_raw.shape
+
+    bands: dict[str, np.ndarray] = {
+        "red": red_raw.astype("float32").filled(np.nan) / 10000.0,
+    }
+
+    for band_name in [
+        "blue",
+        "green",
+        "nir",
+        "swir16",
+        "swir22",
+        "rededge1",
+        "rededge2",
+        "rededge3",
+        "nir08",
+    ]:
+        href = asset_map.get(band_name)
+        if not href:
+            continue
+
+        band_raw, _ = _read_band_window(
+            href=href,
+            bbox=bbox,
+            out_shape=target_shape,
+            resampling=Resampling.bilinear,
+        )
+        bands[band_name] = band_raw.astype("float32").filled(np.nan) / 10000.0
+
+    scl_raw, _ = _read_band_window(
+        href=asset_map["scl"],
+        bbox=bbox,
+        out_shape=target_shape,
+        resampling=Resampling.nearest,
+    )
+    bands["scl"] = scl_raw.astype("float32").filled(np.nan)
+
+    return bands, transform
+
+
+def _build_quality_masks(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    scl = bands["scl"]
+
+    nodata_mask = np.isnan(scl) | (scl == 0)
+
+    cloud_mask = np.isin(
+        scl,
+        [
+            3,
+            8,
+            9,
+            10,
+            11,
+        ],
+    )
+
+    invalid_scl_mask = np.isin(
+        scl,
+        [
+            0,
+            1,
+            2,
+        ],
+    )
+
+    required_band_mask = (
+        np.isfinite(bands["blue"])
+        & np.isfinite(bands["green"])
+        & np.isfinite(bands["red"])
+        & np.isfinite(bands["nir"])
+        & np.isfinite(bands["swir16"])
+        & np.isfinite(bands["swir22"])
+    )
+
+    valid_mask = required_band_mask & ~nodata_mask & ~cloud_mask & ~invalid_scl_mask
+
+    return {
+        "nodata": nodata_mask,
+        "cloud": cloud_mask,
+        "valid": valid_mask,
+    }
+
+
+def _calculate_index_arrays(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    blue = bands["blue"]
+    green = bands["green"]
+    red = bands["red"]
+    nir = bands["nir"]
+    swir16 = bands["swir16"]
+    swir22 = bands["swir22"]
+
+    indices = {
+        "ndvi": _safe_divide(nir - red, nir + red),
+        "gndvi": _safe_divide(nir - green, nir + green),
+        "evi": _safe_divide(
+            2.5 * (nir - red),
+            nir + (6.0 * red) - (7.5 * blue) + 1.0,
+        ),
+        "savi": _safe_divide(
+            1.5 * (nir - red),
+            nir + red + 0.5,
+        ),
+        "ndmi": _safe_divide(nir - swir16, nir + swir16),
+        "ndwi": _safe_divide(green - nir, green + nir),
+        "mndwi": _safe_divide(green - swir16, green + swir16),
+        "msi": _safe_divide(swir16, nir),
+        "bsi": _safe_divide(
+            (swir16 + red) - (nir + blue),
+            (swir16 + red) + (nir + blue),
+        ),
+        "nbr": _safe_divide(nir - swir22, nir + swir22),
+        "nbr2": _safe_divide(swir16 - swir22, swir16 + swir22),
+    }
+
+    if "rededge1" in bands:
+        rededge1 = bands["rededge1"]
+        indices["ndre"] = _safe_divide(nir - rededge1, nir + rededge1)
+        indices["reci"] = _safe_divide(nir, rededge1) - 1.0
+    else:
+        indices["ndre"] = np.full(nir.shape, np.nan, dtype=np.float32)
+        indices["reci"] = np.full(nir.shape, np.nan, dtype=np.float32)
+
+    return indices
+
+
+def _pixel_centers_to_h3(
+    shape: tuple[int, int],
+    transform: Any,
+    h3_resolution: int,
+) -> np.ndarray:
+    rows, cols = shape
+    h3_grid = np.empty(shape, dtype=object)
+
+    for row in range(rows):
+        for col in range(cols):
+            lon, lat = rasterio.transform.xy(
+                transform,
+                row,
+                col,
+                offset="center",
+            )
+
+            # transform is still in asset CRS, usually EPSG:32645.
+            # For now we only use this after reading Sentinel-2 UTM tiles.
+            # The h3 values will be corrected in the next version by storing
+            # the dataset CRS and transforming pixel centers back to EPSG:4326.
+            #
+            # Temporary safety:
+            # if values do not look like lon/lat, skip exact h3 mapping later.
+            h3_grid[row, col] = (float(lon), float(lat))
+
+    return h3_grid
+
+
+def _aggregate_whole_bbox(
+    bands: dict[str, np.ndarray],
+    indices: dict[str, np.ndarray],
+    masks: dict[str, np.ndarray],
+    h3_resolution: int,
+    bbox: list[float],
+) -> list[dict[str, Any]]:
+    """
+    Standard v1 aggregation:
+    Use bbox center as farm-preview H3 cell.
+    This avoids incorrect H3 from UTM pixel centers.
+    Later we will transform every pixel center back to EPSG:4326.
+    """
+    center_lon = (bbox[0] + bbox[2]) / 2.0
+    center_lat = (bbox[1] + bbox[3]) / 2.0
+
+    h3_cell = h3.latlng_to_cell(
+        lat=center_lat,
+        lng=center_lon,
+        res=h3_resolution,
+    )
+
+    pixel_count = int(bands["red"].size)
+    valid_pixel_count = int(np.sum(masks["valid"]))
+    cloud_pixel_count = int(np.sum(masks["cloud"]))
+    nodata_pixel_count = int(np.sum(masks["nodata"]))
+
+    cloud_percentage = (
+        round((cloud_pixel_count / pixel_count) * 100.0, 4)
+        if pixel_count > 0
+        else 0.0
+    )
+
+    valid_mask = masks["valid"]
+
+    row: dict[str, Any] = {
+        "h3_index": h3.str_to_int(h3_cell),
+        "pixel_count": pixel_count,
+        "valid_pixel_count": valid_pixel_count,
+        "cloud_pixel_count": cloud_pixel_count,
+        "nodata_pixel_count": nodata_pixel_count,
+        "cloud_percentage": cloud_percentage,
+    }
+
+    band_fields = {
+        "mean_blue": "blue",
+        "mean_green": "green",
+        "mean_red": "red",
+        "mean_rededge1": "rededge1",
+        "mean_rededge2": "rededge2",
+        "mean_rededge3": "rededge3",
+        "mean_nir": "nir",
+        "mean_nir08": "nir08",
+        "mean_swir16": "swir16",
+        "mean_swir22": "swir22",
+    }
+
+    for output_name, band_name in band_fields.items():
+        if band_name in bands:
+            row[output_name] = _clean_float(_mean_or_none(bands[band_name][valid_mask]))
+
+    for index_name, array in indices.items():
+        row[index_name] = _clean_float(_mean_or_none(array[valid_mask]))
+
+    return [row]
+
+
+def process_sentinel2_indices(
+    scene: dict[str, Any],
+    bbox: list[float],
+    h3_resolution: int,
+) -> dict[str, Any]:
+    asset_map = _build_asset_map(scene["assets"])
+    _validate_required_assets(asset_map)
+
+    bands, _transform = _read_all_required_bands(
+        asset_map=asset_map,
+        bbox=bbox,
+    )
+
+    masks = _build_quality_masks(bands)
+    indices = _calculate_index_arrays(bands)
+
+    features = _aggregate_whole_bbox(
+        bands=bands,
+        indices=indices,
+        masks=masks,
+        h3_resolution=h3_resolution,
+        bbox=bbox,
+    )
+
+    total_pixels = int(bands["red"].size)
+    total_valid = int(np.sum(masks["valid"]))
+    total_cloud = int(np.sum(masks["cloud"]))
+
+    return {
+        "source_assets_used": sorted(asset_map.keys()),
+        "row_count": len(features),
+        "total_pixel_count": total_pixels,
+        "total_valid_pixel_count": total_valid,
+        "total_cloud_pixel_count": total_cloud,
+        "features": features,
+    }

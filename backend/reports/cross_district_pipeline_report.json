@@ -1,0 +1,559 @@
+{
+  "pipeline_name": "MaatiTrace Cross District Pipeline Test",
+  "tested_services": [
+    "boundary_index_service",
+    "district_boundary_service",
+    "farm_registry_service",
+    "stac_catalog_service",
+    "raster_processor_service"
+  ],
+  "health_checks": {
+    "boundary_index_service": {
+      "service": "boundary_index_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "district_boundary_service": {
+      "service": "district_boundary_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "farm_registry_service": {
+      "service": "farm_registry_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "stac_catalog_service": {
+      "service": "stac_catalog_service",
+      "status": "live",
+      "environment": "local"
+    },
+    "raster_processor_service": {
+      "service": "raster_processor_service",
+      "status": "live",
+      "environment": "local"
+    }
+  },
+  "tests": [
+    {
+      "test_name": "Puri Pipili Test",
+      "district_name": "Puri",
+      "block_name": "Pipili",
+      "block_code": 3544,
+      "input_lon": 85.832,
+      "input_lat": 20.113,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Pipili",
+          "block_code": 3544,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "59898692-f156-47fc-858c-8d4e3e4a90c8",
+          "area_acres": 0.8256,
+          "h3_cell_count": 8,
+          "bbox": [
+            85.832,
+            20.113,
+            85.83278,
+            20.11337
+          ],
+          "district_name": "Puri",
+          "block_name": "Pipili",
+          "block_code": 3544
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QUC_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.419109,
+          "scene_bbox": [
+            85.0785588,
+            19.7978447,
+            86.1387859,
+            20.7980518
+          ],
+          "proj_code": "EPSG:32645"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631569256985266687,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.25014,
+            "gndvi": 0.262323,
+            "evi": 0.341722,
+            "savi": 0.209701,
+            "ndmi": -0.036659,
+            "ndwi": -0.262323,
+            "mndwi": -0.296127,
+            "msi": 1.076263,
+            "bsi": 0.036168,
+            "nbr": 0.059792,
+            "nbr2": 0.096245,
+            "ndre": 0.161845,
+            "reci": 0.386642
+          }
+        }
+      }
+    },
+    {
+      "test_name": "Puri Sadar Test",
+      "district_name": "Puri",
+      "block_name": "Sadar",
+      "block_code": 3545,
+      "input_lon": 85.824,
+      "input_lat": 19.819,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Sadar",
+          "block_code": 3545,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "a60122cb-c980-4caa-a127-c07a3db7d18a",
+          "area_acres": 0.8271,
+          "h3_cell_count": 14,
+          "bbox": [
+            85.824,
+            19.819,
+            85.82478,
+            19.81937
+          ],
+          "district_name": "Puri",
+          "block_name": "Sadar",
+          "block_code": 3545
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QUC_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.419109,
+          "scene_bbox": [
+            85.0785588,
+            19.7978447,
+            86.1387859,
+            20.7980518
+          ],
+          "proj_code": "EPSG:32645"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631570317724797439,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.111432,
+            "gndvi": 0.083444,
+            "evi": 0.132526,
+            "savi": 0.077977,
+            "ndmi": 0.073572,
+            "ndwi": -0.083444,
+            "mndwi": -0.009787,
+            "msi": 0.86846,
+            "bsi": -0.04648,
+            "nbr": 0.170207,
+            "nbr2": 0.098062,
+            "ndre": 0.041863,
+            "reci": 0.091964
+          }
+        }
+      }
+    },
+    {
+      "test_name": "Puri Satyabadi Test",
+      "district_name": "Puri",
+      "block_name": "Satyabadi",
+      "block_code": 3546,
+      "input_lon": 85.8205,
+      "input_lat": 19.99,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Puri",
+          "district_code": 369,
+          "block_name": "Satyabadi",
+          "block_code": 3546,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "eabcbb5a-ad7d-455d-af7d-a18837e30e5f",
+          "area_acres": 0.8262,
+          "h3_cell_count": 9,
+          "bbox": [
+            85.8205,
+            19.99,
+            85.82128,
+            19.99037
+          ],
+          "district_name": "Puri",
+          "block_name": "Satyabadi",
+          "block_code": 3546
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QUC_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.419109,
+          "scene_bbox": [
+            85.0785588,
+            19.7978447,
+            86.1387859,
+            20.7980518
+          ],
+          "proj_code": "EPSG:32645"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631570303531806207,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.264636,
+            "gndvi": 0.243423,
+            "evi": 0.340138,
+            "savi": 0.203481,
+            "ndmi": 0.102061,
+            "ndwi": -0.243423,
+            "mndwi": -0.144957,
+            "msi": 0.81489,
+            "bsi": -0.064639,
+            "nbr": 0.248161,
+            "nbr2": 0.149896,
+            "ndre": 0.175449,
+            "reci": 0.426222
+          }
+        }
+      }
+    },
+    {
+      "test_name": "Sambalpur Bamra Test",
+      "district_name": "Sambalpur",
+      "block_name": "Bamra",
+      "block_code": 3558,
+      "input_lon": 84.395,
+      "input_lat": 22.064,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Bamra",
+          "block_code": 3558,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "e3a468bd-4ab8-43f3-9e02-9bfca6ef5b65",
+          "area_acres": 0.8151,
+          "h3_cell_count": 9,
+          "bbox": [
+            84.395,
+            22.064,
+            84.39578,
+            22.06437
+          ],
+          "district_name": "Sambalpur",
+          "block_name": "Bamra",
+          "block_code": 3558
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251227T045119_R076_T45QTE_20251227T072009",
+          "scene_datetime": "2025-12-27T04:51:19.024000+00:00",
+          "scene_cloud_cover": 0.000146,
+          "scene_bbox": [
+            84.0822841,
+            21.5898212,
+            85.1624335,
+            22.5963725
+          ],
+          "proj_code": "EPSG:32645"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631568622547904511,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.437088,
+            "gndvi": 0.39726,
+            "evi": 0.446735,
+            "savi": 0.313348,
+            "ndmi": 0.160868,
+            "ndwi": -0.39726,
+            "mndwi": -0.252505,
+            "msi": 0.723025,
+            "bsi": -0.112911,
+            "nbr": 0.337322,
+            "nbr2": 0.186602,
+            "ndre": 0.306033,
+            "reci": 0.882985
+          }
+        }
+      }
+    },
+    {
+      "test_name": "Sambalpur Dhankauda Test",
+      "district_name": "Sambalpur",
+      "block_name": "Dhankauda",
+      "block_code": 3559,
+      "input_lon": 83.966,
+      "input_lat": 21.47,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Dhankauda",
+          "block_code": 3559,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "22dce6ac-26ba-4782-966b-a87c19a43ef9",
+          "area_acres": 0.8184,
+          "h3_cell_count": 12,
+          "bbox": [
+            83.966,
+            21.47,
+            83.96678,
+            21.47037
+          ],
+          "district_name": "Sambalpur",
+          "block_name": "Dhankauda",
+          "block_code": 3559
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251230T050119_R119_T44QRJ_20251230T072458",
+          "scene_datetime": "2025-12-30T05:01:19.024000+00:00",
+          "scene_cloud_cover": 0.003454,
+          "scene_bbox": [
+            83.8795252,
+            20.6860577,
+            84.1903509,
+            21.6780763
+          ],
+          "proj_code": "EPSG:32644"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631568311351513599,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.139116,
+            "gndvi": 0.148311,
+            "evi": 0.148698,
+            "savi": 0.097786,
+            "ndmi": -0.025818,
+            "ndwi": -0.148311,
+            "mndwi": -0.173478,
+            "msi": 1.053336,
+            "bsi": 0.025229,
+            "nbr": 0.014524,
+            "nbr2": 0.040333,
+            "ndre": 0.087946,
+            "reci": 0.193279
+          }
+        }
+      }
+    },
+    {
+      "test_name": "Sambalpur Jamankira Test",
+      "district_name": "Sambalpur",
+      "block_name": "Jamankira",
+      "block_code": 3560,
+      "input_lon": 84.366,
+      "input_lat": 21.54,
+      "status": "FAILED",
+      "steps": {},
+      "error": "POST failed: http://localhost:8008/v1/raster/sentinel2/indices/preview\nStatus: 400\nResponse: {\n  \"detail\": {\n    \"code\": \"RASTER_PROCESSING_ERROR\",\n    \"message\": \"Failed to read raster asset: Read failed. See previous exception for details.\"\n  }\n}"
+    },
+    {
+      "test_name": "Sambalpur Jujomura Test",
+      "district_name": "Sambalpur",
+      "block_name": "Jujomura",
+      "block_code": 3561,
+      "input_lon": 84.044,
+      "input_lat": 21.36,
+      "status": "PASSED",
+      "steps": {
+        "location_validation": {
+          "is_valid": true,
+          "state_name": "Odisha",
+          "district_name": "Sambalpur",
+          "district_code": 371,
+          "block_name": "Jujomura",
+          "block_code": 3561,
+          "message": "Location is valid"
+        },
+        "farm_registration": {
+          "farm_id": "529a0a3f-f294-4cfd-bde4-490136684edf",
+          "area_acres": 0.819,
+          "h3_cell_count": 12,
+          "bbox": [
+            84.044,
+            21.36,
+            84.04478,
+            21.36037
+          ],
+          "district_name": "Sambalpur",
+          "block_name": "Jujomura",
+          "block_code": 3561
+        },
+        "stac_search": {
+          "returned_count": 1,
+          "used_max_cloud_cover": 30,
+          "scene_id": "S2B_MSIL2A_20251230T050119_R119_T44QRJ_20251230T072458",
+          "scene_datetime": "2025-12-30T05:01:19.024000+00:00",
+          "scene_cloud_cover": 0.003454,
+          "scene_bbox": [
+            83.8795252,
+            20.6860577,
+            84.1903509,
+            21.6780763
+          ],
+          "proj_code": "EPSG:32644"
+        },
+        "raster_preview": {
+          "row_count": 1,
+          "total_pixel_count": 4,
+          "total_valid_pixel_count": 4,
+          "total_cloud_pixel_count": 0,
+          "source_assets_used": [
+            "blue",
+            "green",
+            "nir",
+            "nir08",
+            "red",
+            "rededge1",
+            "rededge2",
+            "rededge3",
+            "scl",
+            "swir16",
+            "swir22"
+          ],
+          "first_feature": {
+            "h3_index": 631568313358785023,
+            "cloud_percentage": 0.0,
+            "ndvi": 0.409823,
+            "gndvi": 0.373617,
+            "evi": 0.395518,
+            "savi": 0.28251,
+            "ndmi": 0.154947,
+            "ndwi": -0.373617,
+            "mndwi": -0.232086,
+            "msi": 0.731817,
+            "bsi": -0.10591,
+            "nbr": 0.315765,
+            "nbr2": 0.169106,
+            "ndre": 0.302188,
+            "reci": 0.866617
+          }
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "passed": 6,
+    "failed": 1
+  }
+}
