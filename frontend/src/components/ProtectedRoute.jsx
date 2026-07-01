@@ -3,6 +3,8 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getMe } from "@/lib/api/auth";
 import { clearSession, getAccessToken, getStoredUser, saveSession } from "@/lib/auth/session";
 import { canAccess } from "@/lib/rbac/permissions";
+import UserNotRegisteredError from "@/components/UserNotRegisteredError";
+import AppShell from "@/components/layout/AppShell";
 
 export default function ProtectedRoute({ permission }) {
   const location = useLocation();
@@ -32,6 +34,10 @@ export default function ProtectedRoute({ permission }) {
 
   if (state.loading) return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Checking session...</div>;
   if (!state.user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (!state.allowed) return <Navigate to="/login" replace />;
-  return <Outlet />;
+  if (!state.allowed) return <UserNotRegisteredError />;
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  );
 }

@@ -73,6 +73,71 @@ def create_user(data: dict[str, Any]) -> dict[str, Any]:
     return dict(row)
 
 
+def ensure_farmer_profile_for_user(user: dict[str, Any]) -> None:
+    exists_query = text(
+        """
+        SELECT farmer_id
+        FROM farmer_profiles
+        WHERE user_id = :user_id
+        LIMIT 1;
+        """
+    )
+
+    insert_query = text(
+        """
+        INSERT INTO farmer_profiles (
+            user_id,
+            fpo_id,
+            full_name,
+            phone_number,
+            gender,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            is_active
+        )
+        VALUES (
+            :user_id,
+            NULL,
+            :full_name,
+            :phone_number,
+            NULL,
+            'Odisha',
+            'Unassigned',
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            TRUE
+        );
+        """
+    )
+
+    try:
+        with engine.begin() as conn:
+            existing = conn.execute(
+                exists_query,
+                {"user_id": str(user["user_id"])},
+            ).mappings().first()
+
+            if existing is None:
+                conn.execute(
+                    insert_query,
+                    {
+                        "user_id": str(user["user_id"]),
+                        "full_name": user["full_name"],
+                        "phone_number": user.get("phone_number"),
+                    },
+                )
+    except SQLAlchemyError as exc:
+        raise AuthRepositoryError(
+            f"Failed to provision farmer profile for user: {exc}"
+        ) from exc
+
+
 def get_user_by_identifier(identifier: str) -> dict[str, Any] | None:
     cleaned = normalize_identifier(identifier)
 

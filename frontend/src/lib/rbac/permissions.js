@@ -1,20 +1,62 @@
-const ROUTE_RULES = {
-  "/admin": ["admin"],
-  "/fpo/me": ["admin", "fpo"],
-  "/fpo/:fpoId": ["admin", "fpo"],
-  "/my-fpo": ["admin", "fpo"],
-  "/farmer/me": ["farmer"],
-  "/farmers/:farmerId": ["admin", "fpo", "farmer"],
-  "/land/:farmId": ["admin", "fpo", "farmer"],
-  "/farm-register": ["admin", "fpo", "farmer"],
-  "/bulk-upload": ["admin", "fpo"],
-  "/notifications": ["admin", "fpo", "farmer"],
-  "/use-cases": ["admin", "fpo", "farmer"],
-  "/our-method": ["admin", "fpo", "farmer"],
+export const ROLES = {
+  ADMIN: "admin",
+  FPO: "fpo",
+  FARMER: "farmer",
 };
-export const canAccess = (user, permission) => !!user && ROUTE_RULES[permission]?.includes(user.role);
-export const canSeeAdminControls = (user) => user?.role === "admin";
-export const canSeeFpoControls = (user) => user?.role === "admin" || user?.role === "fpo";
-export const canBulkUpload = (user) => user?.role === "admin" || user?.role === "fpo";
-export const canEditFarm = (user) => !!user;
-export const canViewTechnicalH3Layer = (user) => user?.role === "admin" || user?.role === "fpo";
+
+export const ROUTE_RULES = {
+  adminDashboard: [ROLES.ADMIN],
+  fpoDashboard: [ROLES.ADMIN, ROLES.FPO],
+  myFpo: [ROLES.ADMIN, ROLES.FPO],
+  farmerProfile: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+  landIntelligence: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+  farmRegister: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+  bulkUpload: [ROLES.ADMIN, ROLES.FPO],
+  notifications: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+  publicInternal: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+};
+
+const PATH_PERMISSION_MAP = {
+  "/admin": "adminDashboard",
+  "/fpo/me": "fpoDashboard",
+  "/fpo/:fpoId": "fpoDashboard",
+  "/my-fpo": "myFpo",
+  "/farmer/me": "farmerProfile",
+  "/farmers/:farmerId": "farmerProfile",
+  "/land/:farmId": "landIntelligence",
+  "/farm-register": "farmRegister",
+  "/bulk-upload": "bulkUpload",
+  "/notifications": "notifications",
+  "/use-cases": "publicInternal",
+  "/our-method": "publicInternal",
+};
+
+export function hasRole(user, allowedRoles) {
+  if (!user) return false;
+  return allowedRoles.includes(user.role);
+}
+
+export function canAccess(user, permission) {
+  const key = PATH_PERMISSION_MAP[permission] || permission;
+  return hasRole(user, ROUTE_RULES[key] || []);
+}
+
+export function canSeeFpoControls(user) {
+  return user?.role === ROLES.ADMIN || user?.role === ROLES.FPO;
+}
+
+export function canSeeAdminControls(user) {
+  return user?.role === ROLES.ADMIN;
+}
+
+export function canBulkUpload(user) {
+  return user?.role === ROLES.ADMIN || user?.role === ROLES.FPO;
+}
+
+export function canEditFarm(user) {
+  return !!user;
+}
+
+export function canViewTechnicalH3Layer(user) {
+  return user?.role === ROLES.ADMIN || user?.role === ROLES.FPO;
+}

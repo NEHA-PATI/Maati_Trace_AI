@@ -6,6 +6,7 @@ from services.auth_service.app.repository import (
     AuthRepositoryError,
     create_refresh_token,
     create_user,
+    ensure_farmer_profile_for_user,
     get_active_refresh_token,
     get_user_by_id,
     get_user_by_identifier,
@@ -69,6 +70,8 @@ def signup(payload: SignupRequest) -> dict[str, Any]:
                 "role": payload.role,
             }
         )
+        if payload.role == "farmer":
+            ensure_farmer_profile_for_user(user)
     except AuthRepositoryError as exc:
         raise AuthServiceError(str(exc)) from exc
 
@@ -91,6 +94,12 @@ def login(payload: LoginRequest) -> dict[str, Any]:
 
     if not verify_password(payload.password, user["password_hash"]):
         raise AuthServiceError("Invalid login credentials")
+
+    if user.get("role") == "farmer":
+        try:
+            ensure_farmer_profile_for_user(user)
+        except AuthRepositoryError as exc:
+            raise AuthServiceError(str(exc)) from exc
 
     return _issue_tokens(user)
 

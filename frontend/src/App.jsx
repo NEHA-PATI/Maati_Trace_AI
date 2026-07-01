@@ -11,8 +11,10 @@ import LandIntelligence from "@/pages/LandIntelligence";
 import FarmRegister from "@/pages/FarmRegister";
 import BulkUpload from "@/pages/BulkUpload";
 import Notifications from "@/pages/Notifications";
-
-const Placeholder = ({ title }) => <div className="min-h-screen p-10 text-3xl font-black">{title}</div>;
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import MyFpo from "@/pages/MyFpo";
 
 export default function App() {
   return (
@@ -20,9 +22,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Placeholder title="Register" />} />
-        <Route path="/forgot-password" element={<Placeholder title="Forgot Password" />} />
-        <Route path="/reset-password" element={<Placeholder title="Reset Password" />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/use-cases" element={<UseCases />} />
         <Route path="/our-method" element={<OurMethod />} />
         <Route element={<ProtectedRoute permission="/admin" />}>
@@ -30,15 +32,25 @@ export default function App() {
         </Route>
         <Route element={<ProtectedRoute permission="/fpo/me" />}>
           <Route path="/fpo/me" element={<FpoDashboard />} />
-          <Route path="/my-fpo" element={<FpoDashboard />} />
+          <Route path="/my-fpo" element={<MyFpo />} />
           <Route path="/fpo/:fpoId" element={<FpoDashboard />} />
         </Route>
         <Route element={<ProtectedRoute permission="/farmer/me" />}>
           <Route path="/farmer/me" element={<FarmerProfile />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/farmers/:farmerId" />}>
           <Route path="/farmers/:farmerId" element={<FarmerProfile />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/land/:farmId" />}>
           <Route path="/land/:farmId" element={<LandIntelligence />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/farm-register" />}>
           <Route path="/farm-register" element={<FarmRegister />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/bulk-upload" />}>
           <Route path="/bulk-upload" element={<BulkUpload />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/notifications" />}>
           <Route path="/notifications" element={<Notifications />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

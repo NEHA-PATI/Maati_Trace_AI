@@ -49,10 +49,20 @@ def _build_target_url(prefix: str, rest_path: str, query_string: bytes) -> str:
     #
     # So we map:
     # /api/{prefix}/{rest_path} -> /v1/{prefix}/{rest_path}
-    target_path = f"/v1/{prefix}"
-
-    if rest_path:
-        target_path += f"/{rest_path}"
+    if prefix == "location":
+        location_aliases = {
+            "states": "/v1/states",
+            "districts": "/v1/districts",
+            "blocks": "/v1/blocks",
+            "validate": "/v1/location/validate",
+            "location/validate": "/v1/location/validate",
+            "location/stats": "/v1/location/stats",
+        }
+        target_path = location_aliases.get(rest_path, "/v1/location")
+    else:
+        target_path = f"/v1/{prefix}"
+        if rest_path:
+            target_path += f"/{rest_path}"
 
     target_url = f"{clean_base}{target_path}"
 
