@@ -666,6 +666,71 @@ def list_farms_by_farmer(farmer_id: UUID) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def list_farms(
+    fpo_id: UUID | str | None = None,
+    farmer_id: UUID | str | None = None,
+    district_name: str | None = None,
+    block_name: str | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict]:
+    where_clauses = ["is_active = TRUE"]
+    params: dict[str, Any] = {}
+
+    if fpo_id is not None:
+        where_clauses.append("fpo_id = :fpo_id")
+        params["fpo_id"] = str(fpo_id)
+    if farmer_id is not None:
+        where_clauses.append("farmer_id = :farmer_id")
+        params["farmer_id"] = str(farmer_id)
+    if district_name:
+        where_clauses.append("district_name = :district_name")
+        params["district_name"] = normalize_text(district_name)
+    if block_name:
+        where_clauses.append("block_name = :block_name")
+        params["block_name"] = normalize_text(block_name)
+
+    limit_clause = ""
+    if limit is not None:
+        limit_clause = "LIMIT :limit"
+        params["limit"] = int(limit)
+        if offset is not None:
+            limit_clause += " OFFSET :offset"
+            params["offset"] = int(offset)
+
+    query = text(
+        f"""
+        SELECT
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active
+        FROM farms
+        WHERE {" AND ".join(where_clauses)}
+        ORDER BY created_at DESC
+        {limit_clause};
+        """
+    )
+
+    with engine.connect() as conn:
+        rows = conn.execute(query, params).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
 def list_farmers_by_fpo(fpo_id: UUID | str) -> list[dict]:
     query = text(
         """

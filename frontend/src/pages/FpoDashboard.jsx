@@ -10,7 +10,7 @@ import StatStrip from "@/components/ui-custom/StatStrip";
 import PipelineStepper from "@/components/ui-custom/PipelineStepper";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
-import DistrictMap from "@/components/ui-custom/DistrictMap";
+import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import {
   getFpo,
   getFpoFarmers,
@@ -167,14 +167,20 @@ export default function FpoDashboard() {
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                 <MapPin className="h-4 w-4 text-emerald-500" />
-                District Coverage Map
+                Farm Pointers
               </span>
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
-                {fpo ? `${fpo.state_name} - ${fpo.district_name}` : "Coverage"}
-              </span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">{farms.length} farms</span>
             </div>
             <div className="p-3">
-              <DistrictMap />
+              <FarmPointerMap
+                farms={farms}
+                selectedFarmId={null}
+                onFarmClick={(farm) => window.location.assign(`/land/${farm.farm_id}`)}
+                showBoundaries={false}
+                height={420}
+                userRole="fpo"
+                emptyMessage="No farms are linked to this FPO yet."
+              />
             </div>
           </div>
 

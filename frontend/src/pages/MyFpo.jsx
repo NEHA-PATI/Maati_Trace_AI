@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
+import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import { getFpoFarmers, getFpoFarms, getMyFpo } from "@/lib/api/fpo";
 
 export default function MyFpo() {
@@ -184,48 +185,24 @@ export default function MyFpo() {
         </div>
 
         <AnimatePresence mode="wait">
-          {view === "map" ? (
-            <motion.div key="map" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm lg:col-span-2">
-                <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                  <span className="font-bold text-gray-800">Farmer Distribution - Odisha</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{fpo?.district_name || "District"} Cluster</span>
-                </div>
-                <div className="relative h-[480px] overflow-hidden bg-gray-100">
-                  <img
-                    src="https://res.cloudinary.com/dkst917dg/image/upload/v1780464229/31_h2wcys.jpg"
-                    alt="Map"
-                    className="h-full w-full object-cover opacity-30"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50/40 to-emerald-50/40" />
-                  {groupedDots.map((dot, index) => (
-                    <motion.div
-                      key={`${dot.label}-${index}`}
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: index * 0.1, type: "spring", stiffness: 200, damping: 15 }}
-                      className="absolute cursor-pointer"
-                      style={{ left: dot.x, top: dot.y, transform: "translate(-50%, -50%)" }}
-                      onClick={() => setSelectedDot(selectedDot === index ? null : index)}
-                    >
-                      <motion.div
-                        whileHover={{ scale: 1.15 }}
-                        animate={{ boxShadow: selectedDot === index ? "0 0 0 6px rgba(59,130,246,0.2)" : "0 0 0 0 rgba(59,130,246,0)" }}
-                        className={`flex items-center justify-center rounded-full transition-all ${
-                          dot.farmers.length >= 3 ? "h-12 w-12 bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40" :
-                          dot.farmers.length >= 2 ? "h-9 w-9 bg-gradient-to-br from-emerald-400 to-teal-500 shadow-md shadow-emerald-500/30" :
-                          "h-7 w-7 bg-gradient-to-br from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
-                        }`}
-                      >
-                        <span className="text-xs font-black text-white">{dot.farmers.length}</span>
-                      </motion.div>
-                      <div className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap">
-                        <span className="rounded-lg bg-white/80 px-2 py-0.5 text-[9px] font-bold text-gray-600 shadow-sm backdrop-blur-sm">{dot.label}</span>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+        {view === "map" ? (
+          <motion.div key="map" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm lg:col-span-2">
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                <span className="font-bold text-gray-800">Farmer Distribution - Odisha</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{fpo?.district_name || "District"} Cluster</span>
               </div>
+              <div className="p-3">
+                <FarmPointerMap
+                  farms={farms}
+                  onFarmClick={(farm) => window.location.assign(`/land/${farm.farm_id}`)}
+                  showBoundaries={false}
+                  height={480}
+                  userRole="fpo"
+                  emptyMessage="No farms are linked to this FPO yet."
+                />
+              </div>
+            </div>
 
               <div className="space-y-3">
                 <AnimatePresence mode="wait">

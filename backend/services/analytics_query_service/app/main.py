@@ -7,6 +7,7 @@ from shared.errors.api_errors import bad_request, not_found
 from shared.logging.json_logging import configure_json_logging
 from services.analytics_query_service.app.repository import (
     AnalyticsQueryRepositoryError,
+    get_grid_cell_details,
     get_farm_grid_cells,
     get_farm_h3_cells,
     get_farm_trends,
@@ -126,6 +127,14 @@ def farm_grid_values_history(
     limit: int = Query(default=10, ge=1, le=100),
 ):
     return {"farm_id": str(farm_id), "items": get_grid_value_history(farm_id, limit)}
+
+
+@app.get("/v1/analytics/farms/{farm_id}/grid-cells/{grid_cell_id}/details")
+def farm_grid_cell_details(farm_id: UUID, grid_cell_id: UUID):
+    result = get_grid_cell_details(farm_id, grid_cell_id)
+    if result is None:
+        raise not_found("Grid cell not found")
+    return result
 
 
 @app.get("/v1/analytics/farmers/{farmer_id}/summary")

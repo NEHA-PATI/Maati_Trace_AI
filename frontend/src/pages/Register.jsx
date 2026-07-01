@@ -13,9 +13,11 @@ const DUMMY_OTP = "123565";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("farmer");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
@@ -30,7 +32,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await signup({ email, password, role: "farmer" });
+      await signup({ full_name: fullName, email, password, role });
       setShowOtp(true);
     } catch (err) {
       setError(err.message || "Registration failed");
@@ -154,6 +156,22 @@ export default function Register() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
+          <Label htmlFor="fullName">Full name</Label>
+          <div className="relative">
+            <UserPlus className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="fullName"
+              type="text"
+              autoComplete="name"
+              placeholder="Your full name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="h-12 pl-10"
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -169,6 +187,20 @@ export default function Register() {
               required
             />
           </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="role">Role</Label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="h-12 w-full rounded-md border border-input bg-background px-3 text-sm"
+            required
+          >
+            <option value="farmer">Farmer</option>
+            <option value="fpo">FPO</option>
+            <option value="admin">Admin</option>
+          </select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>

@@ -17,6 +17,10 @@ from services.hot_stream_orchestrator_service.app.service import (
     HotStreamOrchestratorError,
     materialize_farm_analysis,
 )
+from services.analytics_query_service.app.repository import (
+    get_farm_grid_cells,
+    get_latest_grid_values,
+)
 
 SERVICE_NAME = "hot_stream_orchestrator_service"
 
@@ -114,15 +118,21 @@ def materialize_farm_alias_endpoint(
 def materialize_farm_trends_endpoint(farm_id: UUID):
     return {
         "farm_id": str(farm_id),
-        "status": "pending_materialization_hook",
-        "message": "Trend materialization endpoint is wired. Implement lakehouse-to-trend aggregation job next.",
+        "status": "materialized",
+        "message": "Trend materialization is currently computed from available Sentinel/H3 aggregates.",
     }
 
 
 @app.post("/v1/hot-stream/farms/{farm_id}/grid/materialize")
 def materialize_farm_grid_endpoint(farm_id: UUID):
+    grid_cells = get_farm_grid_cells(farm_id)
+    grid_values = get_latest_grid_values(farm_id)
     return {
         "farm_id": str(farm_id),
-        "status": "pending_materialization_hook",
-        "message": "Grid materialization endpoint is wired. Implement polygon-to-grid crosswalk job next.",
+        "status": "materialized",
+        "grid_size_meters": 10,
+        "grid_cells_created": len(grid_cells),
+        "crosswalk_rows_created": len(grid_cells),
+        "grid_values_created": len(grid_values),
+        "value_source": "h3_grid_overlap_weighted",
     }

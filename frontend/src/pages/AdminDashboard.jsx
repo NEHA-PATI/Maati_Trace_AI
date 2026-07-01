@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
+import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import { apiRequest } from "@/lib/api/client";
 import { getFpoFarmers, getFpoFarms, getFpos } from "@/lib/api/fpo";
+import { getFarms } from "@/lib/api/farm";
 
 const SERVICE_ICON_MAP = {
   location: MapPin,
@@ -30,6 +32,7 @@ const SERVICE_ICON_MAP = {
 export default function AdminDashboard() {
   const [routesPayload, setRoutesPayload] = useState(null);
   const [fpos, setFpos] = useState([]);
+  const [farms, setFarms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -40,9 +43,10 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       try {
-        const [routesResult, fpoList] = await Promise.all([
+        const [routesResult, fpoList, farmList] = await Promise.all([
           apiRequest("/api/routes").catch(() => null),
           getFpos().catch(() => []),
+          getFarms().catch(() => []),
         ]);
 
         const enrichedFpos = await Promise.all(
@@ -58,6 +62,7 @@ export default function AdminDashboard() {
         if (cancelled) return;
         setRoutesPayload(routesResult);
         setFpos(enrichedFpos);
+        setFarms(Array.isArray(farmList) ? farmList : []);
       } catch (err) {
         if (cancelled) return;
         setError(typeof err?.message === "string" ? err.message : "Unable to load admin dashboard.");
@@ -187,6 +192,26 @@ export default function AdminDashboard() {
               </motion.div>
             );
           })}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <MapPin className="h-4 w-4 text-emerald-500" />
+            Farm Pointers
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{farms.length} farms</span>
+        </div>
+        <div className="p-4">
+          <FarmPointerMap
+            farms={farms}
+            onFarmClick={(farm) => window.location.assign(`/land/${farm.farm_id}`)}
+            showBoundaries
+            height={420}
+            userRole="admin"
+            emptyMessage="No accessible farms yet."
+          />
         </div>
       </div>
 

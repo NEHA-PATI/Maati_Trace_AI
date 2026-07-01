@@ -11,6 +11,7 @@ import FarmCard from "@/components/ui-custom/FarmCard";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import FarmerLandMap from "@/components/ui-custom/FarmerLandMap";
+import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import {
   getFarmer,
   getFarmerFarms,
@@ -370,6 +371,45 @@ export default function FarmerProfile() {
         </div>
         <FarmerLandMap farms={farms} />
       </motion.div>
+
+      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          <span className="text-sm font-bold text-gray-800">Farm Pointers</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{farms.length} farms</span>
+        </div>
+        <div className="p-3">
+          <FarmPointerMap
+            farms={farms.map((farmItem) => ({
+              farm_id: farmItem.id,
+              farm_name: farmItem.farmName || farmItem.surveyNumber || "Registered farm",
+              farmer_id: farmer.id,
+              fpo_id: farmer.fpoId,
+              village_name: farmItem.village,
+              district_name: farmItem.district,
+              block_name: farmItem.block,
+              area_acres: farmItem.area,
+              bbox: farmItem.bbox,
+              polygon_geojson: farmItem.polygon?.length
+                ? {
+                    type: "Polygon",
+                    coordinates: [
+                      [...farmItem.polygon.map(([lat, lon]) => [lon, lat]), [farmItem.polygon[0][1], farmItem.polygon[0][0]]],
+                    ],
+                  }
+                : null,
+              h3_cell_count: farmItem.h3Count,
+              latest_ndvi: farmItem.ndvi,
+              latest_ndmi: farmItem.moisture,
+              health_status: farmItem.status === "verified" ? "stable" : "unknown",
+            }))}
+            onFarmClick={(farmItem) => window.location.assign(`/land/${farmItem.farm_id}`)}
+            showBoundaries
+            height={420}
+            userRole={user?.role}
+            emptyMessage="No farms linked to this farmer yet."
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
