@@ -48,8 +48,14 @@ export async function apiRequest(path, options = {}) {
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
   if (!response.ok) {
+    const detailMessage =
+      payload && typeof payload === "object"
+        ? (typeof payload.detail === "string"
+            ? payload.detail
+            : payload.detail?.message || payload.message)
+        : null;
     const message =
-      (payload && typeof payload === "object" && (payload.detail || payload.message)) ||
+      detailMessage ||
       `Request failed with status ${response.status}`;
     throw new ApiError(message, response.status, payload);
   }

@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from uuid import UUID
 
@@ -94,7 +95,11 @@ def get_farmer_for_write(farmer_id: UUID | str) -> dict:
 
 
 def create_fpo(data: dict[str, Any]) -> dict:
+    validate_user_exists(data.get("user_id"))
+
     payload = data.copy()
+    payload["user_id"] = str(payload["user_id"]) if payload.get("user_id") else None
+    payload["fpo_user_role"] = normalize_text(payload.get("fpo_user_role")) or "fpo_admin"
     payload["fpo_name"] = normalize_text(payload.get("fpo_name"))
     payload["registration_number"] = normalize_text(payload.get("registration_number"))
     payload["state_name"] = normalize_text(payload.get("state_name")) or "Odisha"
@@ -183,6 +188,28 @@ def create_fpo(data: dict[str, Any]) -> dict:
         """
     )
 
+    link_user_query = text(
+        """
+        INSERT INTO fpo_users (
+            fpo_id,
+            user_id,
+            role,
+            is_active
+        )
+        VALUES (
+            :fpo_id,
+            :user_id,
+            :fpo_user_role,
+            TRUE
+        )
+        ON CONFLICT (fpo_id, user_id)
+        DO UPDATE SET
+            role = EXCLUDED.role,
+            is_active = TRUE,
+            updated_at = now();
+        """
+    )
+
     try:
         with engine.begin() as conn:
             existing_fpo = None
@@ -199,6 +226,15 @@ def create_fpo(data: dict[str, Any]) -> dict:
             else:
                 row = conn.execute(insert_query, payload).mappings().one()
 
+            if payload.get("user_id"):
+                conn.execute(
+                    link_user_query,
+                    {
+                        "fpo_id": str(row["fpo_id"]),
+                        "user_id": payload["user_id"],
+                        "fpo_user_role": payload["fpo_user_role"],
+                    },
+                )
     except SQLAlchemyError as exc:
         raise FarmRegistryRepositoryError(f"Failed to create FPO: {exc}") from exc
 
@@ -287,7 +323,49 @@ def create_farmer(data: dict[str, Any]) -> dict:
     validate_user_exists(data.get("user_id"))
     validate_fpo_exists(data.get("fpo_id"))
 
-    query = text(
+    existing_by_user_query = text(
+        """
+        SELECT farmer_id
+        FROM farmer_profiles
+        WHERE user_id = :user_id
+        LIMIT 1;
+        """
+    )
+
+    update_query = text(
+        """
+        UPDATE farmer_profiles
+        SET
+            fpo_id = :fpo_id,
+            full_name = :full_name,
+            phone_number = :phone_number,
+            gender = :gender,
+            state_name = :state_name,
+            district_name = :district_name,
+            district_code = :district_code,
+            block_name = :block_name,
+            block_code = :block_code,
+            village_name = :village_name,
+            is_active = TRUE
+        WHERE farmer_id = :farmer_id
+        RETURNING
+            farmer_id,
+            user_id,
+            fpo_id,
+            full_name,
+            phone_number,
+            gender,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            is_active;
+        """
+    )
+
+    insert_query = text(
         """
         INSERT INTO farmer_profiles (
             user_id,
@@ -351,7 +429,19 @@ def create_farmer(data: dict[str, Any]) -> dict:
 
     try:
         with engine.begin() as conn:
-            row = conn.execute(query, payload).mappings().one()
+            existing_by_user = None
+
+            if payload.get("user_id"):
+                existing_by_user = conn.execute(
+                    existing_by_user_query,
+                    {"user_id": payload["user_id"]},
+                ).mappings().first()
+
+            if existing_by_user:
+                payload["farmer_id"] = str(existing_by_user["farmer_id"])
+                row = conn.execute(update_query, payload).mappings().one()
+            else:
+                row = conn.execute(insert_query, payload).mappings().one()
     except SQLAlchemyError as exc:
         raise FarmRegistryRepositoryError(f"Failed to create farmer: {exc}") from exc
 
@@ -543,6 +633,104 @@ def get_farm(farm_id: UUID) -> dict | None:
     return dict(row) if row else None
 
 
+def get_farm_for_repair(farm_id: UUID | str) -> dict | None:
+    query = text(
+        """
+        SELECT
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cells,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active
+        FROM farms
+        WHERE farm_id = :farm_id
+          AND is_active = TRUE
+        LIMIT 1;
+        """
+    )
+
+    with engine.connect() as conn:
+        row = conn.execute(query, {"farm_id": str(farm_id)}).mappings().first()
+
+    return dict(row) if row else None
+
+
+def update_farm_derived_fields(
+    farm_id: UUID | str,
+    *,
+    district_code: int | None = None,
+    block_code: int | None = None,
+    h3_resolution: int | None = None,
+    h3_cells: list[int] | None = None,
+    h3_cell_count: int | None = None,
+    area_acres: float | None = None,
+    bbox: list[float] | None = None,
+) -> dict | None:
+    query = text(
+        """
+        UPDATE farms
+        SET
+            district_code = COALESCE(:district_code, district_code),
+            block_code = COALESCE(:block_code, block_code),
+            h3_resolution = COALESCE(:h3_resolution, h3_resolution),
+            h3_cells = COALESCE(:h3_cells, h3_cells),
+            h3_cell_count = COALESCE(:h3_cell_count, h3_cell_count),
+            area_acres = COALESCE(:area_acres, area_acres),
+            bbox = COALESCE(CAST(:bbox AS JSONB), bbox),
+            updated_at = now()
+        WHERE farm_id = :farm_id
+          AND is_active = TRUE
+        RETURNING
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active;
+        """
+    )
+
+    payload = {
+        "farm_id": str(farm_id),
+        "district_code": district_code,
+        "block_code": block_code,
+        "h3_resolution": h3_resolution,
+        "h3_cells": h3_cells,
+        "h3_cell_count": h3_cell_count,
+        "area_acres": area_acres,
+        "bbox": json.dumps(bbox) if bbox is not None else None,
+    }
+
+    with engine.begin() as conn:
+        row = conn.execute(query, payload).mappings().first()
+
+    return dict(row) if row else None
+
+
 def list_farms_by_farmer(farmer_id: UUID) -> list[dict]:
     query = text(
         """
@@ -573,6 +761,71 @@ def list_farms_by_farmer(farmer_id: UUID) -> list[dict]:
 
     with engine.connect() as conn:
         rows = conn.execute(query, {"farmer_id": str(farmer_id)}).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def list_farms(
+    fpo_id: UUID | str | None = None,
+    farmer_id: UUID | str | None = None,
+    district_name: str | None = None,
+    block_name: str | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict]:
+    where_clauses = ["is_active = TRUE"]
+    params: dict[str, Any] = {}
+
+    if fpo_id is not None:
+        where_clauses.append("fpo_id = :fpo_id")
+        params["fpo_id"] = str(fpo_id)
+    if farmer_id is not None:
+        where_clauses.append("farmer_id = :farmer_id")
+        params["farmer_id"] = str(farmer_id)
+    if district_name:
+        where_clauses.append("district_name = :district_name")
+        params["district_name"] = normalize_text(district_name)
+    if block_name:
+        where_clauses.append("block_name = :block_name")
+        params["block_name"] = normalize_text(block_name)
+
+    limit_clause = ""
+    if limit is not None:
+        limit_clause = "LIMIT :limit"
+        params["limit"] = int(limit)
+        if offset is not None:
+            limit_clause += " OFFSET :offset"
+            params["offset"] = int(offset)
+
+    query = text(
+        f"""
+        SELECT
+            farm_id,
+            farmer_id,
+            fpo_id,
+            farm_name,
+            survey_number,
+            state_name,
+            district_name,
+            district_code,
+            block_name,
+            block_code,
+            village_name,
+            polygon_geojson,
+            h3_resolution,
+            h3_cell_count,
+            area_acres,
+            bbox,
+            is_active
+        FROM farms
+        WHERE {" AND ".join(where_clauses)}
+        ORDER BY created_at DESC
+        {limit_clause};
+        """
+    )
+
+    with engine.connect() as conn:
+        rows = conn.execute(query, params).mappings().all()
 
     return [dict(row) for row in rows]
 
@@ -641,7 +894,7 @@ def get_fpo_summary(fpo_id: UUID | str) -> dict:
     query = text(
         """
         SELECT
-            :fpo_id::uuid AS fpo_id,
+            :fpo_id AS fpo_id,
             COUNT(DISTINCT fp.farmer_id) AS farmer_count,
             COUNT(DISTINCT fm.farm_id) AS farm_count,
             COALESCE(SUM(fm.area_acres), 0) AS total_area_acres
@@ -662,7 +915,7 @@ def get_farmer_summary(farmer_id: UUID | str) -> dict:
     query = text(
         """
         SELECT
-            :farmer_id::uuid AS farmer_id,
+            :farmer_id AS farmer_id,
             COUNT(f.farm_id) AS farm_count,
             COALESCE(SUM(f.area_acres), 0) AS total_area_acres,
             MAX(f.state_name) AS state_name,

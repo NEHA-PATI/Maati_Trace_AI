@@ -60,3 +60,35 @@ export function canEditFarm(user) {
 export function canViewTechnicalH3Layer(user) {
   return user?.role === ROLES.ADMIN || user?.role === ROLES.FPO;
 }
+
+export function getSidebarItemsForRole(role) {
+  const common = [
+    { to: "/farm-register", label: "Register Land" },
+    { to: "/notifications", label: "Notifications" },
+    { to: "/use-cases", label: "Use Cases" },
+    { to: "/our-method", label: "Our Method" },
+  ];
+
+  if (role === ROLES.ADMIN) {
+    return [
+      { to: "/admin", label: "Admin Dashboard" },
+      { to: "/my-fpo", label: "My FPO" },
+      ...common,
+      { to: "/bulk-upload", label: "Bulk Upload" },
+    ];
+  }
+
+  if (role === ROLES.FPO) {
+    return [
+      { to: "/fpo/me", label: "FPO Dashboard" },
+      { to: "/my-fpo", label: "My FPO" },
+      ...common,
+      { to: "/bulk-upload", label: "Bulk Upload" },
+    ];
+  }
+
+  return [
+    { to: "/farmer/me", label: "Farmer Profile" },
+    ...common,
+  ];
+}

@@ -108,6 +108,7 @@ def sentinel2_indices_preview_from_search(payload: Sentinel2IndicesFromSearchReq
             scene=scene,
             bbox=payload.bbox,
             h3_resolution=payload.h3_resolution,
+            h3_cells_bigint=payload.h3_cells_bigint,
         )
     except (RasterProcessorError, RasterStacClientError) as exc:
         raise bad_request(str(exc), code="RASTER_PROCESSING_ERROR") from exc

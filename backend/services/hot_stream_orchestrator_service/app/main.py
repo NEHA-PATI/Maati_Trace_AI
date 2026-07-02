@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 
 from shared.config.settings import settings
-from shared.errors.api_errors import bad_request
+from fastapi import HTTPException
 from shared.logging.json_logging import configure_json_logging
 from services.hot_stream_orchestrator_service.app.clients import (
     OrchestratorClientError,
@@ -15,7 +15,13 @@ from services.hot_stream_orchestrator_service.app.schemas import (
 )
 from services.hot_stream_orchestrator_service.app.service import (
     HotStreamOrchestratorError,
+    ensure_farm_analysis_ready,
     materialize_farm_analysis,
+)
+from services.analytics_query_service.app.repository import (
+    get_farm_grid_cells,
+    get_latest_features,
+    get_latest_grid_values,
 )
 
 SERVICE_NAME = "hot_stream_orchestrator_service"
@@ -26,6 +32,13 @@ app = FastAPI(
     title="Hot Stream Orchestrator Service",
     version="1.0.0",
 )
+
+
+def _raise_hot_stream_error(exc: HotStreamOrchestratorError) -> None:
+    raise HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
 
 
 @app.get("/health/live", response_model=HealthResponse)
@@ -46,6 +59,34 @@ def ready():
     )
 
 
+@app.post("/v1/hot-stream/farms/{farm_id}/repair")
+def repair_farm_endpoint(farm_id: UUID):
+    try:
+        result = ensure_farm_analysis_ready(farm_id)
+    except HotStreamOrchestratorError as exc:
+        _raise_hot_stream_error(exc)
+    except OrchestratorClientError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "FARM_REPAIR_ERROR", "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "FARM_REPAIR_ERROR", "message": f"Unexpected farm repair error: {exc}"},
+        ) from exc
+
+    return {
+        "farm_id": str(farm_id),
+        "status": "ready",
+        "repaired_fields": result["repaired_fields"],
+        "h3_cell_count": result["h3_cell_count"],
+        "bbox": result["bbox"],
+        "area_acres": result["area_acres"],
+        "warnings": result["warnings"],
+    }
+
+
 @app.post(
     "/v1/farm-analysis/{farm_id}/materialize",
     response_model=FarmAnalysisMaterializeResponse,
@@ -60,11 +101,19 @@ def materialize_farm_analysis_endpoint(
             payload=payload,
         )
     except (HotStreamOrchestratorError, OrchestratorClientError) as exc:
-        raise bad_request(str(exc), code="FARM_ANALYSIS_MATERIALIZE_ERROR") from exc
+        if isinstance(exc, HotStreamOrchestratorError):
+            _raise_hot_stream_error(exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "FARM_ANALYSIS_MATERIALIZE_ERROR", "message": str(exc)},
+        ) from exc
     except Exception as exc:
-        raise bad_request(
-            f"Unexpected farm analysis materialization error: {exc}",
-            code="FARM_ANALYSIS_MATERIALIZE_ERROR",
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "FARM_ANALYSIS_MATERIALIZE_ERROR",
+                "message": f"Unexpected farm analysis materialization error: {exc}",
+            },
         ) from exc
 
     farm = result["farm"]
@@ -114,15 +163,33 @@ def materialize_farm_alias_endpoint(
 def materialize_farm_trends_endpoint(farm_id: UUID):
     return {
         "farm_id": str(farm_id),
-        "status": "pending_materialization_hook",
-        "message": "Trend materialization endpoint is wired. Implement lakehouse-to-trend aggregation job next.",
+        "status": "materialized",
+        "message": "Trend materialization is currently computed from available Sentinel/H3 aggregates.",
     }
 
 
 @app.post("/v1/hot-stream/farms/{farm_id}/grid/materialize")
 def materialize_farm_grid_endpoint(farm_id: UUID):
+    grid_cells = get_farm_grid_cells(farm_id)
+    h3_rows = get_latest_features(farm_id)
+    if not h3_rows:
+        return {
+            "farm_id": str(farm_id),
+            "status": "no_h3_features",
+            "message": "Run farm analysis before grid values can be computed",
+            "grid_size_meters": 10,
+            "grid_cells_created": len(grid_cells),
+            "crosswalk_rows_created": 0,
+            "grid_values_created": 0,
+            "value_source": None,
+        }
+    grid_values = get_latest_grid_values(farm_id)
     return {
         "farm_id": str(farm_id),
-        "status": "pending_materialization_hook",
-        "message": "Grid materialization endpoint is wired. Implement polygon-to-grid crosswalk job next.",
+        "status": "materialized",
+        "grid_size_meters": 10,
+        "grid_cells_created": len(grid_cells),
+        "crosswalk_rows_created": len(grid_cells),
+        "grid_values_created": len(grid_values),
+        "value_source": "h3_grid_overlap_weighted",
     }

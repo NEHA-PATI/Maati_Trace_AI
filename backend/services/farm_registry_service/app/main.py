@@ -35,6 +35,7 @@ from services.farm_registry_service.app.repository import (
     list_farmers_by_fpo,
     list_farms_by_fpo,
     list_farms_by_farmer,
+    list_farms,
     list_fpos,
 )
 from services.farm_registry_service.app.schemas import (
@@ -268,8 +269,30 @@ def register_farm_endpoint(payload: FarmRegisterRequest):
         raise bad_request(str(exc), code="FARM_GEOMETRY_ERROR") from exc
     except FarmRegistryRepositoryError as exc:
         raise bad_request(str(exc), code="FARM_CREATE_ERROR") from exc
-    
-    
+
+
+@app.get("/v1/farms", response_model=list[FarmResponse])
+def list_farms_endpoint(
+    fpo_id: UUID | None = None,
+    farmer_id: UUID | None = None,
+    district_name: str | None = None,
+    block_name: str | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+):
+    return [
+        FarmResponse(**row)
+        for row in list_farms(
+            fpo_id=fpo_id,
+            farmer_id=farmer_id,
+            district_name=district_name,
+            block_name=block_name,
+            limit=limit,
+            offset=offset,
+        )
+    ]
+
+
 @app.get("/v1/farms/{farm_id}", response_model=FarmResponse)
 def get_farm_endpoint(farm_id: UUID):
     result = get_farm(farm_id)

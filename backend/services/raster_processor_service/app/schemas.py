@@ -92,6 +92,7 @@ class Sentinel2IndicesFromSearchRequest(BaseModel):
     farm_id: str | None = None
     bbox: list[float] = Field(..., min_length=4, max_length=4)
     h3_resolution: int = Field(default=12, ge=7, le=12)
+    h3_cells_bigint: list[int] | None = None
 
     provider: str = "planetary_computer"
     collection_id: str = "sentinel-2-l2a"
