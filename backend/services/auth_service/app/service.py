@@ -1,18 +1,34 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
+import os
+import secrets
 
 from services.auth_service.app.repository import (
     AuthRepositoryError,
     create_refresh_token,
     create_user,
+    create_signup_session,
     ensure_farmer_profile_for_user,
     get_active_refresh_token,
     get_user_by_id,
     get_user_by_identifier,
+    get_signup_session,
+    mark_signup_session_completed,
+    mark_signup_session_verified,
     revoke_refresh_token,
 )
-from services.auth_service.app.schemas import LoginRequest, SignupRequest
+from services.auth_service.app.schemas import (
+    FarmerProfileUpdateRequest,
+    FpoProfileUpdateRequest,
+    LoginRequest,
+    SignupCompleteRequest,
+    SignupRequest,
+    SignupStartRequest,
+    SignupVerifyRequest,
+)
+from shared.config.settings import settings
 from services.auth_service.app.security import (
     create_access_token,
     create_refresh_token_plain,
@@ -76,6 +92,62 @@ def signup(payload: SignupRequest) -> dict[str, Any]:
         raise AuthServiceError(str(exc)) from exc
 
     return _issue_tokens(user)
+
+
+def start_signup(payload: SignupStartRequest) -> dict[str, Any]:
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    session = create_signup_session(
+        {
+            "full_name": payload.full_name,
+            "phone_number": payload.phone_number,
+            "email": str(payload.email) if payload.email else None,
+            "password_hash": hash_password(payload.password),
+            "role": payload.role,
+            "fpo_id": payload.fpo_id,
+            "invite_code": payload.invite_code,
+        },
+        otp_hash=hash_password(otp),
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+    )
+    response = {"signup_session_id": session["signup_session_id"]}
+    if os.getenv("APP_ENV", settings.app_env) == "local":
+        response["dev_otp"] = otp
+    return response
+
+
+def verify_signup_otp(payload: SignupVerifyRequest) -> dict[str, Any]:
+    session = get_signup_session(payload.signup_session_id)
+    if session is None:
+        raise AuthServiceError("Signup session not found")
+    if session.get("verified_at"):
+        return {"signup_session_id": payload.signup_session_id, "verified": True}
+    if hash_password(payload.otp) != session["otp_hash"]:
+        raise AuthServiceError("Invalid OTP")
+    mark_signup_session_verified(payload.signup_session_id)
+    return {"signup_session_id": payload.signup_session_id, "verified": True}
+
+
+def complete_signup(payload: SignupCompleteRequest) -> dict[str, Any]:
+    session = get_signup_session(payload.signup_session_id)
+    if session is None:
+        raise AuthServiceError("Signup session not found")
+    if not session.get("verified_at"):
+        raise AuthServiceError("OTP verification required")
+
+    try:
+        user = create_user({
+            "full_name": session["full_name"],
+            "email": session["email"] or f"{session['phone_number']}@maatitrace.local",
+            "phone_number": session["phone_number"],
+            "password_hash": session["password_hash"],
+            "role": payload.role,
+        })
+        if payload.role == "farmer":
+            ensure_farmer_profile_for_user(user)
+        mark_signup_session_completed(payload.signup_session_id)
+    except AuthRepositoryError as exc:
+        raise AuthServiceError(str(exc)) from exc
+    return {"success": True, "user_id": user["user_id"]}
 
 
 def login(payload: LoginRequest) -> dict[str, Any]:

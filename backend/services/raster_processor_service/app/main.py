@@ -1,7 +1,8 @@
-﻿import os
+import os
 
 import pyproj
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 _proj_data_dir = pyproj.datadir.get_data_dir()
 os.environ["PROJ_LIB"] = _proj_data_dir
@@ -32,6 +33,14 @@ configure_json_logging(SERVICE_NAME)
 app = FastAPI(
     title="Raster Processor Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -88,6 +97,7 @@ def sentinel2_indices_preview(payload: Sentinel2IndicesPreviewRequest):
         total_cloud_pixel_count=result["total_cloud_pixel_count"],
         features=result["features"],
     )
+
 
 @app.post(
     "/v1/raster/sentinel2/indices/preview-from-search",

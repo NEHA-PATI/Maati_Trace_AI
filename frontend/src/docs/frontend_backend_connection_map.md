@@ -1,43 +1,32 @@
-**Frontend Backend Connection Map**
+# Frontend Backend Connection Map
 
-Frontend rule:
-- All data calls go only to `http://localhost:8000`
-- No direct frontend calls to backend service ports
+## Auth
+- `frontend/src/lib/api/auth.js` -> `auth_service` direct `/v1/auth/*`
+- `Login.jsx` -> `login`
+- `SignupFlow.jsx` -> `startSignup`, `verifySignupOtp`, `completeSignup`
+- `ProtectedRoute.jsx` -> `getMe`
 
-Shared auth/session layer:
-- `src/lib/api/client.js` injects the bearer token and clears session on 401
-- `src/lib/auth/session.js` stores access token, refresh token, and user
-- `src/lib/rbac/permissions.js` filters routes and sidebar items by role
-- `src/components/ProtectedRoute.jsx` verifies `/api/auth/me` before rendering protected pages
+## Location
+- `frontend/src/lib/api/location.js` -> `district_boundary_service` direct `/v1/states`, `/v1/districts`, `/v1/blocks`, `/v1/location/validate`
+- `FarmRegister.jsx` -> `getStates`, `getDistricts`, `getBlocks`, `validateLocation`
 
-Page to gateway mapping:
-- `Login.jsx` -> `/api/auth/login`, `/api/auth/me`
-- `AdminDashboard.jsx` -> `/api/routes`, `/api/fpos`, `/api/farms`
-- `FpoDashboard.jsx` -> `/api/fpos/me`, `/api/fpos/:fpoId`, `/api/fpos/:fpoId/summary`, `/api/fpos/:fpoId/farmers`, `/api/fpos/:fpoId/farms`
-- `MyFpo.jsx` -> `/api/fpos/me`, `/api/fpos/:fpoId/farmers`, `/api/fpos/:fpoId/farms`
-- `FarmerProfile.jsx` -> `/api/farmers/me`, `/api/farmers/:farmerId`, `/api/farmers/:farmerId/summary`, `/api/farmers/:farmerId/farms`
-- `LandIntelligence.jsx` -> `/api/farms/:farmId`, `/api/analytics/farms/:farmId/summary`, `/api/analytics/farms/:farmId/sentinel2/latest`, `/api/analytics/farms/:farmId/sentinel2/history`, `/api/analytics/farms/:farmId/trends`, `/api/analytics/farms/:farmId/h3-cells`, `/api/analytics/farms/:farmId/grid-cells`, `/api/analytics/farms/:farmId/grid-values/latest`, `/api/analytics/farms/:farmId/grid-cells/:gridCellId/details`
-- `FarmRegister.jsx` -> `/api/location/states`, `/api/location/districts`, `/api/location/blocks`, `/api/location/validate`, `/api/h3/preview`, `/api/farmers`, `/api/farms/register`, `/api/farm-analysis/:farmId/materialize`, `/api/hot-stream/farms/:farmId/trends/materialize`, `/api/hot-stream/farms/:farmId/grid/materialize`
+## Farm and analysis
+- `frontend/src/lib/api/farm.js` -> `farm_registry_service` direct `/v1/farms/*` and `boundary_index_service` direct `/v1/h3/preview`
+- `frontend/src/lib/api/hotStream.js` -> `hot_stream_orchestrator_service` direct `/v1/hot-stream/*` and `/v1/farm-analysis/*`
+- `FarmRegister.jsx` -> create farmer, H3 preview, register farm, analysis materialization
+- `LandIntelligence.jsx` -> farm summary, H3 cells, grid cells, grid values, cell details
 
-Reusable map components:
-- `FarmPointerMap.jsx` shows many farm pointers and routes to land intelligence
-- `LandGridMap.jsx` shows the satellite basemap, farm boundary, square grid, and optional H3 layer
+## Farmer/FPO
+- `frontend/src/lib/api/farmer.js` -> `farm_registry_service` direct `/v1/farmers/*`
+- `frontend/src/lib/api/fpo.js` -> `farm_registry_service` direct `/v1/fpos/*`
+- `FarmerProfile.jsx` -> farmer profile, farms, summary
+- `FpoDashboard.jsx` -> FPO profile, farmers, farms, summary
+- `MyFpo.jsx` -> current FPO profile
+- `Settings.jsx` -> current farmer/FPO profile update and export
 
-Backend mapping:
-- `/api/auth/*` -> `auth_service`
-- `/api/location/*` -> `DISTRICT_BOUNDARY_SERVICE`
-- `/api/h3/*` -> `boundary_index_service`
-- `/api/fpos/*`, `/api/farmers/*`, `/api/farms/*` -> `farm_registry_service`
-- `/api/farm-analysis/*`, `/api/hot-stream/*` -> `hot_stream_orchestrator_service`
-- `/api/analytics/*` -> `analytics_query_service`
+## Dashboard/admin
+- `AdminDashboard.jsx` -> direct service health, FPO lists, farm lists
 
-Analytics/model notes:
-- `total_farm_h3_cells` = farm metadata H3 count
-- `processed_h3_cells` = distinct H3 rows in latest processed Sentinel data
-- `grid_cells_with_values` = grid cells with values available
-- Grid values use H3-overlap weighting when crosswalk rows and H3 rows exist
-
-Known gaps:
-- If the raster processor writes identical per-H3 values upstream, grid variation will still appear flat until that pipeline is fixed
-- Full read/write persistence for grid materialization still depends on the upstream hot-stream job path
-- `POST /api/hot-stream/farms/:farmId/repair` now backfills missing farm metadata before analysis, so DB-inserted farms can be repaired before `Run Latest Analysis`
+## Notes
+- No frontend code should call the API gateway in direct mode.
+- `frontend/src/lib/api/client.js` is the service client factory and the only network abstraction the UI should use.

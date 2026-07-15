@@ -5,6 +5,7 @@ import { clearSession, getAccessToken, getStoredUser, saveSession } from "@/lib/
 import { canAccess } from "@/lib/rbac/permissions";
 import UserNotRegisteredError from "@/components/UserNotRegisteredError";
 import AppShell from "@/components/layout/AppShell";
+import PostLoginLandPrompt from "@/components/onboarding/PostLoginLandPrompt";
 
 export default function ProtectedRoute({ permission }) {
   const location = useLocation();
@@ -37,6 +38,7 @@ export default function ProtectedRoute({ permission }) {
   if (!state.allowed) return <UserNotRegisteredError />;
   return (
     <AppShell>
+      <PostLoginLandPrompt user={state.user} />
       <Outlet />
     </AppShell>
   );

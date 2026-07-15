@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from shared.config.settings import settings
@@ -13,16 +14,24 @@ from services.auth_service.app.schemas import (
     LogoutRequest,
     RefreshRequest,
     SignupRequest,
+    SignupStartRequest,
+    SignupStartResponse,
+    SignupVerifyRequest,
+    SignupVerifyResponse,
+    SignupCompleteRequest,
     UserPublic,
 )
 from services.auth_service.app.security import AuthSecurityError, decode_access_token
 from services.auth_service.app.service import (
     AuthServiceError,
+    complete_signup,
     get_current_user_from_id,
     login,
     logout,
     refresh,
+    start_signup,
     signup,
+    verify_signup_otp,
 )
 
 SERVICE_NAME = "auth_service"
@@ -34,6 +43,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
 app = FastAPI(
     title="Auth Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -61,6 +78,30 @@ def signup_endpoint(payload: SignupRequest):
         return AuthResponse(**signup(payload))
     except AuthServiceError as exc:
         raise bad_request(str(exc), code="AUTH_SIGNUP_ERROR") from exc
+
+
+@app.post("/v1/auth/signup/start", response_model=SignupStartResponse)
+def signup_start_endpoint(payload: SignupStartRequest):
+    try:
+        return SignupStartResponse(**start_signup(payload))
+    except AuthServiceError as exc:
+        raise bad_request(str(exc), code="AUTH_SIGNUP_ERROR_START") from exc
+
+
+@app.post("/v1/auth/signup/verify-otp", response_model=SignupVerifyResponse)
+def signup_verify_otp_endpoint(payload: SignupVerifyRequest):
+    try:
+        return SignupVerifyResponse(**verify_signup_otp(payload))
+    except AuthServiceError as exc:
+        raise bad_request(str(exc), code="AUTH_SIGNUP_ERROR_VERIFY") from exc
+
+
+@app.post("/v1/auth/signup/complete")
+def signup_complete_endpoint(payload: SignupCompleteRequest):
+    try:
+        return complete_signup(payload)
+    except AuthServiceError as exc:
+        raise bad_request(str(exc), code="AUTH_SIGNUP_ERROR_COMPLETE") from exc
 
 
 @app.post("/v1/auth/login", response_model=AuthResponse)

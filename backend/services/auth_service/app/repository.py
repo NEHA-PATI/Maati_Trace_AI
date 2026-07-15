@@ -73,6 +73,77 @@ def create_user(data: dict[str, Any]) -> dict[str, Any]:
     return dict(row)
 
 
+def create_signup_session(data: dict[str, Any], otp_hash: str, otp_expires_at: datetime) -> dict[str, Any]:
+    query = text(
+        """
+        INSERT INTO signup_otp_sessions (
+            full_name,
+            phone_number,
+            email,
+            password_hash,
+            role,
+            fpo_id,
+            invite_code,
+            otp_hash,
+            otp_expires_at
+        )
+        VALUES (
+            :full_name,
+            :phone_number,
+            :email,
+            :password_hash,
+            :role,
+            :fpo_id,
+            :invite_code,
+            :otp_hash,
+            :otp_expires_at
+        )
+        RETURNING signup_session_id;
+        """
+    )
+
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(
+                query,
+                {**data, "otp_hash": otp_hash, "otp_expires_at": otp_expires_at},
+            ).mappings().one()
+    except SQLAlchemyError as exc:
+        raise AuthRepositoryError(f"Failed to create signup session: {exc}") from exc
+
+    return dict(row)
+
+
+def get_signup_session(signup_session_id: UUID | str) -> dict[str, Any] | None:
+    query = text(
+        """
+        SELECT *
+        FROM signup_otp_sessions
+        WHERE signup_session_id = :signup_session_id
+        LIMIT 1;
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(query, {"signup_session_id": str(signup_session_id)}).mappings().first()
+    return dict(row) if row else None
+
+
+def mark_signup_session_verified(signup_session_id: UUID | str) -> None:
+    query = text(
+        "UPDATE signup_otp_sessions SET verified_at = now() WHERE signup_session_id = :signup_session_id;"
+    )
+    with engine.begin() as conn:
+        conn.execute(query, {"signup_session_id": str(signup_session_id)})
+
+
+def mark_signup_session_completed(signup_session_id: UUID | str) -> None:
+    query = text(
+        "UPDATE signup_otp_sessions SET completed_at = now() WHERE signup_session_id = :signup_session_id;"
+    )
+    with engine.begin() as conn:
+        conn.execute(query, {"signup_session_id": str(signup_session_id)})
+
+
 def ensure_farmer_profile_for_user(user: dict[str, Any]) -> None:
     exists_query = text(
         """

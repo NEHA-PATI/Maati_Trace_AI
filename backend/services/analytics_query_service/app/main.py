@@ -1,6 +1,7 @@
-﻿from uuid import UUID
+from uuid import UUID
 
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
 from shared.errors.api_errors import bad_request, not_found
@@ -35,6 +36,14 @@ configure_json_logging(SERVICE_NAME)
 app = FastAPI(
     title="Analytics Query Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -130,7 +139,7 @@ def farm_grid_values_history(
 
 
 @app.get("/v1/analytics/farms/{farm_id}/grid-cells/{grid_cell_id}/details")
-def farm_grid_cell_details(farm_id: UUID, grid_cell_id: UUID):
+def farm_grid_cell_details(farm_id: UUID, grid_cell_id: str):
     result = get_grid_cell_details(farm_id, grid_cell_id)
     if result is None:
         raise not_found("Grid cell not found")

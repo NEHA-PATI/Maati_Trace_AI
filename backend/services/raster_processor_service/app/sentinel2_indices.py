@@ -1024,6 +1024,7 @@ def _sample_bands_at_point(
     lat: float,
 ) -> dict[str, float | None]:
     sample_values: dict[str, float | None] = {}
+
     with rasterio.Env(
         GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
         CPL_VSIL_CURL_USE_HEAD="NO",
@@ -1036,36 +1037,95 @@ def _sample_bands_at_point(
         with rasterio.open(asset_map["red"]) as ref_dataset:
             if ref_dataset.crs is None:
                 raise RasterProcessorError("Raster asset has no CRS.")
-            transformer = Transformer.from_crs("EPSG:4326", ref_dataset.crs, always_xy=True)
+
+            transformer = Transformer.from_crs(
+                "EPSG:4326",
+                ref_dataset.crs,
+                always_xy=True,
+            )
             x, y = transformer.transform(lon, lat)
 
-            band_names = {
-                "mean_blue": "blue",
-                "mean_green": "green",
-                "mean_red": "red",
-                "mean_rededge1": "rededge1",
-                "mean_rededge2": "rededge2",
-                "mean_rededge3": "rededge3",
-                "mean_nir": "nir",
-                "mean_nir08": "nir08",
-                "mean_swir16": "swir16",
-                "mean_swir22": "swir22",
-            }
+        # Read SCL first because it decides whether spectral values are usable.
+        with rasterio.open(asset_map["scl"]) as dataset:
+            sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
+            scl_value = float(sample[0]) if np.isfinite(sample[0]) else np.nan
 
-            band_samples: dict[str, float | None] = {}
-            for out_name, band_name in band_names.items():
-                href = asset_map.get(band_name)
-                if not href:
-                    band_samples[out_name] = None
-                    continue
-                with rasterio.open(href) as dataset:
-                    sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
-                    value = sample[0]
-                    band_samples[out_name] = _clean_float(float(value) / 10000.0) if np.isfinite(value) else None
+        is_nodata = bool(np.isnan(scl_value) or scl_value == 0)
+        is_invalid = bool(scl_value in {0, 1, 2})
+        is_cloud = bool(scl_value in {3, 8, 9, 10, 11})
+        is_valid = not is_nodata and not is_invalid and not is_cloud
 
-            with rasterio.open(asset_map["scl"]) as dataset:
+        cloud_percentage = 100.0 if is_cloud else 0.0
+        valid_pixel_count = 1 if is_valid else 0
+        cloud_pixel_count = 1 if is_cloud else 0
+        nodata_pixel_count = 1 if is_nodata else 0
+
+        empty_result = {
+            "pixel_count": 1,
+            "valid_pixel_count": valid_pixel_count,
+            "cloud_pixel_count": cloud_pixel_count,
+            "nodata_pixel_count": nodata_pixel_count,
+            "cloud_percentage": cloud_percentage,
+
+            "mean_blue": None,
+            "mean_green": None,
+            "mean_red": None,
+            "mean_rededge1": None,
+            "mean_rededge2": None,
+            "mean_rededge3": None,
+            "mean_nir": None,
+            "mean_nir08": None,
+            "mean_swir16": None,
+            "mean_swir22": None,
+
+            "ndvi": None,
+            "gndvi": None,
+            "evi": None,
+            "savi": None,
+            "ndmi": None,
+            "ndwi": None,
+            "mndwi": None,
+            "msi": None,
+            "bsi": None,
+            "nbr": None,
+            "nbr2": None,
+            "ndre": None,
+            "reci": None,
+        }
+
+        if not is_valid:
+            return empty_result
+
+        band_names = {
+            "mean_blue": "blue",
+            "mean_green": "green",
+            "mean_red": "red",
+            "mean_rededge1": "rededge1",
+            "mean_rededge2": "rededge2",
+            "mean_rededge3": "rededge3",
+            "mean_nir": "nir",
+            "mean_nir08": "nir08",
+            "mean_swir16": "swir16",
+            "mean_swir22": "swir22",
+        }
+
+        band_samples: dict[str, float | None] = {}
+
+        for out_name, band_name in band_names.items():
+            href = asset_map.get(band_name)
+
+            if not href:
+                band_samples[out_name] = None
+                continue
+
+            with rasterio.open(href) as dataset:
                 sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
-                scl_value = float(sample[0]) if np.isfinite(sample[0]) else np.nan
+                value = sample[0]
+                band_samples[out_name] = (
+                    _clean_float(float(value) / 10000.0)
+                    if np.isfinite(value)
+                    else None
+                )
 
     blue = band_samples.get("mean_blue")
     green = band_samples.get("mean_green")
@@ -1084,34 +1144,40 @@ def _sample_bands_at_point(
 
     ndvi = div(nir, red)
     gndvi = div(nir, green)
+
     evi = None
     if None not in (nir, red, blue):
         denom = nir + (6.0 * red) - (7.5 * blue) + 1.0
         if abs(denom) > 1e-6:
             evi = _clean_float(2.5 * (nir - red) / denom)
+
     savi = None
     if None not in (nir, red):
         denom = nir + red + 0.5
         if abs(denom) > 1e-6:
             savi = _clean_float(1.5 * (nir - red) / denom)
+
     ndmi = div(nir, swir16)
     ndwi = div(green, nir)
     mndwi = div(green, swir16)
-    msi = _clean_float((swir16 / nir) if nir not in (None, 0) and swir16 is not None else None)
+
+    msi = None
+    if nir is not None and swir16 is not None and abs(nir) > 1e-6:
+        msi = _clean_float(swir16 / nir)
+
     bsi = None
     if None not in (swir16, red, nir, blue):
         denom = (swir16 + red) + (nir + blue)
         if abs(denom) > 1e-6:
             bsi = _clean_float(((swir16 + red) - (nir + blue)) / denom)
+
     nbr = div(nir, swir22)
     nbr2 = div(swir16, swir22)
     ndre = div(nir, rededge1)
-    reci = _clean_float((nir / rededge1) - 1.0) if nir is not None and rededge1 not in (None, 0) else None
 
-    cloud_percentage = 0.0 if np.isnan(scl_value) else (100.0 if scl_value in {3, 8, 9, 10, 11} else 0.0)
-    valid_pixel_count = 1 if not np.isnan(scl_value) and scl_value not in {0, 1, 2, 3, 8, 9, 10, 11} else 0
-    cloud_pixel_count = 1 if scl_value in {3, 8, 9, 10, 11} else 0
-    nodata_pixel_count = 1 if np.isnan(scl_value) or scl_value == 0 else 0
+    reci = None
+    if nir is not None and rededge1 is not None and abs(rededge1) > 1e-6:
+        reci = _clean_float((nir / rededge1) - 1.0)
 
     return {
         "pixel_count": 1,
@@ -1119,6 +1185,7 @@ def _sample_bands_at_point(
         "cloud_pixel_count": cloud_pixel_count,
         "nodata_pixel_count": nodata_pixel_count,
         "cloud_percentage": cloud_percentage,
+
         "mean_blue": blue,
         "mean_green": green,
         "mean_red": red,
@@ -1129,6 +1196,7 @@ def _sample_bands_at_point(
         "mean_nir08": band_samples.get("mean_nir08"),
         "mean_swir16": swir16,
         "mean_swir22": swir22,
+
         "ndvi": ndvi,
         "gndvi": gndvi,
         "evi": evi,

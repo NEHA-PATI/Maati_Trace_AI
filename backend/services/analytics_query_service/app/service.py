@@ -9,6 +9,8 @@ from services.analytics_query_service.app.repository import (
     get_latest_aggregate,
     get_latest_features,
     get_farm_h3_cells,
+    get_persisted_grid_cell_count,
+    get_latest_grid_value_count,
 )
 from services.farm_registry_service.app.repository import get_farm
 
@@ -83,9 +85,11 @@ def build_latest_response(farm_id: UUID) -> dict[str, Any] | None:
     if aggregate is None:
         return None
 
-    features = get_latest_features(farm_id)
+    features = get_latest_features(farm_id, usable_only=True)
 
     aggregate["features"] = features
+    aggregate["analysis_mode"] = "latest_usable"
+    aggregate["usable_scene_max_cloud_percentage"] = 40.0
 
     return aggregate
 
@@ -106,11 +110,15 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
     farm_h3_cells = get_farm_h3_cells(farm_id)
     total_farm_h3_cells = int(farm.get("h3_cell_count") or len(farm.get("h3_cells") or []) or len(farm_h3_cells) or 0) if farm else len(farm_h3_cells)
 
+    persisted_grid_cell_count = get_persisted_grid_cell_count(farm_id)
+    latest_grid_value_count = get_latest_grid_value_count(farm_id)
+
     if aggregate is None:
-        grid_cells = get_farm_grid_cells(farm_id)
         return {
             "farm_id": farm_id,
-            "has_analysis": False,
+            "has_analysis": True,
+            "analysis_mode": "latest_usable",
+            "usable_scene_max_cloud_percentage": 40.0,
             "latest_snapshot_date": None,
             "latest_scene_id": None,
             "vegetation_signal": None,
@@ -136,11 +144,13 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
             "total_farm_h3_cells": total_farm_h3_cells,
             "processed_h3_cells": 0,
             "latest_processed_h3_cells": 0,
-            "total_grid_cells": len(grid_cells),
-            "grid_cells_with_values": 0,
+            "total_grid_cells": persisted_grid_cell_count,
+            "grid_cells_with_values": latest_grid_value_count,
+            "analysis_mode": "latest_usable",
+            "usable_scene_max_cloud_percentage": 40.0,
         }
 
-    features = get_latest_features(farm_id)
+    features = get_latest_features(farm_id, usable_only=True)
     valid_weights = [max(1.0, float(item.get("valid_pixel_count") or item.get("pixel_count") or 0)) for item in features]
     weight_sum = sum(valid_weights) or 1.0
 
@@ -157,6 +167,8 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
     return {
         "farm_id": farm_id,
         "has_analysis": True,
+        "analysis_mode": "latest_usable",
+        "usable_scene_max_cloud_percentage": 40.0,
         "latest_snapshot_date": aggregate["snapshot_date"],
         "latest_scene_id": aggregate["scene_id"],
         "vegetation_signal": _signal_from_ndvi(aggregate.get("avg_ndvi")),
@@ -182,6 +194,6 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
         "total_farm_h3_cells": total_farm_h3_cells,
         "processed_h3_cells": len({item.get("h3_index") for item in features if item.get("h3_index") is not None}),
         "latest_processed_h3_cells": len({item.get("h3_index") for item in features if item.get("h3_index") is not None}),
-        "total_grid_cells": len(get_farm_grid_cells(farm_id)),
-        "grid_cells_with_values": len(get_farm_grid_cells(farm_id)),
+        "total_grid_cells": persisted_grid_cell_count,
+        "grid_cells_with_values": latest_grid_value_count,
     }

@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { analyticsClient } from "./client";
 
 function extractItems(response) {
   if (Array.isArray(response)) return response;
@@ -13,33 +13,33 @@ function getFieldValue(response, keys = []) {
   return response;
 }
 
-export const getFarmSummary = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/summary`);
-export const getLatestSentinel2 = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/sentinel2/latest`);
-export const getSentinel2History = (farmId, limit = 10) => apiRequest(`/api/analytics/farms/${farmId}/sentinel2/history?limit=${limit}`);
-export const getFarmTrends = (farmId) => apiRequest(`/api/analytics/farms/${farmId}/trends`);
+export const getFarmSummary = (farmId) => analyticsClient.request(`/v1/analytics/farms/${farmId}/summary`);
+export const getLatestSentinel2 = (farmId) => analyticsClient.request(`/v1/analytics/farms/${farmId}/sentinel2/latest`);
+export const getSentinel2History = (farmId, limit = 10) => analyticsClient.request(`/v1/analytics/farms/${farmId}/sentinel2/history?limit=${limit}`);
+export const getFarmTrends = (farmId) => analyticsClient.request(`/v1/analytics/farms/${farmId}/trends`);
 export async function getFarmH3Cells(farmId) {
-  const response = await apiRequest(`/api/analytics/farms/${farmId}/h3-cells`);
+  const response = await analyticsClient.request(`/v1/analytics/farms/${farmId}/h3-cells`);
   return extractItems(response);
 }
 export async function getFarmGridCells(farmId) {
-  const response = await apiRequest(`/api/analytics/farms/${farmId}/grid-cells`);
+  const response = await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells`);
   return extractItems(response);
 }
 export async function getLatestGridValues(farmId) {
-  const response = await apiRequest(`/api/analytics/farms/${farmId}/grid-values/latest`);
+  const response = await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-values/latest`);
   return extractItems(response);
 }
 export async function getGridValueHistory(farmId, limit = 10) {
-  const response = await apiRequest(`/api/analytics/farms/${farmId}/grid-values/history?limit=${limit}`);
+  const response = await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-values/history?limit=${limit}`);
   return extractItems(response);
 }
 export async function getFarmerAnalyticsSummary(farmerId) {
-  return apiRequest(`/api/analytics/farmers/${farmerId}/summary`);
+  return analyticsClient.request(`/v1/analytics/farmers/${farmerId}/summary`);
 }
 export async function getFpoAnalyticsSummary(fpoId) {
-  return apiRequest(`/api/analytics/fpos/${fpoId}/summary`);
+  return analyticsClient.request(`/v1/analytics/fpos/${fpoId}/summary`);
 }
 
 export async function getFarmGridCellDetails(farmId, gridCellId) {
-  return apiRequest(`/api/analytics/farms/${farmId}/grid-cells/${gridCellId}/details`);
+  return analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells/${gridCellId}/details`);
 }

@@ -506,6 +506,49 @@ def get_farmer_by_user_id(user_id: UUID | str) -> dict | None:
     return dict(row) if row else None
 
 
+def update_farmer_profile_by_user_id(user_id: UUID | str, data: dict[str, Any]) -> dict | None:
+    columns = [k for k, v in data.items() if v is not None]
+    if not columns:
+        return get_farmer_by_user_id(user_id)
+    sets = ", ".join([f"{col} = :{col}" for col in columns] + ["updated_at = now()"])
+    query = text(
+        f"""
+        UPDATE farmer_profiles
+        SET {sets}
+        WHERE user_id = :user_id
+        RETURNING farmer_id, user_id, fpo_id, full_name, phone_number, gender, state_name, district_name, district_code, block_name, block_code, village_name, is_active;
+        """
+    )
+    payload = {k: v for k, v in data.items() if v is not None}
+    payload["user_id"] = str(user_id)
+    with engine.begin() as conn:
+        row = conn.execute(query, payload).mappings().first()
+    return dict(row) if row else None
+
+
+def update_fpo_profile_by_user_id(user_id: UUID | str, data: dict[str, Any]) -> dict | None:
+    existing = get_fpo_by_user(user_id)
+    if existing is None:
+        return None
+    columns = [k for k, v in data.items() if v is not None]
+    if not columns:
+        return existing
+    sets = ", ".join([f"{col} = :{col}" for col in columns] + ["updated_at = now()"])
+    query = text(
+        f"""
+        UPDATE fpos
+        SET {sets}
+        WHERE fpo_id = :fpo_id
+        RETURNING fpo_id, fpo_name, registration_number, state_name, district_name, block_name, block_code, contact_phone, contact_email, is_active;
+        """
+    )
+    payload = {k: v for k, v in data.items() if v is not None}
+    payload["fpo_id"] = str(existing["fpo_id"])
+    with engine.begin() as conn:
+        row = conn.execute(query, payload).mappings().first()
+    return dict(row) if row else None
+
+
 def get_farmer_by_user(user_id: UUID | str) -> dict | None:
     return get_farmer_by_user_id(user_id)
 

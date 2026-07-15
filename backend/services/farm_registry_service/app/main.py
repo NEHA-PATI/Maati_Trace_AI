@@ -2,6 +2,7 @@
 from uuid import UUID
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
 from shared.errors.api_errors import bad_request, not_found
@@ -37,6 +38,8 @@ from services.farm_registry_service.app.repository import (
     list_farms_by_farmer,
     list_farms,
     list_fpos,
+    update_farmer_profile_by_user_id,
+    update_fpo_profile_by_user_id,
 )
 from services.farm_registry_service.app.schemas import (
     FPOCreateRequest,
@@ -54,6 +57,14 @@ configure_json_logging(SERVICE_NAME)
 app = FastAPI(
     title="Farm Registry Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -119,6 +130,42 @@ def get_my_fpo_endpoint(authorization: str | None = Header(default=None)):
     if result is None:
         raise not_found("Current user is not linked to an FPO")
     return FPOResponse(**result)
+
+
+@app.patch("/v1/farmers/me/profile", response_model=FarmerResponse)
+def patch_my_farmer_profile(payload: dict, authorization: str | None = Header(default=None)):
+    current_user = get_current_user_from_auth_service(authorization)
+    result = update_farmer_profile_by_user_id(current_user["user_id"], payload)
+    if result is None:
+        raise not_found("Farmer not found")
+    return FarmerResponse(**result)
+
+
+@app.get("/v1/farmers/me/profile-export")
+def export_my_farmer_profile(authorization: str | None = Header(default=None)):
+    current_user = get_current_user_from_auth_service(authorization)
+    result = get_farmer_by_user_id(current_user["user_id"])
+    if result is None:
+      raise not_found("Farmer not found")
+    return result
+
+
+@app.patch("/v1/fpos/me/profile", response_model=FPOResponse)
+def patch_my_fpo_profile(payload: dict, authorization: str | None = Header(default=None)):
+    current_user = get_current_user_from_auth_service(authorization)
+    result = update_fpo_profile_by_user_id(current_user["user_id"], payload)
+    if result is None:
+        raise not_found("FPO not found")
+    return FPOResponse(**result)
+
+
+@app.get("/v1/fpos/me/profile-export")
+def export_my_fpo_profile(authorization: str | None = Header(default=None)):
+    current_user = get_current_user_from_auth_service(authorization)
+    result = get_fpo_by_user(current_user["user_id"])
+    if result is None:
+        raise not_found("FPO not found")
+    return result
 
 
 @app.get("/v1/fpos/{fpo_id}", response_model=FPOResponse)

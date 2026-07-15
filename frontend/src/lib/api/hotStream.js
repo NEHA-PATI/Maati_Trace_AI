@@ -1,22 +1,26 @@
-import { apiRequest } from "./client";
+import { hotStreamClient } from "./client";
 
 export const repairFarm = (farmId) =>
-  apiRequest(`/api/hot-stream/farms/${farmId}/repair`, { method: "POST" });
+  hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/repair`, { method: "POST" });
 
 export const materializeFarmAnalysis = (farmId, payload) =>
-  apiRequest(`/api/farm-analysis/${farmId}/materialize`, {
+  hotStreamClient.request(`/v1/farm-analysis/${farmId}/materialize`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
-export const materializeFarmTrends = (farmId, payload) =>
-  apiRequest(`/api/hot-stream/farms/${farmId}/trends/materialize`, {
+export const materializeFarmTrends = (farmId) =>
+  hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/trends/materialize`, {
     method: "POST",
-    body: JSON.stringify(payload),
   });
 
-export const materializeFarmGrid = (farmId, payload) =>
-  apiRequest(`/api/hot-stream/farms/${farmId}/grid/materialize`, {
+export const materializeFarmGrid = (farmId) =>
+  hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/grid/materialize`, {
     method: "POST",
-    body: JSON.stringify(payload),
+  });
+
+export const fullRefreshFarm = (farmId, payload) =>
+  hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/full-refresh`, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined,
   });

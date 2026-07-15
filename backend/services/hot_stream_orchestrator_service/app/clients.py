@@ -108,3 +108,106 @@ def write_sentinel2_to_lakehouse(
     }
 
     return _post_json(url, body, timeout=300)
+
+
+def search_latest_sentinel2_scene(
+    provider: str,
+    collection_id: str,
+    bbox: list[float],
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float | None,
+) -> dict[str, Any]:
+    url = f"{settings.stac_catalog_service_url}/v1/stac/latest"
+
+    body = {
+        "provider": provider,
+        "collection_id": collection_id,
+        "bbox": bbox,
+        "start_date": start_date,
+        "end_date": end_date,
+        "max_cloud_cover": max_cloud_cover,
+    }
+
+    payload = _post_json(url, body, timeout=120)
+    items = payload.get("items") or []
+
+    if not items:
+        raise OrchestratorClientError("No Sentinel-2 scene found for the selected farm/date/cloud filters.")
+
+    return items[0]
+
+
+def run_raster_preview_for_scene(
+    farm_id: UUID | str,
+    bbox: list[float],
+    scene: dict[str, Any],
+    h3_resolution: int,
+    h3_cells_bigint: list[int] | None = None,
+) -> dict[str, Any]:
+    url = (
+        f"{settings.raster_processor_service_url}"
+        "/v1/raster/sentinel2/indices/preview"
+    )
+
+    body = {
+        "farm_id": str(farm_id),
+        "bbox": bbox,
+        "h3_resolution": h3_resolution,
+        "scene": scene,
+    }
+
+    if h3_cells_bigint is not None:
+        # The current /preview schema does not accept this yet.
+        # We will use /preview-from-search until raster schema is patched.
+        pass
+
+    return _post_json(url, body, timeout=300)
+
+
+def run_raster_preview_from_known_scene_search_safe(
+    farm_id: UUID | str,
+    bbox: list[float],
+    provider: str,
+    collection_id: str,
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float | None,
+    h3_resolution: int,
+    h3_cells_bigint: list[int],
+) -> dict[str, Any]:
+    return run_raster_preview_from_search(
+        farm_id=farm_id,
+        bbox=bbox,
+        provider=provider,
+        collection_id=collection_id,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_cover=max_cloud_cover,
+        h3_resolution=h3_resolution,
+        h3_cells_bigint=h3_cells_bigint,
+    )
+
+def search_sentinel2_scene_candidates(
+    provider: str,
+    collection_id: str,
+    bbox: list[float],
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float | None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    url = f"{settings.stac_catalog_service_url}/v1/stac/search"
+
+    body = {
+        "provider": provider,
+        "collection_id": collection_id,
+        "bbox": bbox,
+        "start_date": start_date,
+        "end_date": end_date,
+        "max_cloud_cover": max_cloud_cover,
+        "limit": limit,
+    }
+
+    payload = _post_json(url, body, timeout=120)
+    return payload.get("items") or []

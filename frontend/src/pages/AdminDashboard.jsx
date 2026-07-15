@@ -11,7 +11,7 @@ import StatStrip from "@/components/ui-custom/StatStrip";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
 import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
-import { apiRequest } from "@/lib/api/client";
+import { getAllServiceHealth } from "@/lib/api/health";
 import { getFpoFarmers, getFpoFarms, getFpos } from "@/lib/api/fpo";
 import { getFarms } from "@/lib/api/farm";
 
@@ -43,8 +43,8 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       try {
-        const [routesResult, fpoList, farmList] = await Promise.all([
-          apiRequest("/api/routes").catch(() => null),
+        const [healthResult, fpoList, farmList] = await Promise.all([
+          getAllServiceHealth(),
           getFpos().catch(() => []),
           getFarms().catch(() => []),
         ]);
@@ -60,7 +60,7 @@ export default function AdminDashboard() {
         );
 
         if (cancelled) return;
-        setRoutesPayload(routesResult);
+        setRoutesPayload(healthResult);
         setFpos(enrichedFpos);
         setFarms(Array.isArray(farmList) ? farmList : []);
       } catch (err) {
@@ -80,11 +80,11 @@ export default function AdminDashboard() {
   }, []);
 
   const services = useMemo(() => {
-    const routes = routesPayload?.routes || {};
-    return Object.entries(routes).map(([name, target]) => ({
+    const services = routesPayload || {};
+    return Object.entries(services).map(([name, target]) => ({
       name,
-      target,
-      status: target ? "healthy" : "pending",
+      target: target?.environment ? target.environment : target?.error ? "unhealthy" : "live",
+      status: target?.status === "live" ? "healthy" : target?.status === "unhealthy" ? "pending" : target?.status === "ready" ? "healthy" : "healthy",
       icon: SERVICE_ICON_MAP[name] || Database,
     }));
   }, [routesPayload]);

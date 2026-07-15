@@ -34,3 +34,5 @@ coverage.xml
 
 # Logs
 *.log
+*.md
+*.pdf

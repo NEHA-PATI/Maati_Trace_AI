@@ -15,6 +15,7 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import MyFpo from "@/pages/MyFpo";
+import Settings from "@/pages/Settings";
 
 export default function App() {
   return (
@@ -52,6 +53,9 @@ export default function App() {
         </Route>
         <Route element={<ProtectedRoute permission="/notifications" />}>
           <Route path="/notifications" element={<Notifications />} />
+        </Route>
+        <Route element={<ProtectedRoute permission="/settings" />}>
+          <Route path="/settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

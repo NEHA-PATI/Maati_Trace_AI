@@ -1,0 +1,715 @@
+[
+  {
+    "farm_id": "05cdf611-71a5-4765-9e4d-ed639188ab5d",
+    "result": {
+      "farm_id": "05cdf611-71a5-4765-9e4d-ed639188ab5d",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'b2bfe02a-4c54-4b62-ab57-2121c323e0d0'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "05fac859-8a26-4ae8-9dac-ed25a2f5e976",
+    "result": {
+      "farm_id": "05fac859-8a26-4ae8-9dac-ed25a2f5e976",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '9dcbc595-cc7e-4ffe-b9c4-331a3a29a017'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "1d09e2bf-d3a7-4bda-aaa6-c1490525aa80",
+    "result": {
+      "farm_id": "1d09e2bf-d3a7-4bda-aaa6-c1490525aa80",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'f4297a77-ccf3-46cf-84d9-9fbaeb4afc2f'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "1f7798c5-f31d-4976-a4cd-379d928b953f",
+    "result": {
+      "farm_id": "1f7798c5-f31d-4976-a4cd-379d928b953f",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '3077986e-2116-46c5-ab72-71eb3255ef98'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "22dce6ac-26ba-4782-966b-a87c19a43ef9",
+    "result": {
+      "farm_id": "22dce6ac-26ba-4782-966b-a87c19a43ef9",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '016bfde2-9c96-44c5-85fb-c08cc44d4412'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "33bb71b6-49f1-42d8-a3cb-e62ea1e93d44",
+    "result": {
+      "farm_id": "33bb71b6-49f1-42d8-a3cb-e62ea1e93d44",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'c365c926-c54c-4da0-a3dd-99113b0d71ac'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "34f38886-a459-4011-8b38-051a0e63bd69",
+    "result": {
+      "farm_id": "34f38886-a459-4011-8b38-051a0e63bd69",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '32a5a0e2-f50f-449e-b78b-9d16b88adca0'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "3e1f0332-5174-4415-9c55-106ea1dd6771",
+    "result": {
+      "farm_id": "3e1f0332-5174-4415-9c55-106ea1dd6771",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '95ce166a-ee23-477a-8738-32cdc8de5531'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "529a0a3f-f294-4cfd-bde4-490136684edf",
+    "result": {
+      "farm_id": "529a0a3f-f294-4cfd-bde4-490136684edf",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'ce562739-7dd5-43d0-9d13-5582c07f5ef2'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "59898692-f156-47fc-858c-8d4e3e4a90c8",
+    "result": {
+      "farm_id": "59898692-f156-47fc-858c-8d4e3e4a90c8",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '5d4d96cf-b96a-4e68-88a5-e92895a0c81a'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "61e0f122-8f88-43ac-ad1f-f1fa4bfdf6f0",
+    "result": {
+      "farm_id": "61e0f122-8f88-43ac-ad1f-f1fa4bfdf6f0",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '16fc0739-b612-4e3a-abb8-39c75329fb73'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "85bce395-5eae-4dca-9b22-3476c9d57e1c",
+    "result": {
+      "farm_id": "85bce395-5eae-4dca-9b22-3476c9d57e1c",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '104bfafa-2849-4523-9001-e5d4a47886b0'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "86ac2a3b-7fce-4b3d-9605-05f5ec628880",
+    "result": {
+      "farm_id": "86ac2a3b-7fce-4b3d-9605-05f5ec628880",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'd3fa4f19-f465-4eca-a71b-377567861e49'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "935549be-468c-44ce-967c-0a35aa368d55",
+    "result": {
+      "farm_id": "935549be-468c-44ce-967c-0a35aa368d55",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'd0eb848b-d800-49d2-8691-4b88f72e8e66'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "946f68e9-d90a-4727-823b-777030f86917",
+    "result": {
+      "farm_id": "946f68e9-d90a-4727-823b-777030f86917",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '2e11d976-a7ce-4a00-a15f-3e62a0901f7c'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "9a7a39ad-e750-427f-9ba9-aecb5a8e35f0",
+    "result": {
+      "farm_id": "9a7a39ad-e750-427f-9ba9-aecb5a8e35f0",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'a69081fd-0f0e-4427-897f-4161306240b8'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "a60122cb-c980-4caa-a127-c07a3db7d18a",
+    "result": {
+      "farm_id": "a60122cb-c980-4caa-a127-c07a3db7d18a",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'dc016dc5-4e09-42d4-92b1-711da4419c7e'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "b71a13e9-032d-4306-948c-09dec6aa5c7c",
+    "result": {
+      "farm_id": "b71a13e9-032d-4306-948c-09dec6aa5c7c",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '6ced2114-5564-4d2d-b5ab-b31bddf4270c'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "bd7b2fb5-19f4-4bd8-b1c0-0221a7dcb0f2",
+    "result": {
+      "farm_id": "bd7b2fb5-19f4-4bd8-b1c0-0221a7dcb0f2",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '4200a31e-5f78-460e-bec4-0501d800956e'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "c36f136a-d01b-40cd-bd2e-2c41b368fb8c",
+    "result": {
+      "farm_id": "c36f136a-d01b-40cd-bd2e-2c41b368fb8c",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '18054807-b5d0-4162-b08c-b1052d4c49fb'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "c6bc0612-fd9a-4826-ab76-cdd3384e33d3",
+    "result": {
+      "farm_id": "c6bc0612-fd9a-4826-ab76-cdd3384e33d3",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'd7d1f553-5a52-4c2e-8cdd-1dfc90c94843'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "c9a71956-8a38-4821-acbb-ec88abea266b",
+    "result": {
+      "farm_id": "c9a71956-8a38-4821-acbb-ec88abea266b",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'abe58319-6330-49c5-bf1f-11b9f29902d8'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "e2a53689-64be-4e06-972c-35e5b55815ee",
+    "result": {
+      "farm_id": "e2a53689-64be-4e06-972c-35e5b55815ee",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'd882cc13-e2e3-46e8-926b-3dffd4ee0870'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "e3a468bd-4ab8-43f3-9e02-9bfca6ef5b65",
+    "result": {
+      "farm_id": "e3a468bd-4ab8-43f3-9e02-9bfca6ef5b65",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '42be95af-fcbe-4449-90f5-f1d3fc8a847d'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "e98ead33-3652-43bd-a129-1f5be5acdd5e",
+    "result": {
+      "farm_id": "e98ead33-3652-43bd-a129-1f5be5acdd5e",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '05f4093f-fee8-4409-8ebc-e6242e710988'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "ea702e92-b651-428c-bac3-11afe17d76bf",
+    "result": {
+      "farm_id": "ea702e92-b651-428c-bac3-11afe17d76bf",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '48522100-71a3-4862-82e6-987c5c6dc39f'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "eabcbb5a-ad7d-455d-af7d-a18837e30e5f",
+    "result": {
+      "farm_id": "eabcbb5a-ad7d-455d-af7d-a18837e30e5f",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '1be4ab5d-811e-4069-97c1-c7215c0af56d'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "f06c4f3f-fda9-4ca3-99a2-f6785102c5c9",
+    "result": {
+      "farm_id": "f06c4f3f-fda9-4ca3-99a2-f6785102c5c9",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '92ecaae0-436f-4f09-affe-acd780a917f2'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "fbaab260-44db-4938-8fa3-1f72195ca3cc",
+    "result": {
+      "farm_id": "fbaab260-44db-4938-8fa3-1f72195ca3cc",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '32f3e2bb-b415-4016-b3c1-60a5bd692cec'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "fc7cb061-e72c-4866-ad9a-9c73ea504cd3",
+    "result": {
+      "farm_id": "fc7cb061-e72c-4866-ad9a-9c73ea504cd3",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': '9d3f9c46-5913-42e6-89f8-c6976fc35982'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  },
+  {
+    "farm_id": "fddbc569-7249-4f91-a136-fd0d87a2b51b",
+    "result": {
+      "farm_id": "fddbc569-7249-4f91-a136-fd0d87a2b51b",
+      "status": "failed",
+      "stages": [
+        {
+          "name": "repair",
+          "status": "succeeded",
+          "details": {
+            "repaired_fields": [],
+            "warnings": []
+          }
+        },
+        {
+          "name": "h3_analysis",
+          "status": "failed",
+          "code": "ANALYSIS_FAILED",
+          "message": "Failed to update pipeline job stage: (psycopg2.errors.UndefinedColumn) column \"updated_at\" of relation \"pipeline_jobs\" does not exist\nLINE 6:             updated_at = now()\n                    ^\n\n[SQL: \n        UPDATE pipeline_jobs\n        SET current_stage = %(stage)s,\n            status = COALESCE(%(status)s, status),\n            metadata = COALESCE(CAST(%(metadata)s AS jsonb), metadata),\n            updated_at = now()\n        WHERE job_id = %(job_id)s\n        RETURNING job_id;\n        ]\n[parameters: {'stage': 'repair', 'status': 'running', 'metadata': '{}', 'job_id': 'abd90258-f9c8-4e05-b839-e190eac381a4'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+        }
+      ]
+    }
+  }
+]

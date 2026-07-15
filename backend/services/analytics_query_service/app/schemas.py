@@ -137,6 +137,8 @@ class FarmSentinel2HistoryResponse(BaseModel):
 class FarmIntelligenceSummaryResponse(BaseModel):
     farm_id: UUID
     has_analysis: bool
+    analysis_mode: str | None = None
+    usable_scene_max_cloud_percentage: float | None = None
     latest_snapshot_date: date | None = None
     latest_scene_id: str | None = None
 
