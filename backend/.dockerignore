@@ -21,6 +21,7 @@ docs/
 **/tests/
 **/test_*.py
 
+
 # Env / secrets
 .env
 .env.*

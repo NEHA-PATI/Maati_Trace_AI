@@ -21,8 +21,19 @@ ENV SERVICE_NAME=${SERVICE_NAME} \
 RUN test -n "$SERVICE_NAME" || (echo "SERVICE_NAME build-arg is required" && exit 1)
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    libgomp1 \
+    libexpat1 \
+    libproj-dev \
+    proj-bin \
+    libgeos-dev \
+    libgdal-dev \
+    gdal-bin \
+    libsqlite3-0 \
+    libtiff6 \
+    libjpeg62-turbo \
+    libcurl4 \
+    ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -31,7 +42,8 @@ COPY services/${SERVICE_NAME}/requirements.txt services/${SERVICE_NAME}/requirem
 RUN pip install --no-cache-dir -r services/${SERVICE_NAME}/requirements.txt
 
 COPY shared/ shared/
-COPY services/${SERVICE_NAME}/ services/${SERVICE_NAME}/
+#COPY services/${SERVICE_NAME}/ services/${SERVICE_NAME}/
+COPY services/ services/
 
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app

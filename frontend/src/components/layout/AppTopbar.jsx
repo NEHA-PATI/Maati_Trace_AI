@@ -5,15 +5,7 @@ function MaatiLogo() {
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10">
-        <svg viewBox="0 0 100 100" className="h-8 w-8">
-          <circle cx="50" cy="50" r="48" fill="#f7f3e8" />
-          <path d="M28 64 C34 55, 66 55, 72 64 C74 72, 68 80, 58 80 L42 80 C32 80, 26 72, 28 64Z" fill="#7a4b2b" />
-          <path d="M34 64 C40 58, 60 58, 66 64" stroke="#c98b56" strokeWidth="5" fill="none" strokeLinecap="round" />
-          <path d="M50 60 C50 46, 50 38, 50 28" stroke="#5f7f43" strokeWidth="4" strokeLinecap="round" />
-          <path d="M50 38 C39 29, 29 30, 24 22 C34 18, 42 22, 49 33" fill="#a8c76a" opacity="0.95" />
-          <path d="M50 38 C61 29, 71 30, 76 22 C66 18, 58 22, 51 33" fill="#a8c76a" opacity="0.95" />
-          <circle cx="50" cy="16" r="6" fill="#c99a4a" />
-        </svg>
+        <img src="/MaatiAI.png" alt="MaatiTrace logo" className="h-8 w-8 object-contain" />
       </div>
       <div className="leading-tight">
         <div className="text-sm font-black tracking-[0.24em]">MAATITRACE</div>

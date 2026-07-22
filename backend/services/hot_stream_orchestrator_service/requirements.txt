@@ -1,2 +1,7 @@
 ﻿-r ../../requirements-base.txt
 requests==2.32.3
+
+# Required because hot_stream imports farm_registry_service.area_calculator
+geoalchemy2==0.16.0
+shapely==2.0.6
+pyproj==3.7.0

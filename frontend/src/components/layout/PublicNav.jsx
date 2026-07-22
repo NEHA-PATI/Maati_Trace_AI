@@ -1,5 +1,4 @@
 import { Link, useLocation } from "react-router-dom";
-import { Layers } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home" },
@@ -15,10 +14,10 @@ export default function PublicNav() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-white/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
+      <div className="flex items-center justify-between px-4 py-3 md:px-6">
         <Link to="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-            <Layers className="h-5 w-5" />
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10">
+            <img src="/MaatiAI.png" alt="MaatiTrace logo" className="h-7 w-7 object-contain" />
           </span>
           <div>
             <div className="text-sm font-black tracking-[0.18em] text-foreground">
