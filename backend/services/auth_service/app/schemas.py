@@ -128,7 +128,7 @@ class AuthResponse(BaseModel):
 class SignupStartRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=200)
     phone_number: str = Field(..., min_length=10, max_length=20)
-    email: EmailStr | None = None
+    email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     role: UserRole
     fpo_id: str | None = None

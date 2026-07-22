@@ -75,6 +75,16 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             nodata_pixel_count,
             cloud_percentage,
 
+            observed_area_m2,
+            valid_area_m2,
+            cloud_area_m2,
+            shadow_area_m2,
+            water_area_m2,
+            snow_area_m2,
+            nodata_area_m2,
+            invalid_area_m2,
+            valid_fraction,
+
             mean_blue,
             mean_green,
             mean_red,
@@ -99,6 +109,12 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             nbr2,
             ndre,
             reci,
+
+            fvc_proxy,
+            nirv,
+            optical_resolution_m,
+            rededge_swir_resolution_m,
+            processing_version,
 
             source_assets_used,
             parquet_uri
@@ -127,6 +143,16 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             :nodata_pixel_count,
             :cloud_percentage,
 
+            :observed_area_m2,
+            :valid_area_m2,
+            :cloud_area_m2, 
+            :shadow_area_m2,
+            :water_area_m2,
+            :snow_area_m2,
+            :nodata_area_m2,
+            :invalid_area_m2,
+            :valid_fraction,
+
             :mean_blue,
             :mean_green,
             :mean_red,
@@ -152,6 +178,12 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             :ndre,
             :reci,
 
+            :fvc_proxy,
+            :nirv,
+            :optical_resolution_m,
+            :rededge_swir_resolution_m,
+            :processing_version,
+
             :source_assets_used,
             :parquet_uri
         )
@@ -175,6 +207,22 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             cloud_pixel_count = EXCLUDED.cloud_pixel_count,
             nodata_pixel_count = EXCLUDED.nodata_pixel_count,
             cloud_percentage = EXCLUDED.cloud_percentage,
+
+            observed_area_m2 = EXCLUDED.observed_area_m2,
+            valid_area_m2 = EXCLUDED.valid_area_m2,
+            cloud_area_m2 = EXCLUDED.cloud_area_m2,
+            shadow_area_m2 = EXCLUDED.shadow_area_m2,
+            water_area_m2 = EXCLUDED.water_area_m2,
+            snow_area_m2 = EXCLUDED.snow_area_m2,
+            nodata_area_m2 = EXCLUDED.nodata_area_m2,
+            invalid_area_m2 = EXCLUDED.invalid_area_m2,
+            valid_fraction = EXCLUDED.valid_fraction,
+            
+            fvc_proxy = EXCLUDED.fvc_proxy,
+            nirv = EXCLUDED.nirv,
+            optical_resolution_m = EXCLUDED.optical_resolution_m,
+            rededge_swir_resolution_m = EXCLUDED.rededge_swir_resolution_m,
+            processing_version = EXCLUDED.processing_version,
 
             mean_blue = EXCLUDED.mean_blue,
             mean_green = EXCLUDED.mean_green,

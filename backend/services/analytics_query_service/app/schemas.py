@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -12,6 +12,52 @@ class HealthResponse(BaseModel):
     status: Literal["live", "ready"]
     environment: str
 
+
+class H3TemporalCellResponse(BaseModel):
+    h3_index: int
+    h3_resolution: int
+    data_status: str
+    observation_date: date | None = None
+    observation_age_days: int | None = None
+    freshness_status: str
+    confidence_level: str
+    valid_fraction: float
+    valid_coverage_percent: float
+    scene_id: str | None = None
+    processing_version: str | None = None
+    ndvi: float | None = None
+    ndmi: float | None = None
+    bsi: float | None = None
+    fvc_proxy: float | None = None
+    nirv: float | None = None
+    canopy_condition: str
+    moisture_condition: str
+    soil_exposure_condition: str
+    surface_water_signal: str
+    previous_observation_date: date | None = None
+    observation_interval_days: int | None = None
+    ndvi_change: float | None = None
+    ndvi_trend: str
+    ndmi_change: float | None = None
+    moisture_trend: str
+    action_priority: str
+
+
+class H3TemporalMosaicResponse(BaseModel):
+    farm_id: UUID
+    analysis_mode: Literal["per_h3_latest_valid_temporal_mosaic"]
+    rule_version: str
+    h3_valid_fraction_threshold: float
+    total_h3_cells: int
+    h3_cells_with_valid_history: int
+    h3_cells_waiting_for_valid_observation: int
+    historical_cell_coverage_percent: float
+    newest_cell_observation_date: date | None = None
+    oldest_cell_observation_date: date | None = None
+    mosaic_date_span_days: int | None = None
+    farm_weighted_information: dict[str, Any]
+    priority_counts: dict[str, int]
+    cells: list[H3TemporalCellResponse]
 
 class H3Sentinel2FeatureResponse(BaseModel):
     feature_id: UUID

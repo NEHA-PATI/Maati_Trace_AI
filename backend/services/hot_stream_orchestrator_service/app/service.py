@@ -21,6 +21,7 @@ from services.hot_stream_orchestrator_service.app.clients import (
     search_latest_sentinel2_scene,
     write_sentinel2_to_lakehouse,
     search_sentinel2_scene_candidates,
+    run_raster_preview_for_scene,
 )
 from services.hot_stream_orchestrator_service.app.schemas import FarmAnalysisMaterializeRequest
 from services.hot_stream_orchestrator_service.app.repository import (
@@ -449,26 +450,72 @@ def materialize_farm_analysis(
             },
         )
 
-        raster_result = run_raster_preview_from_search(
+        farm_polygon_geojson = _normalize_polygon(
+            farm.get("polygon_geojson")
+            )
+
+        if farm_polygon_geojson is None:
+            raise HotStreamOrchestratorError(
+                "Farm polygon is missing or invalid.",
+                code="FARM_POLYGON_INVALID",
+                status_code=422,
+    )
+
+        raster_result = run_raster_preview_for_scene(
             farm_id=farm_id,
             bbox=farm_bbox,
-            provider=payload.provider,
-            collection_id=payload.collection_id,
-            start_date=payload.start_date,
-            end_date=payload.end_date,
-            max_cloud_cover=payload.max_cloud_cover,
+            scene=latest_scene,
             h3_resolution=payload.h3_resolution,
             h3_cells_bigint=h3_cells,
+            farm_polygon_geojson=farm_polygon_geojson,
         )
 
         feature_count = len(raster_result.get("features") or [])
 
-        if feature_count < expected_h3_count:
-            raise HotStreamOrchestratorError(
-                f"Raster processor returned {feature_count} H3 rows, expected {expected_h3_count}.",
-                code="RASTER_INCOMPLETE_H3_FEATURES",
-                status_code=422,
+        features = raster_result.get("features") or []
+
+        expected_h3_ids = set(h3_cells)
+
+        returned_h3_ids = {
+            int(item["h3_index"])
+            for item in features
+            if item.get("h3_index") is not None
+}
+
+        missing_h3_ids = sorted(
+            expected_h3_ids - returned_h3_ids
             )
+        
+        unexpected_h3_ids = sorted(
+            returned_h3_ids - expected_h3_ids
+            )
+        
+        if missing_h3_ids or unexpected_h3_ids:
+            raise HotStreamOrchestratorError(
+                (
+                    "Raster H3 contract mismatch. "
+                    f"Missing={missing_h3_ids[:10]}, "
+                    f"unexpected={unexpected_h3_ids[:10]}"
+                    ),
+                    code="RASTER_H3_CONTRACT_MISMATCH",
+                    status_code=422,
+                )
+        
+
+        feature_count = len(features)
+
+        valid_h3_count = sum(
+            1
+            for item in features
+            if float(item.get("valid_area_m2") or 0) > 0
+            )
+        
+        if valid_h3_count == 0:
+            raise HotStreamOrchestratorError(
+                "The selected scene has no valid farm area.",
+                code="RASTER_NO_VALID_FARM_AREA",
+                status_code=422,
+                )
 
         update_pipeline_job_stage(
             job_id=job_id,

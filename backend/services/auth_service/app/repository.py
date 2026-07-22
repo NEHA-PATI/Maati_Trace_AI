@@ -9,7 +9,6 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shared.db.postgres import engine
 
-
 class AuthRepositoryError(RuntimeError):
     pass
 
@@ -342,3 +341,30 @@ def revoke_all_refresh_tokens_for_user(user_id: UUID | str) -> None:
 
     with engine.begin() as conn:
         conn.execute(query, {"user_id": str(user_id)})
+
+def record_failed_otp_attempt(
+    signup_session_id: UUID | str,
+    max_attempts: int,
+) -> None:
+    query = text("""
+        UPDATE signup_otp_sessions
+        SET
+            attempts = attempts + 1,
+            last_attempt_at = now(),
+            locked_at = CASE
+                WHEN attempts + 1 >= :max_attempts THEN now()
+                ELSE locked_at
+            END
+        WHERE signup_session_id = :signup_session_id
+          AND verified_at IS NULL
+          AND completed_at IS NULL;
+    """)
+
+    with engine.begin() as connection:
+        connection.execute(
+            query,
+            {
+                "signup_session_id": str(signup_session_id),
+                "max_attempts": max_attempts,
+            },
+        )

@@ -34,6 +34,9 @@ class Sentinel2IndicesPreviewRequest(BaseModel):
     bbox: list[float] = Field(..., min_length=4, max_length=4)
     h3_resolution: int = Field(default=12, ge=7, le=12)
 
+    h3_cells_bigint: list[int] | None = None
+    farm_polygon_geojson: dict[str, Any] | None = None
+
 
 class H3Sentinel2Feature(BaseModel):
     h3_index: int
@@ -42,6 +45,19 @@ class H3Sentinel2Feature(BaseModel):
     cloud_pixel_count: int
     nodata_pixel_count: int
     cloud_percentage: float
+    observed_area_m2: float = 0
+    valid_area_m2: float = 0
+    cloud_area_m2: float = 0
+    shadow_area_m2: float = 0
+    water_area_m2: float = 0
+    snow_area_m2: float = 0
+    nodata_area_m2: float = 0
+    invalid_area_m2: float = 0
+    valid_fraction: float = 0
+
+    optical_resolution_m: int = 10
+    rededge_swir_resolution_m: int = 20
+    processing_version: str = "s2_zonal_v1"
 
     mean_blue: float | None = None
     mean_green: float | None = None
@@ -71,6 +87,9 @@ class H3Sentinel2Feature(BaseModel):
     ndre: float | None = None
     reci: float | None = None
 
+    fvc_proxy: float | None = None
+    nirv: float | None = None
+
 
 class Sentinel2IndicesPreviewResponse(BaseModel):
     farm_id: str | None
@@ -81,18 +100,24 @@ class Sentinel2IndicesPreviewResponse(BaseModel):
     scene_cloud_cover: float | None
     bbox: list[float]
     h3_resolution: int
+    
     source_assets_used: list[str]
     row_count: int
     total_pixel_count: int
     total_valid_pixel_count: int
     total_cloud_pixel_count: int
+    total_observed_area_m2: float = 0
+    total_valid_area_m2: float = 0
+    farm_valid_fraction: float = 0
     features: list[H3Sentinel2Feature]
 
 class Sentinel2IndicesFromSearchRequest(BaseModel):
     farm_id: str | None = None
     bbox: list[float] = Field(..., min_length=4, max_length=4)
     h3_resolution: int = Field(default=12, ge=7, le=12)
+    
     h3_cells_bigint: list[int] | None = None
+    farm_polygon_geojson: dict[str, Any] | None = None
 
     provider: str = "planetary_computer"
     collection_id: str = "sentinel-2-l2a"

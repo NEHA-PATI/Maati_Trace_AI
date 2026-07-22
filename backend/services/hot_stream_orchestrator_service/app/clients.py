@@ -143,7 +143,8 @@ def run_raster_preview_for_scene(
     bbox: list[float],
     scene: dict[str, Any],
     h3_resolution: int,
-    h3_cells_bigint: list[int] | None = None,
+    h3_cells_bigint: list[int],
+    farm_polygon_geojson: dict[str, Any],
 ) -> dict[str, Any]:
     url = (
         f"{settings.raster_processor_service_url}"
@@ -155,14 +156,15 @@ def run_raster_preview_for_scene(
         "bbox": bbox,
         "h3_resolution": h3_resolution,
         "scene": scene,
+        "h3_cells_bigint": h3_cells_bigint,
+        "farm_polygon_geojson": farm_polygon_geojson,
     }
 
-    if h3_cells_bigint is not None:
-        # The current /preview schema does not accept this yet.
-        # We will use /preview-from-search until raster schema is patched.
-        pass
-
-    return _post_json(url, body, timeout=300)
+    return _post_json(
+        url,
+        body,
+        timeout=300,
+    )
 
 
 def run_raster_preview_from_known_scene_search_safe(
