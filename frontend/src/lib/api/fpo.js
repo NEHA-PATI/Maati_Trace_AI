@@ -1,8 +1,10 @@
-import { apiRequest } from "./client";
-export const createFpo = (payload) => apiRequest("/api/fpos", { method: "POST", body: JSON.stringify(payload) });
-export const getFpos = () => apiRequest("/api/fpos");
-export const getMyFpo = () => apiRequest("/api/fpos/me");
-export const getFpo = (fpoId) => apiRequest(`/api/fpos/${fpoId}`);
-export const getFpoSummary = (fpoId) => apiRequest(`/api/fpos/${fpoId}/summary`);
-export const getFpoFarmers = (fpoId) => apiRequest(`/api/fpos/${fpoId}/farmers`);
-export const getFpoFarms = (fpoId) => apiRequest(`/api/fpos/${fpoId}/farms`);
+import { farmRegistryClient } from "./client";
+export const createFpo = (payload) => farmRegistryClient.request("/v1/fpos", { method: "POST", body: JSON.stringify(payload) });
+export const getFpos = () => farmRegistryClient.request("/v1/fpos");
+export const getMyFpo = () => farmRegistryClient.request("/v1/fpos/me");
+export const getFpo = (fpoId) => farmRegistryClient.request(`/v1/fpos/${fpoId}`);
+export const getFpoSummary = (fpoId) => farmRegistryClient.request(`/v1/fpos/${fpoId}/summary`);
+export const getFpoFarmers = (fpoId) => farmRegistryClient.request(`/v1/fpos/${fpoId}/farmers`);
+export const getFpoFarms = (fpoId) => farmRegistryClient.request(`/v1/fpos/${fpoId}/farms`);
+export const updateMyFpoProfile = (payload) => farmRegistryClient.request("/v1/fpos/me/profile", { method: "PATCH", body: JSON.stringify(payload) });
+export const exportMyFpoProfile = () => farmRegistryClient.request("/v1/fpos/me/profile-export");

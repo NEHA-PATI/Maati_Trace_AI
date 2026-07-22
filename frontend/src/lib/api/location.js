@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { locationClient } from "./client";
 
 function extractArray(payload, keys) {
   if (Array.isArray(payload)) return payload;
@@ -33,25 +33,25 @@ export function normalizeBlocks(response) {
 }
 
 export async function getStates() {
-  return normalizeStates(await apiRequest("/api/location/states"));
+  return normalizeStates(await locationClient.request("/v1/states"));
 }
 
 export async function getDistricts(stateName) {
   return normalizeDistricts(
-    await apiRequest(`/api/location/districts?state_name=${encodeURIComponent(stateName)}`),
+    await locationClient.request(`/v1/districts?state_name=${encodeURIComponent(stateName)}`),
   );
 }
 
 export async function getBlocks(stateName, districtName) {
   return normalizeBlocks(
-    await apiRequest(
-      `/api/location/blocks?state_name=${encodeURIComponent(stateName)}&district_name=${encodeURIComponent(districtName)}`,
+    await locationClient.request(
+      `/v1/blocks?state_name=${encodeURIComponent(stateName)}&district_name=${encodeURIComponent(districtName)}`,
     ),
   );
 }
 
 export function validateLocation(payload) {
-  return apiRequest("/api/location/validate", {
+  return locationClient.request("/v1/location/validate", {
     method: "POST",
     body: JSON.stringify(payload),
   });

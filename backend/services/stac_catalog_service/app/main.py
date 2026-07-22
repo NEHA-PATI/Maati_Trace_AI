@@ -1,4 +1,5 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
 from shared.errors.api_errors import bad_request
@@ -39,6 +40,14 @@ configure_json_logging(SERVICE_NAME)
 app = FastAPI(
     title="STAC Catalog Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

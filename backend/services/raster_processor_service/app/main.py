@@ -1,7 +1,8 @@
-﻿import os
+import os
 
 import pyproj
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 _proj_data_dir = pyproj.datadir.get_data_dir()
 os.environ["PROJ_LIB"] = _proj_data_dir
@@ -34,6 +35,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/health/live", response_model=HealthResponse)
 def live():
@@ -63,6 +72,8 @@ def sentinel2_indices_preview(payload: Sentinel2IndicesPreviewRequest):
             scene=payload.scene.model_dump(),
             bbox=payload.bbox,
             h3_resolution=payload.h3_resolution,
+            h3_cells_bigint=payload.h3_cells_bigint,
+            farm_polygon_geojson=payload.farm_polygon_geojson,
         )
     except RasterProcessorError as exc:
         raise bad_request(str(exc), code="RASTER_PROCESSING_ERROR") from exc
@@ -86,8 +97,12 @@ def sentinel2_indices_preview(payload: Sentinel2IndicesPreviewRequest):
         total_pixel_count=result["total_pixel_count"],
         total_valid_pixel_count=result["total_valid_pixel_count"],
         total_cloud_pixel_count=result["total_cloud_pixel_count"],
+        total_observed_area_m2=result["total_observed_area_m2"],
+        total_valid_area_m2=result["total_valid_area_m2"],
+        farm_valid_fraction=result["farm_valid_fraction"],
         features=result["features"],
     )
+
 
 @app.post(
     "/v1/raster/sentinel2/indices/preview-from-search",
@@ -109,7 +124,8 @@ def sentinel2_indices_preview_from_search(payload: Sentinel2IndicesFromSearchReq
             bbox=payload.bbox,
             h3_resolution=payload.h3_resolution,
             h3_cells_bigint=payload.h3_cells_bigint,
-        )
+            farm_polygon_geojson=payload.farm_polygon_geojson,
+)
     except (RasterProcessorError, RasterStacClientError) as exc:
         raise bad_request(str(exc), code="RASTER_PROCESSING_ERROR") from exc
     except Exception as exc:
@@ -132,5 +148,8 @@ def sentinel2_indices_preview_from_search(payload: Sentinel2IndicesFromSearchReq
         total_pixel_count=result["total_pixel_count"],
         total_valid_pixel_count=result["total_valid_pixel_count"],
         total_cloud_pixel_count=result["total_cloud_pixel_count"],
+        total_observed_area_m2=result["total_observed_area_m2"],
+        total_valid_area_m2=result["total_valid_area_m2"],
+        farm_valid_fraction=result["farm_valid_fraction"],
         features=result["features"],
     )

@@ -19,7 +19,7 @@ import {
   getLatestSentinel2,
   getSentinel2History,
 } from "@/lib/api/analytics";
-import { materializeFarmAnalysis, materializeFarmGrid, materializeFarmTrends, repairFarm } from "@/lib/api/hotStream";
+import { fullRefreshFarm } from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/lib/rbac/permissions";
 import { getStoredUser } from "@/lib/auth/session";
 
@@ -250,17 +250,7 @@ export default function LandIntelligence() {
         farm?.farm_name ? `Farm: ${farm.farm_name}` : `Farm ID: ${farmId}`,
       ]);
 
-      const repair = await repairFarm(farmId);
-      updatePipelineStage(1, "Computing H3 cells", [
-        `H3 cells: ${repair?.h3_cell_count ?? farm?.h3_cell_count ?? "—"}`,
-        repair?.area_acres ? `Area: ${pretty(repair.area_acres, 2)} ac` : null,
-      ]);
-
-      updatePipelineStage(2, "Searching latest satellite scene", [
-        "Using repaired polygon and farm metadata.",
-      ]);
-
-      const analysis = await materializeFarmAnalysis(farmId, {
+      const payload = {
         start_date: "2025-12-01",
         end_date: "2025-12-31",
         max_cloud_cover: 30,
@@ -269,41 +259,33 @@ export default function LandIntelligence() {
         collection_id: "sentinel-2-l2a",
         use_tiny_preview_bbox: true,
         tiny_bbox_size_deg: 0.0002,
+      };
+
+      const refresh = await fullRefreshFarm(farmId, payload);
+      const stages = Array.isArray(refresh?.stages) ? refresh.stages : [];
+      stages.forEach((stage, index) => {
+        updatePipelineStage(index, stage.name || `Stage ${index + 1}`, [
+          `Status: ${stage.status}`,
+          ...(stage.details ? [JSON.stringify(stage.details)] : []),
+          ...(stage.message ? [stage.message] : []),
+        ]);
       });
 
-      updatePipelineStage(3, "Computing per-H3 satellite indices", [
-        analysis?.scene_id ? `Scene: ${analysis.scene_id}` : null,
-        analysis?.raster_row_count ? `Raster rows: ${analysis.raster_row_count}` : null,
-      ]);
+      if (refresh?.status !== "succeeded") {
+        setPipelineFailure(`Pipeline completed with status: ${refresh?.status}`);
+        setPipelineOpen(true);
+        setPipelineStatus("Pipeline partial");
+      } else {
+        setPipelineStatus("Analysis complete");
+        setPipelineOpen(false);
+      }
 
-      updatePipelineStage(4, "Writing H3 analytics", [
-        analysis?.lakehouse_row_count ? `Rows written: ${analysis.lakehouse_row_count}` : null,
-        analysis?.parquet_uri ? `Lakehouse: ${analysis.parquet_uri}` : null,
-      ]);
-
-      updatePipelineStage(5, "Computing trends", ["Refreshing vegetation, moisture and soil trend snapshots."]);
-      await materializeFarmTrends(farmId, {}).catch((err) => {
-        console.warn("Trend materialization warning", err);
-        return null;
-      });
-
-      updatePipelineStage(6, "Building 10m grid", ["Generating or refreshing 10m visual cells."]);
-      await materializeFarmGrid(farmId, {}).catch((err) => {
-        console.warn("Grid materialization warning", err);
-        return null;
-      });
-
-      updatePipelineStage(7, "Computing H3-to-grid coverage %", ["Crosswalk rows are derived from repaired farm geometry."]);
-      updatePipelineStage(8, "Computing weighted grid values", ["Weighted grid values are refreshed from latest H3 features."]);
-      updatePipelineStage(9, "Refreshing land intelligence", ["Reloading farm, H3, grid and summary data."]);
       try {
         await loadLandIntelligence();
       } catch (refreshErr) {
         console.warn("Land intelligence refresh warning", refreshErr);
         setError(refreshErr?.message || "Analysis completed, but the page refresh failed. Please retry.");
       }
-      setPipelineStatus("Analysis complete");
-      setPipelineOpen(false);
     } catch (err) {
       const message = err?.payload?.detail?.message || err?.message || "Analysis failed.";
       setPipelineFailure(message);

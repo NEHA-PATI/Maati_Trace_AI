@@ -13,6 +13,7 @@ export const ROUTE_RULES = {
   farmRegister: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
   bulkUpload: [ROLES.ADMIN, ROLES.FPO],
   notifications: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
+  settings: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
   publicInternal: [ROLES.ADMIN, ROLES.FPO, ROLES.FARMER],
 };
 
@@ -27,6 +28,7 @@ const PATH_PERMISSION_MAP = {
   "/farm-register": "farmRegister",
   "/bulk-upload": "bulkUpload",
   "/notifications": "notifications",
+  "/settings": "settings",
   "/use-cases": "publicInternal",
   "/our-method": "publicInternal",
 };
@@ -64,6 +66,7 @@ export function canViewTechnicalH3Layer(user) {
 export function getSidebarItemsForRole(role) {
   const common = [
     { to: "/farm-register", label: "Register Land" },
+    { to: "/settings", label: "Settings / Profile" },
     { to: "/notifications", label: "Notifications" },
     { to: "/use-cases", label: "Use Cases" },
     { to: "/our-method", label: "Our Method" },
@@ -74,6 +77,7 @@ export function getSidebarItemsForRole(role) {
       { to: "/admin", label: "Admin Dashboard" },
       { to: "/my-fpo", label: "My FPO" },
       ...common,
+      { to: "/settings", label: "Settings / Profile" },
       { to: "/bulk-upload", label: "Bulk Upload" },
     ];
   }
@@ -83,12 +87,14 @@ export function getSidebarItemsForRole(role) {
       { to: "/fpo/me", label: "FPO Dashboard" },
       { to: "/my-fpo", label: "My FPO" },
       ...common,
+      { to: "/settings", label: "Settings / Profile" },
       { to: "/bulk-upload", label: "Bulk Upload" },
     ];
   }
 
   return [
     { to: "/farmer/me", label: "Farmer Profile" },
+    { to: "/settings", label: "Settings / Profile" },
     ...common,
   ];
 }

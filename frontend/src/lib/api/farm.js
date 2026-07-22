@@ -1,7 +1,7 @@
-import { apiRequest } from "./client";
+import { boundaryIndexClient, farmRegistryClient } from "./client";
 
 export function getFarm(farmId) {
-  return apiRequest(`/api/farms/${farmId}`);
+  return farmRegistryClient.request(`/v1/farms/${farmId}`);
 }
 
 export function getFarms(params = {}) {
@@ -12,30 +12,23 @@ export function getFarms(params = {}) {
     }
   });
   const query = search.toString();
-  return apiRequest(`/api/farms${query ? `?${query}` : ""}`);
+  return farmRegistryClient.request(`/v1/farms${query ? `?${query}` : ""}`);
 }
 
 export function registerFarm(payload) {
-  return apiRequest("/api/farms/register", {
+  return farmRegistryClient.request("/v1/farms/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function getFarmsByFarmer(farmerId) {
-  return apiRequest(`/api/farmers/${farmerId}/farms`);
+  return farmRegistryClient.request(`/v1/farmers/${farmerId}/farms`);
 }
 
 export function previewH3(payload) {
-  return apiRequest("/api/h3/preview", {
+  return boundaryIndexClient.request("/v1/h3/preview", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
-
-export function uploadFarmSnapshot(farmId, imagePayload) {
-  return apiRequest(`/api/farms/${farmId}/snapshot`, {
-    method: "POST",
-    body: JSON.stringify({ image: imagePayload }),
   });
 }

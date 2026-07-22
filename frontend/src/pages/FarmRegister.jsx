@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import FarmCard from "@/components/ui-custom/FarmCard";
 import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
 import { createFarmer, getMyFarmerProfile } from "@/lib/api/farmer";
-import { previewH3, registerFarm, uploadFarmSnapshot } from "@/lib/api/farm";
+import { previewH3, registerFarm } from "@/lib/api/farm";
 import {
   getBlocks,
   getDistricts,
@@ -239,7 +239,6 @@ export default function FarmRegister() {
   const [registeredFarm, setRegisteredFarm] = useState(null);
   const [linkedFarmer, setLinkedFarmer] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
-  const [snapshotDataUrl, setSnapshotDataUrl] = useState("");
   const [h3Preview, setH3Preview] = useState(null);
   const [validationWarning, setValidationWarning] = useState("");
   const [pipelineStage, setPipelineStage] = useState(0);
@@ -375,20 +374,6 @@ export default function FarmRegister() {
     };
   }, [registeredFarm, formData, polygonPoints.length]);
 
-  async function captureSnapshot() {
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const node = document.getElementById("maatitrace-register-map");
-      if (!node) return "";
-      const canvas = await html2canvas(node, { backgroundColor: null, useCORS: true });
-      const dataUrl = canvas.toDataURL("image/png");
-      setSnapshotDataUrl(dataUrl);
-      return dataUrl;
-    } catch {
-      return "";
-    }
-  }
-
   async function handleRegister() {
     setLoading(true);
     setError("");
@@ -462,21 +447,11 @@ export default function FarmRegister() {
 
       setPipelineStatus("Registering farm...");
       setPipelineStage(2);
-      console.error("FARM_REGISTER_PAYLOAD", registerPayload);
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
-      setPipelineStatus("Capturing snapshot...");
-      setPipelineStage(3);
-      const snapshot = await captureSnapshot();
-      if (snapshot) {
-        await uploadFarmSnapshot(farmPayload.farm_id, snapshot).catch(() => {
-          setValidationWarning("Snapshot upload endpoint pending. Saved locally for now.");
-        });
-      }
-
       setPipelineStatus("Materializing analysis...");
-      setPipelineStage(4);
+      setPipelineStage(3);
       await materializeFarmAnalysis(farmPayload.farm_id, {
         start_date: "2025-12-01",
         end_date: "2025-12-31",
@@ -489,21 +464,14 @@ export default function FarmRegister() {
       }).catch(() => setValidationWarning("Farm analysis endpoint pending. Registration still completed."));
 
       await materializeFarmTrends(farmPayload.farm_id, {}).catch(() => null);
-      setPipelineStage(8);
+      setPipelineStage(7);
       await materializeFarmGrid(farmPayload.farm_id, {}).catch(() => null);
-      setPipelineStage(9);
+      setPipelineStage(8);
 
       setPipelineStatus("Registered. Redirecting to land intelligence...");
       setPipelineStage(9);
       setTimeout(() => navigate(`/land/${farmPayload.farm_id}`), 800);
     } catch (err) {
-      console.error("FARM_REGISTER_ERROR", {
-        status: err?.response?.status,
-        data: err?.response?.data,
-        detail: err?.response?.data?.detail,
-        payload: err?.config?.data,
-        raw: err,
-      });
       setBackendErrorDetail(JSON.stringify({
         status: err?.response?.status || null,
         data: err?.response?.data || null,
@@ -748,7 +716,7 @@ export default function FarmRegister() {
                         </span>
                       </div>
                       <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
-                        Use the sample polygon button for test-only validation if you need a quick backend check.
+                        Use the sample polygon button for quick validation if you need a backend check.
                       </div>
                     </div>
                   </div>
@@ -787,7 +755,7 @@ export default function FarmRegister() {
                     The polygon drawn in the previous step will be submitted exactly as GeoJSON.
                   </div>
                   {h3Preview && (
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4 text-sm text-violet-700">
+                      <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4 text-sm text-violet-700">
                       H3 preview ready. Estimated cells: {h3Preview.cell_count || h3Preview.returned_cell_count || "pending"}
                     </div>
                   )}
@@ -865,7 +833,6 @@ export default function FarmRegister() {
           </motion.div>
         )}
 
-        {!!snapshotDataUrl && <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-4 text-xs text-gray-500 shadow-sm">Snapshot captured locally.</div>}
       </div>
     </div>
   );
