@@ -229,3 +229,6 @@ class SignupCompleteRequest(BaseModel):
     signup_session_id: UUID
     role: UserRole
     profile: dict[str, Any] = Field(default_factory=dict)
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(..., min_length=100)

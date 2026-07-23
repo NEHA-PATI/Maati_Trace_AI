@@ -44,6 +44,12 @@ from services.auth_service.app.mail import (
     send_signup_otp_email,
 )
 
+from services.auth_service.app.google_oauth import (
+    GoogleOAuthError,
+    find_or_create_google_user,
+    verify_google_id_token,
+)
+
 
 class AuthServiceError(RuntimeError):
     pass
@@ -302,3 +308,12 @@ def get_current_user_from_id(user_id: str) -> dict[str, Any]:
         raise AuthServiceError("User account is inactive")
 
     return _public_user(user)
+
+def login_with_google(id_token_value: str) -> dict[str, Any]:
+    try:
+        claims = verify_google_id_token(id_token_value)
+        user = find_or_create_google_user(claims)
+    except GoogleOAuthError as exc:
+        raise AuthServiceError(str(exc)) from exc
+
+    return _issue_tokens(user)
