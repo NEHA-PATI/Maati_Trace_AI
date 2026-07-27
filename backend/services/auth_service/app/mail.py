@@ -1,415 +1,307 @@
-# from __future__ import annotations
-
-# import html
-# import json
-# from typing import Any
-
-# import requests
-# from sqlalchemy import text
-
-# from shared.config.settings import settings
-# from shared.db.postgres import engine
-
-
-# class MailServiceError(RuntimeError):
-#     pass
-
-
-# def _record_email(
-#     *,
-#     to_email: str,
-#     to_name: str | None,
-#     subject: str,
-#     template_key: str,
-#     provider: str,
-#     status: str,
-#     provider_message_id: str | None = None,
-#     error_message: str | None = None,
-#     metadata: dict[str, Any] | None = None,
-# ) -> None:
-#     query = text("""
-#         INSERT INTO email_outbox (
-#             to_email,
-#             to_name,
-#             subject,
-#             template_key,
-#             provider,
-#             provider_message_id,
-#             status,
-#             error_message,
-#             metadata,
-#             sent_at,
-#             failed_at
-#         )
-#         VALUES (
-#             :to_email,
-#             :to_name,
-#             :subject,
-#             :template_key,
-#             :provider,
-#             :provider_message_id,
-#             :status,
-#             :error_message,
-#             CAST(:metadata AS jsonb),
-#             CASE WHEN :status = 'sent' THEN now() END,
-#             CASE WHEN :status = 'failed' THEN now() END
-#         );
-#     """)
-
-#     with engine.begin() as connection:
-#         connection.execute(
-#             query,
-#             {
-#                 "to_email": to_email,
-#                 "to_name": to_name,
-#                 "subject": subject,
-#                 "template_key": template_key,
-#                 "provider": provider,
-#                 "provider_message_id": provider_message_id,
-#                 "status": status,
-#                 "error_message": error_message,
-#                 "metadata": json.dumps(metadata or {}),
-#             },
-#         )
-
-
-# def send_signup_otp_email(
-#     to_email: str,
-#     full_name: str,
-#     otp: str,
-# ) -> None:
-#     provider = settings.mail_provider.strip().lower()
-#     subject = "Your MaatiTrace verification code"
-
-#     safe_name = html.escape(full_name)
-#     safe_otp = html.escape(otp)
-
-#     html_content = f"""
-#     <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
-#         <h2>Verify your MaatiTrace account</h2>
-#         <p>Hello {safe_name},</p>
-#         <p>Your verification code is:</p>
-
-#         <div style="
-#             font-size:30px;
-#             font-weight:700;
-#             letter-spacing:5px;
-#             padding:16px;
-#             background:#f2f7f2;
-#             text-align:center;
-#         ">
-#             {safe_otp}
-#         </div>
-
-#         <p>This code expires in {settings.signup_otp_expire_minutes} minutes.</p>
-#         <p>Do not share this code with anyone.</p>
-#     </div>
-#     """
-
-#     if provider == "console":
-#         print(f"MAATITRACE OTP for {to_email}: {otp}")
-
-#         _record_email(
-#             to_email=to_email,
-#             to_name=full_name,
-#             subject=subject,
-#             template_key="signup_otp",
-#             provider="console",
-#             status="sent",
-#         )
-#         return
-
-#     if provider != "brevo":
-#         raise MailServiceError(
-#             f"Unsupported mail provider: {provider}"
-#         )
-
-#     if not settings.brevo_api_key:
-#         raise MailServiceError("BREVO_API_KEY is not configured")
-
-#     if not settings.mail_from_email:
-#         raise MailServiceError("MAIL_FROM_EMAIL is not configured")
-
-#     try:
-#         response = requests.post(
-#             "https://api.brevo.com/v3/smtp/email",
-#             headers={
-#                 "api-key": settings.brevo_api_key,
-#                 "accept": "application/json",
-#                 "content-type": "application/json",
-#             },
-#             json={
-#                 "sender": {
-#                     "name": settings.mail_from_name,
-#                     "email": settings.mail_from_email,
-#                 },
-#                 "to": [
-#                     {
-#                         "name": full_name,
-#                         "email": to_email,
-#                     }
-#                 ],
-#                 "subject": subject,
-#                 "htmlContent": html_content,
-#             },
-#             timeout=settings.mail_http_timeout_seconds,
-#         )
-
-#         response.raise_for_status()
-#         response_data = response.json() if response.content else {}
-
-#     except requests.RequestException as exc:
-#         _record_email(
-#             to_email=to_email,
-#             to_name=full_name,
-#             subject=subject,
-#             template_key="signup_otp",
-#             provider="brevo",
-#             status="failed",
-#             error_message=str(exc),
-#         )
-
-#         raise MailServiceError(
-#             "Verification email could not be sent"
-#         ) from exc
-
-#     _record_email(
-#         to_email=to_email,
-#         to_name=full_name,
-#         subject=subject,
-#         template_key="signup_otp",
-#         provider="brevo",
-#         status="sent",
-#         provider_message_id=response_data.get("messageId"),
-#     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 from __future__ import annotations
 
-import html
 import json
+import logging
+import threading
+import time
+from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import requests
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
-from shared.config.settings import settings
-from shared.db.postgres import engine
+from services.auth_service.app.config_validation import get_auth_config
+from services.auth_service.app.email_templates import RenderedEmail, render_email
+from services.auth_service.app.logging_context import get_logger, log_event
+
+
+logger = get_logger(__name__)
 
 
 class MailServiceError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "MAIL_SEND_FAILED",
+        transient: bool = True,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.transient = transient
+        self.status_code = status_code
 
 
-def _record_email(
+@dataclass(frozen=True, slots=True)
+class GraphSendResult:
+    provider_request_id: str | None
+    status_code: int
+
+
+@dataclass(slots=True)
+class _CachedGraphToken:
+    access_token: str
+    expires_monotonic: float
+
+
+_TOKEN_LOCK = threading.Lock()
+_CACHED_TOKEN: _CachedGraphToken | None = None
+
+
+def _fernet() -> Fernet:
+    return Fernet(get_auth_config().email_payload_encryption_key.encode("ascii"))
+
+
+def _encrypt_template_data(template_data: dict[str, Any]) -> bytes:
+    return _fernet().encrypt(json.dumps(template_data).encode("utf-8"))
+
+
+def decrypt_template_data(encrypted_payload: bytes | memoryview | None) -> dict[str, Any]:
+    if encrypted_payload is None:
+        raise MailServiceError(
+            "Email payload is missing",
+            code="EMAIL_PAYLOAD_MISSING",
+            transient=False,
+        )
+    raw = bytes(encrypted_payload)
+    try:
+        decrypted = _fernet().decrypt(raw)
+        value = json.loads(decrypted.decode("utf-8"))
+    except (InvalidToken, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MailServiceError(
+            "Email payload could not be decrypted",
+            code="EMAIL_PAYLOAD_INVALID",
+            transient=False,
+        ) from exc
+    if not isinstance(value, dict):
+        raise MailServiceError(
+            "Email payload has an invalid shape",
+            code="EMAIL_PAYLOAD_INVALID",
+            transient=False,
+        )
+    return value
+
+
+def queue_email(
+    conn: Connection,
     *,
     to_email: str,
     to_name: str | None,
-    subject: str,
     template_key: str,
-    provider: str,
-    status: str,
-    provider_message_id: str | None = None,
-    error_message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                INSERT INTO email_outbox (
-                    to_email,
-                    to_name,
-                    subject,
-                    template_key,
-                    provider,
-                    provider_message_id,
-                    status,
-                    error_message,
-                    metadata,
-                    sent_at,
-                    failed_at
-                )
-                VALUES (
-                    :to_email,
-                    :to_name,
-                    :subject,
-                    :template_key,
-                    :provider,
-                    :provider_message_id,
-                    :status,
-                    :error_message,
-                    CAST(:metadata AS jsonb),
-                    CASE WHEN :status = 'sent' THEN now() END,
-                    CASE WHEN :status = 'failed' THEN now() END
-                );
-                """
-            ),
-            {
-                "to_email": to_email,
-                "to_name": to_name,
-                "subject": subject,
-                "template_key": template_key,
-                "provider": provider,
-                "provider_message_id": provider_message_id,
-                "status": status,
-                "error_message": error_message,
-                "metadata": json.dumps(metadata or {}),
-            },
+    template_data: dict[str, Any],
+    public_metadata: dict[str, Any] | None = None,
+) -> str:
+    rendered = render_email(template_key, template_data)
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO email_outbox (
+                email_outbox_id,
+                to_email,
+                to_name,
+                subject,
+                template_key,
+                provider,
+                status,
+                metadata,
+                payload,
+                encrypted_payload,
+                attempts,
+                next_attempt_at,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                gen_random_uuid(),
+                :to_email,
+                :to_name,
+                :subject,
+                :template_key,
+                'microsoft_graph',
+                'queued',
+                CAST(:metadata AS jsonb),
+                CAST(:payload AS jsonb),
+                :encrypted_payload,
+                0,
+                now(),
+                now(),
+                now()
+            )
+            RETURNING email_outbox_id;
+            """
+        ),
+        {
+            "to_email": to_email,
+            "to_name": to_name,
+            "subject": rendered.subject,
+            "template_key": template_key,
+            "metadata": json.dumps(public_metadata or {}),
+            "payload": json.dumps({"template_version": 1}),
+            "encrypted_payload": _encrypt_template_data(template_data),
+        },
+    ).scalar_one()
+    return str(row)
+
+
+def render_queued_email(template_key: str, encrypted_payload: bytes | memoryview | None) -> RenderedEmail:
+    return render_email(template_key, decrypt_template_data(encrypted_payload))
+
+
+def _graph_access_token(force_refresh: bool = False) -> str:
+    global _CACHED_TOKEN
+    config = get_auth_config()
+    if not config.mail_enabled:
+        raise MailServiceError(
+            "Microsoft Graph mail is disabled",
+            code="MAIL_NOT_CONFIGURED",
+            transient=False,
         )
 
+    now = time.monotonic()
+    with _TOKEN_LOCK:
+        if not force_refresh and _CACHED_TOKEN and _CACHED_TOKEN.expires_monotonic > now + 60:
+            return _CACHED_TOKEN.access_token
 
-def _graph_access_token() -> str:
-    if not settings.microsoft_tenant_id:
-        raise MailServiceError("MICROSOFT_TENANT_ID is missing")
-    if not settings.microsoft_client_id:
-        raise MailServiceError("MICROSOFT_CLIENT_ID is missing")
-    if not settings.microsoft_client_secret:
-        raise MailServiceError("MICROSOFT_CLIENT_SECRET is missing")
-
-    token_url = (
-        "https://login.microsoftonline.com/"
-        f"{settings.microsoft_tenant_id}/oauth2/v2.0/token"
-    )
-    try:
-        response = requests.post(
-            token_url,
-            data={
-                "client_id": settings.microsoft_client_id,
-                "client_secret": settings.microsoft_client_secret,
-                "scope": settings.microsoft_graph_scope,
-                "grant_type": "client_credentials",
-            },
-            timeout=20,
+        token_url = (
+            "https://login.microsoftonline.com/"
+            f"{quote(config.microsoft_tenant_id or '', safe='')}/oauth2/v2.0/token"
         )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise MailServiceError("Could not get Microsoft Graph mail token") from exc
+        try:
+            response = requests.post(
+                token_url,
+                data={
+                    "client_id": config.microsoft_client_id,
+                    "client_secret": config.microsoft_client_secret,
+                    "scope": config.microsoft_graph_scope,
+                    "grant_type": "client_credentials",
+                },
+                timeout=config.microsoft_graph_timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise MailServiceError(
+                "Microsoft token request failed",
+                code="GRAPH_TOKEN_NETWORK_ERROR",
+                transient=True,
+            ) from exc
 
-    data = response.json()
-    access_token = data.get("access_token")
-    if not access_token:
-        raise MailServiceError("Microsoft Graph token response did not include access_token")
-    return str(access_token)
+        if response.status_code >= 500 or response.status_code == 429:
+            raise MailServiceError(
+                "Microsoft token service is temporarily unavailable",
+                code="GRAPH_TOKEN_TEMPORARY_ERROR",
+                transient=True,
+                status_code=response.status_code,
+            )
+        if not response.ok:
+            raise MailServiceError(
+                "Microsoft token configuration was rejected",
+                code="GRAPH_TOKEN_CONFIGURATION_ERROR",
+                transient=False,
+                status_code=response.status_code,
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MailServiceError(
+                "Microsoft token response was not JSON",
+                code="GRAPH_TOKEN_INVALID_RESPONSE",
+                transient=True,
+                status_code=response.status_code,
+            ) from exc
+
+        access_token = payload.get("access_token")
+        expires_in = int(payload.get("expires_in") or 3600)
+        if not access_token:
+            raise MailServiceError(
+                "Microsoft token response omitted access_token",
+                code="GRAPH_TOKEN_INVALID_RESPONSE",
+                transient=True,
+                status_code=response.status_code,
+            )
+
+        _CACHED_TOKEN = _CachedGraphToken(
+            access_token=str(access_token),
+            expires_monotonic=now + max(120, expires_in),
+        )
+        log_event(logger, logging.INFO, "microsoft_graph_token_acquired", expires_in_seconds=expires_in)
+        return _CACHED_TOKEN.access_token
 
 
-def _send_with_microsoft_graph(
+def reset_graph_token_cache() -> None:
+    global _CACHED_TOKEN
+    with _TOKEN_LOCK:
+        _CACHED_TOKEN = None
+
+
+def send_rendered_email(
     *,
     to_email: str,
-    to_name: str,
-    subject: str,
-    html_content: str,
-) -> str | None:
-    if not settings.mail_from_email:
-        raise MailServiceError("MAIL_FROM_EMAIL is missing")
+    to_name: str | None,
+    rendered: RenderedEmail,
+) -> GraphSendResult:
+    config = get_auth_config()
+    sender = quote(config.mail_from_email or "", safe="@._-+")
+    send_url = f"https://graph.microsoft.com/v1.0/users/{sender}/sendMail"
 
-    access_token = _graph_access_token()
-    send_url = f"https://graph.microsoft.com/v1.0/users/{settings.mail_from_email}/sendMail"
     payload = {
         "message": {
-            "subject": subject,
-            "body": {
-                "contentType": "HTML",
-                "content": html_content,
-            },
+            "subject": rendered.subject,
+            "body": {"contentType": "HTML", "content": rendered.html_body},
             "toRecipients": [
                 {
                     "emailAddress": {
                         "address": to_email,
-                        "name": to_name,
+                        **({"name": to_name} if to_name else {}),
                     }
                 }
             ],
         },
-        "saveToSentItems": "true",
+        "saveToSentItems": True,
     }
 
-    try:
-        response = requests.post(
+    def perform(access_token: str) -> requests.Response:
+        return requests.post(
             send_url,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Accept": "application/json",
             },
             json=payload,
-            timeout=20,
+            timeout=config.microsoft_graph_timeout_seconds,
         )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise MailServiceError("Verification email could not be sent with Microsoft Graph") from exc
-
-    return response.headers.get("request-id") or response.headers.get("client-request-id")
-
-
-def send_signup_otp_email(to_email: str, full_name: str, otp: str) -> None:
-    provider = settings.mail_provider.strip().lower()
-    subject = "Your MaatiTrace verification code"
-    safe_name = html.escape(full_name)
-    safe_otp = html.escape(otp)
-    html_content = (
-        "<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto'>"
-        "<h2>Verify your MaatiTrace account</h2>"
-        f"<p>Hello {safe_name},</p>"
-        "<p>Your verification code is:</p>"
-        f"<div style='font-size:28px;font-weight:700;letter-spacing:4px'>{safe_otp}</div>"
-        f"<p>This code expires in {settings.signup_otp_expire_minutes} minutes.</p>"
-        "<p>If you did not request this, you can ignore this email.</p>"
-        "</div>"
-    )
-
-    if provider == "console":
-        print(f"MAATITRACE LOCAL OTP for {to_email}: {otp}")
-        _record_email(
-            to_email=to_email,
-            to_name=full_name,
-            subject=subject,
-            template_key="signup_otp",
-            provider="console",
-            status="sent",
-        )
-        return
-
-    if provider != "microsoft_graph":
-        raise MailServiceError("MAIL_PROVIDER must be console or microsoft_graph")
 
     try:
-        provider_message_id = _send_with_microsoft_graph(
-            to_email=to_email,
-            to_name=full_name,
-            subject=subject,
-            html_content=html_content,
-        )
-    except MailServiceError as exc:
-        _record_email(
-            to_email=to_email,
-            to_name=full_name,
-            subject=subject,
-            template_key="signup_otp",
-            provider="microsoft_graph",
-            status="failed",
-            error_message=str(exc),
-        )
-        raise
+        response = perform(_graph_access_token())
+        if response.status_code == 401:
+            reset_graph_token_cache()
+            response = perform(_graph_access_token(force_refresh=True))
+    except requests.RequestException as exc:
+        raise MailServiceError(
+            "Microsoft Graph send request failed",
+            code="GRAPH_SEND_NETWORK_ERROR",
+            transient=True,
+        ) from exc
 
-    _record_email(
-        to_email=to_email,
-        to_name=full_name,
-        subject=subject,
-        template_key="signup_otp",
-        provider="microsoft_graph",
-        status="sent",
-        provider_message_id=provider_message_id,
+    request_id = response.headers.get("request-id") or response.headers.get("client-request-id")
+    if response.status_code == 202:
+        return GraphSendResult(provider_request_id=request_id, status_code=202)
+
+    if response.status_code == 429 or response.status_code >= 500:
+        raise MailServiceError(
+            "Microsoft Graph temporarily rejected the email",
+            code="GRAPH_SEND_TEMPORARY_ERROR",
+            transient=True,
+            status_code=response.status_code,
+        )
+
+    raise MailServiceError(
+        "Microsoft Graph permanently rejected the email",
+        code="GRAPH_SEND_PERMANENT_ERROR",
+        transient=False,
+        status_code=response.status_code,
     )
