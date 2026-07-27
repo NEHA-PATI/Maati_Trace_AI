@@ -17,6 +17,7 @@ import {
   Wheat,
 } from "lucide-react";
 import { startSignup, verifySignupOtp, completeSignup } from "@/lib/api/auth";
+import { getDefaultRouteForRole, saveSession } from "@/lib/auth/session";
 
 const INITIAL = {
   full_name: "",
@@ -37,6 +38,7 @@ const STEPS = [
   { id: "done", label: "Done" },
 ];
 
+
 export default function SignupFlow() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -47,22 +49,30 @@ export default function SignupFlow() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [profile, setProfile] = useState({});
+  const [completedUser, setCompletedUser] = useState(null);
 
   const progress = useMemo(() => [22, 50, 80, 100][step] || 10, [step]);
   const isFarmer = form.role === "farmer";
 
-  const canStart =
-    form.full_name.trim() &&
-    form.phone_number.replace(/\D/g, "").length === 10 &&
-    form.password.length >= 8 &&
-    form.password === form.confirm_password &&
-    form.consent_terms;
+const canStart =
+  form.full_name.trim() &&
+  form.phone_number.replace(/\D/g, "").length === 10 &&
+  form.email.trim() &&
+  form.password.length >= 8 &&
+  form.password === form.confirm_password &&
+  form.consent_terms;
 
-  useEffect(() => {
-    if (step !== 3) return;
-    const timer = window.setTimeout(() => navigate("/login", { replace: true, state: { signupSuccess: "Details registered with MaatiTrace." } }), 4000);
-    return () => window.clearTimeout(timer);
-  }, [navigate, step]);
+useEffect(() => {
+  if (step !== 3) return;
+
+  const redirectTarget = getDefaultRouteForRole(completedUser?.role || "farmer");
+
+  const timer = window.setTimeout(() => {
+    navigate(redirectTarget, { replace: true });
+  }, 4000);
+
+  return () => window.clearTimeout(timer);
+}, [completedUser?.role, navigate, step]);
 
   const setValue = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -94,18 +104,25 @@ export default function SignupFlow() {
     }
   };
 
-  const complete = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await completeSignup({ signup_session_id: sessionId, role: form.role, profile });
-      setStep(3);
-    } catch (err) {
-      setError(err.message || "Unable to complete signup.");
-    } finally {
-      setLoading(false);
-    }
-  };
+const complete = async () => {
+  setLoading(true);
+  setError("");
+
+  try {
+    const authResponse = await completeSignup({
+      signup_session_id: sessionId,
+      profile,
+    });
+
+    saveSession(authResponse);
+    setCompletedUser(authResponse.user);
+    setStep(3);
+  } catch (err) {
+    setError(err.message || "Unable to complete signup.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#eff5ef_0%,#f6f1e7_52%,#edf3ee_100%)] px-4 py-6 text-slate-900">
