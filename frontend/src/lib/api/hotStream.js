@@ -1,4 +1,4 @@
-import { hotStreamClient } from "./client";
+﻿import { hotStreamClient } from "@/shared/api/serviceClients";
 
 export const repairFarm = (farmId) =>
   hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/repair`, { method: "POST" });
@@ -24,3 +24,4 @@ export const fullRefreshFarm = (farmId, payload) =>
     method: "POST",
     body: payload ? JSON.stringify(payload) : undefined,
   });
+

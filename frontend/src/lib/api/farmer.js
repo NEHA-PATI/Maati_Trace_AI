@@ -1,4 +1,4 @@
-import { farmRegistryClient } from "./client";
+﻿import { farmRegistryClient } from "@/shared/api/serviceClients";
 export const getMyFarmerProfile = () => farmRegistryClient.request("/v1/farmers/me");
 export const getFarmer = (farmerId) => farmRegistryClient.request(`/v1/farmers/${farmerId}`);
 export const getFarmerSummary = (farmerId) => farmRegistryClient.request(`/v1/farmers/${farmerId}/summary`);
@@ -14,3 +14,4 @@ export const uploadFarmerDocument = async (file, documentType) => {
     message: "Document upload backend pending",
   };
 };
+

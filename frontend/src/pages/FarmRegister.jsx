@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   MapPin, User, Hexagon, FileText, Check, ChevronRight,
@@ -30,7 +30,7 @@ import {
   materializeFarmGrid,
   materializeFarmTrends,
 } from "@/lib/api/hotStream";
-import { getStoredUser } from "@/lib/auth/session";
+import { getStoredUser } from "@/features/auth/session";
 
 const STEPS = [
   { num: "01", label: "Location", icon: MapPin },
@@ -547,9 +547,9 @@ export default function FarmRegister() {
             "Preparing land intelligence page",
           ]}
           details={[
-            `State: ${formData.state_name || "—"}`,
-            `District: ${formData.district_name || "—"}`,
-            `Block: ${formData.block_name || "—"}`,
+            `State: ${formData.state_name || "â€”"}`,
+            `District: ${formData.district_name || "â€”"}`,
+            `Block: ${formData.block_name || "â€”"}`,
             `H3 res: 12`,
             `Points: ${polygonPoints.length}`,
           ]}
@@ -837,3 +837,4 @@ export default function FarmRegister() {
     </div>
   );
 }
+

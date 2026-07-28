@@ -17,7 +17,7 @@ USER_SELECT = """
     u.password_hash AS password_hash,
     u.role AS role,
     u.is_active AS is_active,
-    COALESCE(u.is_verified, u.is_email_verified, FALSE) AS is_verified,
+    COALESCE(u.is_verified, FALSE) AS is_verified,
     u.onboarding_status AS onboarding_status,
     u.profile_image_url AS profile_image_url
 """
@@ -88,7 +88,7 @@ def create_user(
 ) -> dict[str, Any]:
     row = conn.execute(
         text(
-            f"""
+            """
             INSERT INTO users (
                 full_name,
                 email,
@@ -97,7 +97,6 @@ def create_user(
                 role,
                 is_active,
                 is_verified,
-                is_email_verified,
                 onboarding_status,
                 profile_image_url,
                 updated_at
@@ -109,7 +108,6 @@ def create_user(
                 :password_hash,
                 :role,
                 TRUE,
-                :is_verified,
                 :is_verified,
                 'pending',
                 :profile_image_url,
@@ -123,7 +121,7 @@ def create_user(
                 password_hash,
                 role,
                 is_active,
-                COALESCE(is_verified, is_email_verified, FALSE) AS is_verified,
+                COALESCE(is_verified, FALSE) AS is_verified,
                 onboarding_status,
                 profile_image_url;
             """
@@ -138,6 +136,7 @@ def create_user(
             "profile_image_url": profile_image_url,
         },
     ).mappings().one()
+
     return dict(row)
 
 

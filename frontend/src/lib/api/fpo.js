@@ -1,4 +1,4 @@
-import { farmRegistryClient } from "./client";
+﻿import { farmRegistryClient } from "@/shared/api/serviceClients";
 export const createFpo = (payload) => farmRegistryClient.request("/v1/fpos", { method: "POST", body: JSON.stringify(payload) });
 export const getFpos = () => farmRegistryClient.request("/v1/fpos");
 export const getMyFpo = () => farmRegistryClient.request("/v1/fpos/me");
@@ -8,3 +8,4 @@ export const getFpoFarmers = (fpoId) => farmRegistryClient.request(`/v1/fpos/${f
 export const getFpoFarms = (fpoId) => farmRegistryClient.request(`/v1/fpos/${fpoId}/farms`);
 export const updateMyFpoProfile = (payload) => farmRegistryClient.request("/v1/fpos/me/profile", { method: "PATCH", body: JSON.stringify(payload) });
 export const exportMyFpoProfile = () => farmRegistryClient.request("/v1/fpos/me/profile-export");
+

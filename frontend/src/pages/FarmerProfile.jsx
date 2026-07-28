@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
   User, MapPin, Phone, Mail, Hexagon, Plus, Calendar,
@@ -18,7 +18,7 @@ import {
   getFarmerSummary,
   getMyFarmerProfile,
 } from "@/lib/api/farmer";
-import { getStoredUser } from "@/lib/auth/session";
+import { getStoredUser } from "@/features/auth/session";
 
 const DEFAULT_FARMER = {
   id: "FR-000",
@@ -80,7 +80,7 @@ function PhotoModal({ onClose, onSave }) {
             <Camera className="h-6 w-6 text-emerald-500" strokeWidth={2.5} />
           </div>
           <h3 className="text-base font-bold text-gray-800">Upload Profile Photo</h3>
-          <p className="mt-1 text-xs text-gray-400">JPG, PNG or WEBP · Max 5 MB</p>
+          <p className="mt-1 text-xs text-gray-400">JPG, PNG or WEBP Â· Max 5 MB</p>
         </div>
 
         <div
@@ -496,3 +496,4 @@ export default function FarmerProfile() {
     </div>
   );
 }
+

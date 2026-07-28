@@ -1,4 +1,4 @@
-import { boundaryIndexClient, farmRegistryClient } from "./client";
+﻿import { boundaryIndexClient, farmRegistryClient } from "@/shared/api/serviceClients";
 
 export function getFarm(farmId) {
   return farmRegistryClient.request(`/v1/farms/${farmId}`);
@@ -32,3 +32,4 @@ export function previewH3(payload) {
     body: JSON.stringify(payload),
   });
 }
+
