@@ -1,4 +1,4 @@
-import { analyticsClient } from "./client";
+﻿import { analyticsClient } from "@/shared/api/serviceClients";
 
 function extractItems(response) {
   if (Array.isArray(response)) return response;
@@ -43,3 +43,4 @@ export async function getFpoAnalyticsSummary(fpoId) {
 export async function getFarmGridCellDetails(farmId, gridCellId) {
   return analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells/${gridCellId}/details`);
 }
+

@@ -1,4 +1,4 @@
-import { locationClient } from "./client";
+﻿import { locationClient } from "@/shared/api/serviceClients";
 
 function extractArray(payload, keys) {
   if (Array.isArray(payload)) return payload;
@@ -56,3 +56,4 @@ export function validateLocation(payload) {
     body: JSON.stringify(payload),
   });
 }
+

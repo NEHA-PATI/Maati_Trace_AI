@@ -35,4 +35,5 @@ coverage.xml
 # Logs
 *.log
 *.md
-*.pdf
+*.pdfbackend/services/*/.env
+frontend/.env.local

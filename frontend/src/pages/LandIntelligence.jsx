@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Cloud, Hexagon, Leaf, RefreshCw, Thermometer, Waves, Mountain, Droplets } from "lucide-react";
 import { motion } from "framer-motion";
@@ -20,8 +20,8 @@ import {
   getSentinel2History,
 } from "@/lib/api/analytics";
 import { fullRefreshFarm } from "@/lib/api/hotStream";
-import { canViewTechnicalH3Layer } from "@/lib/rbac/permissions";
-import { getStoredUser } from "@/lib/auth/session";
+import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
+import { getStoredUser } from "@/features/auth/session";
 
 const PARAMETERS = [
   { key: "ndvi", label: "NDVI" },
@@ -56,14 +56,14 @@ function normalizeList(payload) {
 }
 
 function pretty(value, digits = 2) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "â€”";
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   return num.toFixed(digits);
 }
 
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) return "â€”";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("en-GB", {
@@ -232,12 +232,12 @@ export default function LandIntelligence() {
   const latestSceneId = latestSentinel?.scene_id || latestSummary.latest_scene_id;
   const hasAnalysis = Boolean(latestSummary.has_analysis || latestSummary.latest_snapshot_date || latestSentinel?.scene_id);
   const stats = [
-    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "—", unit: "ac" },
-    { label: "Grid cells", value: displayCells.length || "—", unit: "" },
-    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "—", unit: "" },
+    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "â€”", unit: "ac" },
+    { label: "Grid cells", value: displayCells.length || "â€”", unit: "" },
+    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "â€”", unit: "" },
     { label: "Latest scene", value: latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet", unit: "" },
-    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "—", unit: "%" },
-    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "—", unit: "%" },
+    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "â€”", unit: "%" },
+    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "â€”", unit: "%" },
   ];
 
   async function runLatestAnalysis() {
@@ -331,7 +331,7 @@ export default function LandIntelligence() {
           <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-emerald-600">Land Intelligence</p>
           <h1 className="mt-1 text-2xl font-black text-gray-900">
             {farm?.farm_name || "Farm"}
-            {farm?.survey_number ? ` · ${farm.survey_number}` : ""}
+            {farm?.survey_number ? ` Â· ${farm.survey_number}` : ""}
           </h1>
           <p className="text-sm text-gray-500">
             {farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}
@@ -440,7 +440,7 @@ export default function LandIntelligence() {
             {displaySelected ? (
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-gray-400">Cell ID</span><span className="font-mono text-[11px]">{displaySelected.grid_cell_id}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Row / Col</span><span>{displaySelected.grid_row ?? "—"} / {displaySelected.grid_col ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Row / Col</span><span>{displaySelected.grid_row ?? "â€”"} / {displaySelected.grid_col ?? "â€”"}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Coverage</span><span>{pretty(selectedDetails?.grid_cell?.coverage_ratio ?? displaySelected.coverage_ratio, 2)}</span></div>
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   {[
@@ -473,7 +473,7 @@ export default function LandIntelligence() {
                           <span className="font-mono">{String(row.h3_index)}</span>
                           <span className="font-semibold">{row.overlap_percentage}%</span>
                         </div>
-                        <div className="mt-1 text-gray-500">NDVI {pretty(row.ndvi, 3)} · NDMI {pretty(row.ndmi, 3)} · BSI {pretty(row.bsi, 3)}</div>
+                        <div className="mt-1 text-gray-500">NDVI {pretty(row.ndvi, 3)} Â· NDMI {pretty(row.ndmi, 3)} Â· BSI {pretty(row.bsi, 3)}</div>
                       </div>
                     ))}
                   </div>
@@ -491,11 +491,11 @@ export default function LandIntelligence() {
                 <div><span className="block text-gray-400">Weighted NDRE</span><span className="font-semibold">{pretty(latestSummary.weighted_ndre, 3)}</span></div>
                 <div><span className="block text-gray-400">Cloud</span><span className="font-semibold">{pretty(latestSummary.avg_cloud_percentage, 0)}</span></div>
                 <div><span className="block text-gray-400">Valid pixels</span><span className="font-semibold">{pretty(latestSummary.valid_pixel_percentage, 0)}</span></div>
-                <div><span className="block text-gray-400">Farm H3 cells</span><span className="font-semibold">{latestSummary.total_farm_h3_cells ?? latestSummary.total_h3_cells ?? h3Cells.length ?? "—"}</span></div>
-                <div><span className="block text-gray-400">Processed H3 cells</span><span className="font-semibold">{latestSummary.processed_h3_cells ?? latestSummary.latest_processed_h3_cells ?? "—"}</span></div>
-                <div><span className="block text-gray-400">Grid cells</span><span className="font-semibold">{latestSummary.total_grid_cells ?? displayCells.length ?? "—"}</span></div>
-                <div><span className="block text-gray-400">Grid cells with values</span><span className="font-semibold">{latestSummary.grid_cells_with_values ?? displayCells.length ?? "—"}</span></div>
-                <div className="col-span-2 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">Vegetation: {pickTrend(latestSummary, trends, "vegetation_trend")} · Moisture: {pickTrend(latestSummary, trends, "moisture_trend")} · Soil: {pickTrend(latestSummary, trends, "soil_exposure_trend")}</div>
+                <div><span className="block text-gray-400">Farm H3 cells</span><span className="font-semibold">{latestSummary.total_farm_h3_cells ?? latestSummary.total_h3_cells ?? h3Cells.length ?? "â€”"}</span></div>
+                <div><span className="block text-gray-400">Processed H3 cells</span><span className="font-semibold">{latestSummary.processed_h3_cells ?? latestSummary.latest_processed_h3_cells ?? "â€”"}</span></div>
+                <div><span className="block text-gray-400">Grid cells</span><span className="font-semibold">{latestSummary.total_grid_cells ?? displayCells.length ?? "â€”"}</span></div>
+                <div><span className="block text-gray-400">Grid cells with values</span><span className="font-semibold">{latestSummary.grid_cells_with_values ?? displayCells.length ?? "â€”"}</span></div>
+                <div className="col-span-2 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">Vegetation: {pickTrend(latestSummary, trends, "vegetation_trend")} Â· Moisture: {pickTrend(latestSummary, trends, "moisture_trend")} Â· Soil: {pickTrend(latestSummary, trends, "soil_exposure_trend")}</div>
                 {!hasAnalysis && (
                   <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                     Analysis not yet computed for this farm. Click Run Latest Analysis.
@@ -521,7 +521,7 @@ export default function LandIntelligence() {
               <div className="flex justify-between"><span className="text-gray-400">Vegetation</span><span className="font-semibold">{pickTrend(latestSummary, trends, "vegetation_trend")}</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Moisture</span><span className="font-semibold">{pickTrend(latestSummary, trends, "moisture_trend")}</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Soil</span><span className="font-semibold">{pickTrend(latestSummary, trends, "soil_exposure_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">History points</span><span className="font-semibold">{history.length || "—"}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">History points</span><span className="font-semibold">{history.length || "â€”"}</span></div>
             </div>
             <div className="mt-4 text-xs text-gray-500">
               {canViewTechnicalH3Layer(user) ? "H3 technical layer available through the toggle." : "Farmer view defaults to the square visual grid."}
@@ -535,3 +535,4 @@ export default function LandIntelligence() {
     </motion.div>
   );
 }
+

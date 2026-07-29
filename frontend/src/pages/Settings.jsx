@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   Check,
@@ -12,7 +12,7 @@ import {
   Wheat,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { getStoredUser } from "@/lib/auth/session";
+import { getStoredUser } from "@/features/auth/session";
 import { getMyFarmerProfile, updateMyFarmerProfile, exportMyFarmerProfile } from "@/lib/api/farmer";
 import { getMyFpo, updateMyFpoProfile, exportMyFpoProfile } from "@/lib/api/fpo";
 
@@ -414,3 +414,4 @@ function calculateProfileCompletion(role, profile) {
 
   return total ? Math.round((filled / total) * 100) : 0;
 }
+

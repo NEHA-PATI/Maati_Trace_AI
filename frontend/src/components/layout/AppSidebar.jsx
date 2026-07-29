@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { getStoredUser } from "@/lib/auth/session";
-import { getSidebarItemsForRole } from "@/lib/rbac/permissions";
+import { getStoredUser } from "@/features/auth/session";
+import { getSidebarItemsForRole } from "@/shared/rbac/permissions";
 
 export default function AppSidebar() {
   const location = useLocation();
@@ -26,3 +26,4 @@ export default function AppSidebar() {
     </aside>
   );
 }
+

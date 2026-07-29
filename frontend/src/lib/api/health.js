@@ -1,4 +1,4 @@
-import { authClient, locationClient, farmRegistryClient, stacClient, rasterClient, lakehouseClient, hotStreamClient, analyticsClient, boundaryIndexClient } from "./client";
+﻿import { authClient, locationClient, farmRegistryClient, stacClient, rasterClient, lakehouseClient, hotStreamClient, analyticsClient, boundaryIndexClient } from "@/shared/api/serviceClients";
 
 const HEALTH_PATH = "/health/live";
 
@@ -19,3 +19,4 @@ export async function getAllServiceHealth() {
   const resolved = await Promise.all(entries.map(async ([name, promise]) => [name, await promise.catch((error) => ({ status: "unhealthy", error: error?.message || "Request failed" }))]));
   return Object.fromEntries(resolved);
 }
+
