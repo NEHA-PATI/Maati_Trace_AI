@@ -25,6 +25,7 @@ from services.auth_service.app.repository import (
     create_refresh_token,
     create_signup_session,
     create_user,
+    create_farmer_profile_stub,
     get_account_invitation_by_hash,
     get_auth_identity,
     get_fpo_access_request_for_update,
@@ -430,6 +431,13 @@ def complete_signup(signup_session_id: UUID | str, context: RequestContext) -> I
                 role="farmer",
                 is_verified=True,
             )
+
+            create_farmer_profile_stub(
+                conn,
+                user_id=user["user_id"],
+                full_name=user["full_name"],
+                phone_number=user.get("phone_number"),
+            )
             mark_signup_completed(conn, signup_session_id)
             mark_user_login(conn, user["user_id"])
             issued = _issue_session(conn, user, context)
@@ -547,6 +555,14 @@ def login_with_google(id_token_value: str, context: RequestContext) -> IssuedSes
                         role="farmer",
                         is_verified=True,
                         profile_image_url=claims.get("picture"),
+                    )
+
+                if user["role"] == "farmer":
+                    create_farmer_profile_stub(
+                        conn,
+                        user_id=user["user_id"],
+                        full_name=user["full_name"],
+                        phone_number=None,
                     )
                 link_auth_identity(
                     conn,

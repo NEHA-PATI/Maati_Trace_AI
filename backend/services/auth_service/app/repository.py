@@ -139,6 +139,79 @@ def create_user(
 
     return dict(row)
 
+def create_farmer_profile_stub(
+    conn: Connection,
+    *,
+    user_id: UUID | str,
+    full_name: str,
+    phone_number: str | None,
+) -> dict[str, Any]:
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO farmer_profiles (
+                farmer_id,
+                user_id,
+                fpo_id,
+                full_name,
+                phone_number,
+                gender,
+                state_name,
+                district_name,
+                district_code,
+                block_name,
+                block_code,
+                village_name,
+                is_active
+            )
+            VALUES (
+                gen_random_uuid(),
+                :user_id,
+                NULL,
+                :full_name,
+                :phone_number,
+                NULL,
+                'Odisha',
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                TRUE
+            )
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                full_name = COALESCE(
+                    NULLIF(farmer_profiles.full_name, ''),
+                    EXCLUDED.full_name
+                ),
+                phone_number = COALESCE(
+                    farmer_profiles.phone_number,
+                    EXCLUDED.phone_number
+                ),
+                is_active = TRUE
+            RETURNING
+                farmer_id,
+                user_id,
+                full_name,
+                phone_number,
+                state_name,
+                district_name,
+                block_name,
+                block_code,
+                village_name,
+                is_active;
+            """
+        ),
+        {
+            "user_id": str(user_id),
+            "full_name": full_name,
+            "phone_number": phone_number,
+        },
+    ).mappings().one()
+
+    return dict(row)
+
 
 def update_password_hash(conn: Connection, user_id: UUID | str, password_hash: str) -> None:
     conn.execute(
