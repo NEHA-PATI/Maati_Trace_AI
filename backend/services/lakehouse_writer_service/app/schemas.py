@@ -20,6 +20,22 @@ class H3Sentinel2FeatureInput(BaseModel):
     cloud_pixel_count: int = 0
     nodata_pixel_count: int = 0
     cloud_percentage: float = 0
+    observed_area_m2: float = 0
+    valid_area_m2: float = 0
+    cloud_area_m2: float = 0
+    shadow_area_m2: float = 0
+    water_area_m2: float = 0
+    snow_area_m2: float = 0
+    nodata_area_m2: float = 0
+    invalid_area_m2: float = 0
+    valid_fraction: float = 0
+
+    fvc_proxy: float | None = None
+    nirv: float | None = None
+
+    optical_resolution_m: int = 10
+    rededge_swir_resolution_m: int = 20
+    processing_version: str = "s2_zonal_v1"
 
     mean_blue: float | None = None
     mean_green: float | None = None

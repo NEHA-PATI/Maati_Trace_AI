@@ -536,6 +536,12 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
+from pyproj import Transformer
+
+from services.raster_processor_service.app.h3_zonal_statistics import (
+    H3ZonalStatisticsError,
+    aggregate_h3_zonal_statistics,
+)
 
 
 class RasterProcessorError(RuntimeError):
@@ -615,6 +621,21 @@ def _mean_or_none(values: np.ndarray) -> float | None:
         return None
 
     return round(float(np.mean(valid)), 6)
+
+def _get_raster_crs(href: str):
+    href = _refresh_planetary_computer_href(href)
+
+    with rasterio.Env(
+        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        CPL_VSIL_CURL_USE_HEAD="NO",
+        GTIFF_SRS_SOURCE="EPSG",
+    ):
+        with rasterio.open(href) as dataset:
+            if dataset.crs is None:
+                raise RasterProcessorError(
+                    "Sentinel-2 raster asset has no CRS"
+                )
+            return dataset.crs
 
 
 def _clean_float(value: float | None) -> float | None:
@@ -836,30 +857,18 @@ def _read_all_required_bands(
     return bands, transform
 
 
-def _build_quality_masks(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+def _build_quality_masks(
+    bands: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
     scl = bands["scl"]
 
     nodata_mask = np.isnan(scl) | (scl == 0)
+    invalid_mask = np.isin(scl, [1, 2])
 
-    cloud_mask = np.isin(
-        scl,
-        [
-            3,
-            8,
-            9,
-            10,
-            11,
-        ],
-    )
-
-    invalid_scl_mask = np.isin(
-        scl,
-        [
-            0,
-            1,
-            2,
-        ],
-    )
+    shadow_mask = scl == 3
+    water_mask = scl == 6
+    cloud_mask = np.isin(scl, [8, 9, 10])
+    snow_mask = scl == 11
 
     required_band_mask = (
         np.isfinite(bands["blue"])
@@ -870,16 +879,29 @@ def _build_quality_masks(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         & np.isfinite(bands["swir22"])
     )
 
-    valid_mask = required_band_mask & ~nodata_mask & ~cloud_mask & ~invalid_scl_mask
+    valid_mask = (
+        required_band_mask
+        & ~nodata_mask
+        & ~invalid_mask
+        & ~shadow_mask
+        & ~cloud_mask
+        & ~snow_mask
+    )
 
     return {
         "nodata": nodata_mask,
+        "invalid": invalid_mask,
+        "shadow": shadow_mask,
+        "water": water_mask,
         "cloud": cloud_mask,
+        "snow": snow_mask,
         "valid": valid_mask,
     }
 
 
-def _calculate_index_arrays(bands: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+def _calculate_index_arrays(
+    bands: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
     blue = bands["blue"]
     green = bands["green"]
     red = bands["red"]
@@ -887,9 +909,29 @@ def _calculate_index_arrays(bands: dict[str, np.ndarray]) -> dict[str, np.ndarra
     swir16 = bands["swir16"]
     swir22 = bands["swir22"]
 
+    ndvi = _safe_divide(
+        nir - red,
+        nir + red,
+    )
+
+    # Tunable endmembers. They must later move into the
+    # versioned derived-parameter registry.
+    ndvi_soil = 0.20
+    ndvi_vegetation = 0.86
+
+    fvc_ratio = np.clip(
+        (ndvi - ndvi_soil)
+        / (ndvi_vegetation - ndvi_soil),
+        0.0,
+        1.0,
+    )
+
     indices = {
-        "ndvi": _safe_divide(nir - red, nir + red),
-        "gndvi": _safe_divide(nir - green, nir + green),
+        "ndvi": ndvi,
+        "gndvi": _safe_divide(
+            nir - green,
+            nir + green,
+        ),
         "evi": _safe_divide(
             2.5 * (nir - red),
             nir + (6.0 * red) - (7.5 * blue) + 1.0,
@@ -898,25 +940,67 @@ def _calculate_index_arrays(bands: dict[str, np.ndarray]) -> dict[str, np.ndarra
             1.5 * (nir - red),
             nir + red + 0.5,
         ),
-        "ndmi": _safe_divide(nir - swir16, nir + swir16),
-        "ndwi": _safe_divide(green - nir, green + nir),
-        "mndwi": _safe_divide(green - swir16, green + swir16),
-        "msi": _safe_divide(swir16, nir),
+
+        # Explicit meanings:
+        # NDMI = canopy moisture proxy.
+        # NDWI/MNDWI = open-water signals.
+        "ndmi": _safe_divide(
+            nir - swir16,
+            nir + swir16,
+        ),
+        "ndwi": _safe_divide(
+            green - nir,
+            green + nir,
+        ),
+        "mndwi": _safe_divide(
+            green - swir16,
+            green + swir16,
+        ),
+        "msi": _safe_divide(
+            swir16,
+            nir,
+        ),
+
         "bsi": _safe_divide(
             (swir16 + red) - (nir + blue),
             (swir16 + red) + (nir + blue),
         ),
-        "nbr": _safe_divide(nir - swir22, nir + swir22),
-        "nbr2": _safe_divide(swir16 - swir22, swir16 + swir22),
+        "nbr": _safe_divide(
+            nir - swir22,
+            nir + swir22,
+        ),
+        "nbr2": _safe_divide(
+            swir16 - swir22,
+            swir16 + swir22,
+        ),
+
+        # New derived parameters.
+        "fvc_proxy": np.square(fvc_ratio),
+        "nirv": ndvi * nir,
     }
 
     if "rededge1" in bands:
         rededge1 = bands["rededge1"]
-        indices["ndre"] = _safe_divide(nir - rededge1, nir + rededge1)
-        indices["reci"] = _safe_divide(nir, rededge1) - 1.0
+
+        indices["ndre"] = _safe_divide(
+            nir - rededge1,
+            nir + rededge1,
+        )
+
+        indices["reci"] = (
+            _safe_divide(nir, rededge1) - 1.0
+        )
     else:
-        indices["ndre"] = np.full(nir.shape, np.nan, dtype=np.float32)
-        indices["reci"] = np.full(nir.shape, np.nan, dtype=np.float32)
+        indices["ndre"] = np.full(
+            nir.shape,
+            np.nan,
+            dtype=np.float32,
+        )
+        indices["reci"] = np.full(
+            nir.shape,
+            np.nan,
+            dtype=np.float32,
+        )
 
     return indices
 
@@ -1017,33 +1101,297 @@ def _aggregate_whole_bbox(
     return [row]
 
 
+def _sample_bands_at_point(
+    asset_map: dict[str, str],
+    lon: float,
+    lat: float,
+) -> dict[str, float | None]:
+    sample_values: dict[str, float | None] = {}
+
+    with rasterio.Env(
+        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        CPL_VSIL_CURL_USE_HEAD="NO",
+        GTIFF_SRS_SOURCE="EPSG",
+        VSI_CACHE="TRUE",
+        GDAL_HTTP_MAX_RETRY="3",
+        GDAL_HTTP_RETRY_DELAY="1",
+        GDAL_HTTP_TIMEOUT="120",
+    ):
+        with rasterio.open(asset_map["red"]) as ref_dataset:
+            if ref_dataset.crs is None:
+                raise RasterProcessorError("Raster asset has no CRS.")
+
+            transformer = Transformer.from_crs(
+                "EPSG:4326",
+                ref_dataset.crs,
+                always_xy=True,
+            )
+            x, y = transformer.transform(lon, lat)
+
+        # Read SCL first because it decides whether spectral values are usable.
+        with rasterio.open(asset_map["scl"]) as dataset:
+            sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
+            scl_value = float(sample[0]) if np.isfinite(sample[0]) else np.nan
+
+        is_nodata = bool(np.isnan(scl_value) or scl_value == 0)
+        is_invalid = bool(scl_value in {0, 1, 2})
+        is_cloud = bool(scl_value in {3, 8, 9, 10, 11})
+        is_valid = not is_nodata and not is_invalid and not is_cloud
+
+        cloud_percentage = 100.0 if is_cloud else 0.0
+        valid_pixel_count = 1 if is_valid else 0
+        cloud_pixel_count = 1 if is_cloud else 0
+        nodata_pixel_count = 1 if is_nodata else 0
+
+        empty_result = {
+            "pixel_count": 1,
+            "valid_pixel_count": valid_pixel_count,
+            "cloud_pixel_count": cloud_pixel_count,
+            "nodata_pixel_count": nodata_pixel_count,
+            "cloud_percentage": cloud_percentage,
+
+            "mean_blue": None,
+            "mean_green": None,
+            "mean_red": None,
+            "mean_rededge1": None,
+            "mean_rededge2": None,
+            "mean_rededge3": None,
+            "mean_nir": None,
+            "mean_nir08": None,
+            "mean_swir16": None,
+            "mean_swir22": None,
+
+            "ndvi": None,
+            "gndvi": None,
+            "evi": None,
+            "savi": None,
+            "ndmi": None,
+            "ndwi": None,
+            "mndwi": None,
+            "msi": None,
+            "bsi": None,
+            "nbr": None,
+            "nbr2": None,
+            "ndre": None,
+            "reci": None,
+        }
+
+        if not is_valid:
+            return empty_result
+
+        band_names = {
+            "mean_blue": "blue",
+            "mean_green": "green",
+            "mean_red": "red",
+            "mean_rededge1": "rededge1",
+            "mean_rededge2": "rededge2",
+            "mean_rededge3": "rededge3",
+            "mean_nir": "nir",
+            "mean_nir08": "nir08",
+            "mean_swir16": "swir16",
+            "mean_swir22": "swir22",
+        }
+
+        band_samples: dict[str, float | None] = {}
+
+        for out_name, band_name in band_names.items():
+            href = asset_map.get(band_name)
+
+            if not href:
+                band_samples[out_name] = None
+                continue
+
+            with rasterio.open(href) as dataset:
+                sample = next(dataset.sample([(x, y)], indexes=1, masked=True))
+                value = sample[0]
+                band_samples[out_name] = (
+                    _clean_float(float(value) / 10000.0)
+                    if np.isfinite(value)
+                    else None
+                )
+
+    blue = band_samples.get("mean_blue")
+    green = band_samples.get("mean_green")
+    red = band_samples.get("mean_red")
+    nir = band_samples.get("mean_nir")
+    swir16 = band_samples.get("mean_swir16")
+    swir22 = band_samples.get("mean_swir22")
+    rededge1 = band_samples.get("mean_rededge1")
+
+    def div(a: float | None, b: float | None) -> float | None:
+        if a is None or b is None:
+            return None
+        if abs(a + b) < 1e-6:
+            return None
+        return _clean_float((a - b) / (a + b))
+
+    ndvi = div(nir, red)
+    gndvi = div(nir, green)
+
+    evi = None
+    if None not in (nir, red, blue):
+        denom = nir + (6.0 * red) - (7.5 * blue) + 1.0
+        if abs(denom) > 1e-6:
+            evi = _clean_float(2.5 * (nir - red) / denom)
+
+    savi = None
+    if None not in (nir, red):
+        denom = nir + red + 0.5
+        if abs(denom) > 1e-6:
+            savi = _clean_float(1.5 * (nir - red) / denom)
+
+    ndmi = div(nir, swir16)
+    ndwi = div(green, nir)
+    mndwi = div(green, swir16)
+
+    msi = None
+    if nir is not None and swir16 is not None and abs(nir) > 1e-6:
+        msi = _clean_float(swir16 / nir)
+
+    bsi = None
+    if None not in (swir16, red, nir, blue):
+        denom = (swir16 + red) + (nir + blue)
+        if abs(denom) > 1e-6:
+            bsi = _clean_float(((swir16 + red) - (nir + blue)) / denom)
+
+    nbr = div(nir, swir22)
+    nbr2 = div(swir16, swir22)
+    ndre = div(nir, rededge1)
+
+    reci = None
+    if nir is not None and rededge1 is not None and abs(rededge1) > 1e-6:
+        reci = _clean_float((nir / rededge1) - 1.0)
+
+    return {
+        "pixel_count": 1,
+        "valid_pixel_count": valid_pixel_count,
+        "cloud_pixel_count": cloud_pixel_count,
+        "nodata_pixel_count": nodata_pixel_count,
+        "cloud_percentage": cloud_percentage,
+
+        "mean_blue": blue,
+        "mean_green": green,
+        "mean_red": red,
+        "mean_rededge1": rededge1,
+        "mean_rededge2": band_samples.get("mean_rededge2"),
+        "mean_rededge3": band_samples.get("mean_rededge3"),
+        "mean_nir": nir,
+        "mean_nir08": band_samples.get("mean_nir08"),
+        "mean_swir16": swir16,
+        "mean_swir22": swir22,
+
+        "ndvi": ndvi,
+        "gndvi": gndvi,
+        "evi": evi,
+        "savi": savi,
+        "ndmi": ndmi,
+        "ndwi": ndwi,
+        "mndwi": mndwi,
+        "msi": msi,
+        "bsi": bsi,
+        "nbr": nbr,
+        "nbr2": nbr2,
+        "ndre": ndre,
+        "reci": reci,
+    }
+
+
+def _aggregate_by_h3_cells(
+    scene: dict[str, Any],
+    asset_map: dict[str, str],
+    h3_cells_bigint: list[int],
+) -> list[dict[str, Any]]:
+    features: list[dict[str, Any]] = []
+    for cell_bigint in sorted({int(v) for v in h3_cells_bigint if v is not None}):
+        h3_cell = h3.int_to_str(cell_bigint)
+        lat, lon = h3.cell_to_latlng(h3_cell)
+        sampled = _sample_bands_at_point(asset_map, lon=lon, lat=lat)
+        sampled["h3_index"] = cell_bigint
+        sampled["cloud_percentage"] = sampled.get("cloud_percentage", 0.0)
+        features.append(sampled)
+    return features
+
+
 def process_sentinel2_indices(
     scene: dict[str, Any],
     bbox: list[float],
     h3_resolution: int,
+    h3_cells_bigint: list[int] | None = None,
+    farm_polygon_geojson: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     asset_map = _build_asset_map(scene["assets"])
     _validate_required_assets(asset_map)
 
-    bands, _transform = _read_all_required_bands(
+    bands, raster_transform = _read_all_required_bands(
         asset_map=asset_map,
         bbox=bbox,
     )
 
+    raster_crs = _get_raster_crs(asset_map["red"])
+
     masks = _build_quality_masks(bands)
     indices = _calculate_index_arrays(bands)
 
-    features = _aggregate_whole_bbox(
-        bands=bands,
-        indices=indices,
-        masks=masks,
-        h3_resolution=h3_resolution,
-        bbox=bbox,
+    if h3_cells_bigint:
+        try:
+            features = aggregate_h3_zonal_statistics(
+                bands=bands,
+                indices=indices,
+                masks=masks,
+                raster_transform=raster_transform,
+                raster_crs=raster_crs,
+                h3_cells_bigint=h3_cells_bigint,
+                farm_polygon_geojson=farm_polygon_geojson,
+            )
+        except H3ZonalStatisticsError as exc:
+            raise RasterProcessorError(str(exc)) from exc
+    else:
+        features = _aggregate_whole_bbox(
+            bands=bands,
+            indices=indices,
+            masks=masks,
+            h3_resolution=h3_resolution,
+            bbox=bbox,
+        )
+
+    total_pixels = sum(
+        int(row.get("pixel_count") or 0)
+        for row in features
+    )
+    total_valid = sum(
+        int(row.get("valid_pixel_count") or 0)
+        for row in features
+    )
+    total_cloud = sum(
+        int(row.get("cloud_pixel_count") or 0)
+        for row in features
     )
 
-    total_pixels = int(bands["red"].size)
-    total_valid = int(np.sum(masks["valid"]))
-    total_cloud = int(np.sum(masks["cloud"]))
+    total_observed_area_m2 = round(
+        sum(
+            float(row.get("observed_area_m2") or 0)
+            for row in features
+        ),
+        4,
+    )
+
+    total_valid_area_m2 = round(
+        sum(
+            float(row.get("valid_area_m2") or 0)
+            for row in features
+        ),
+        4,
+    )
+
+    farm_valid_fraction = (
+        round(
+            total_valid_area_m2
+            / total_observed_area_m2,
+            6,
+        )
+        if total_observed_area_m2 > 0
+        else 0.0
+    )
 
     return {
         "source_assets_used": sorted(asset_map.keys()),
@@ -1051,5 +1399,8 @@ def process_sentinel2_indices(
         "total_pixel_count": total_pixels,
         "total_valid_pixel_count": total_valid,
         "total_cloud_pixel_count": total_cloud,
+        "total_observed_area_m2": total_observed_area_m2,
+        "total_valid_area_m2": total_valid_area_m2,
+        "farm_valid_fraction": farm_valid_fraction,
         "features": features,
     }

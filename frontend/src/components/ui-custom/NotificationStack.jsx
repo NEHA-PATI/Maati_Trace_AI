@@ -42,7 +42,7 @@ export default function NotificationStack({ limit = 5, showAll = false }) {
                 <p className="text-[9px] text-muted-foreground/60 mt-1 font-display uppercase tracking-wider">{n.time}</p>
               </div>
               {n.farmId && (
-                <Link to={`/land-intelligence/${n.farmId}`} className="text-primary hover:underline">
+                <Link to={`/land/${n.farmId}`} className="text-primary hover:underline">
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               )}

@@ -22,7 +22,7 @@ export default function FarmCard({ farm }) {
   const healthColor = ndvi > 0.5 ? "text-primary" : ndvi > 0.3 ? "text-amber-600" : "text-destructive";
 
   return (
-    <Link to={`/land-intelligence/${id}`} className="block group">
+    <Link to={`/land/${id}`} className="block group">
       <div className="border border-gray-100 rounded-2xl bg-white hover:shadow-md hover:border-emerald-100 transition-all overflow-hidden shadow-sm">
         {/* Map thumbnail */}
         <div className="h-28 bg-gradient-to-br from-emerald-50 to-green-100 relative overflow-hidden">

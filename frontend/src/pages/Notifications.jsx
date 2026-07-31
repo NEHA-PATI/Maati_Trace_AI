@@ -214,7 +214,7 @@ export default function Notifications() {
                     <span className="text-[10px] text-gray-300">{n.time}</span>
                     {n.farmId && (
                       <Link
-                        to={`/land-intelligence/${n.farmId}`}
+                        to={`/land/${n.farmId}`}
                         className="text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5 ml-auto"
                       >
                         View Farm <ChevronRight className="w-3 h-3" />

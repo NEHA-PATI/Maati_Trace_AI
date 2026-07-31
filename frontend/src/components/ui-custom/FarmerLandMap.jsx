@@ -57,7 +57,7 @@ export default function FarmerLandMap({ farms = [] }) {
           dashArray: farm.status === "pending" ? "6,4" : null,
         }).addTo(map);
 
-        // Centroid marker — clickable → /land-intelligence/:id
+        // Centroid marker — clickable → /land/:id
         const centroid = getCentroid(coords);
         const markerHtml = `
           <div style="
@@ -88,8 +88,8 @@ export default function FarmerLandMap({ farms = [] }) {
           className: "leaflet-maatitrace-tooltip",
         });
 
-        marker.on("click", () => navigate(`/land-intelligence/${farm.id}`));
-        poly.on("click", () => navigate(`/land-intelligence/${farm.id}`));
+        marker.on("click", () => navigate(`/land/${farm.id}`));
+        poly.on("click", () => navigate(`/land/${farm.id}`));
 
         // Grid lines (lat/lng based, like OSM tile grid)
         drawGrid(L, map, coords);
