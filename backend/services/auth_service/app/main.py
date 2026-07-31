@@ -8,7 +8,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from shared.db.postgres import engine
@@ -107,8 +106,6 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=list(bootstrap_config.trusted_hosts),
 )
-if bootstrap_config.app_env == "production":
-    app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(bootstrap_config.cors_allowed_origins),
