@@ -224,10 +224,6 @@ def hash_audit_identifier(value: str) -> str:
     return _hmac_digest(get_auth_config().audit_hmac_secret, "audit-identifier", value.strip().lower())
 
 
-def hash_rate_limit_value(value: str) -> str:
-    return _hmac_digest(get_auth_config().rate_limit_hmac_secret, "rate-limit", value)
-
-
 def hash_device_id(value: str | None) -> str | None:
     if not value:
         return None

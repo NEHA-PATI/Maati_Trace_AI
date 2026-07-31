@@ -1,12 +1,12 @@
-﻿from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
-from shared.errors.api_errors import bad_request
 from shared.logging.json_logging import configure_json_logging
 from services.api_gateway_service.app.proxy import (
     GatewayProxyError,
     get_route_targets,
+    proxy_health_request,
     proxy_request,
 )
 from services.api_gateway_service.app.schemas import HealthResponse
@@ -22,12 +22,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.cors_allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,6 +55,21 @@ def routes():
     }
 
 
+@app.get("/api/health/{service_name}/{check}", response_model=HealthResponse)
+async def service_health(service_name: str, check: str, request: Request):
+    try:
+        return await proxy_health_request(
+            service_name=service_name,
+            check=check,
+            request=request,
+        )
+    except GatewayProxyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "API_GATEWAY_PROXY_ERROR", "message": str(exc)},
+        ) from exc
+
+
 @app.api_route(
     "/api/{prefix}/{rest_path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -72,4 +82,7 @@ async def gateway_proxy(prefix: str, rest_path: str, request: Request):
             request=request,
         )
     except GatewayProxyError as exc:
-        raise bad_request(str(exc), code="API_GATEWAY_PROXY_ERROR") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "API_GATEWAY_PROXY_ERROR", "message": str(exc)},
+        ) from exc

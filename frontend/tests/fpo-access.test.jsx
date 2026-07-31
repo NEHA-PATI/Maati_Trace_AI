@@ -7,13 +7,13 @@ import { describe, expect, it } from "vitest";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import { server } from "@/test/mocks/server";
 
-const BASE = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8002";
+const BASE = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:8000";
 
 describe("FPO access request", () => {
   it("submits a review request without creating an account", async () => {
     const user = userEvent.setup();
     let payload;
-    server.use(http.post(`${BASE}/v1/auth/fpo-access-requests`, async ({ request }) => {
+    server.use(http.post(`${BASE}/api/auth/fpo-access-requests`, async ({ request }) => {
       payload = await request.json();
       return HttpResponse.json({ request_id: "11111111-1111-4111-8111-111111111111", status: "pending", message: "Request received.", correlation_id: "c1" }, { status: 201 });
     }));

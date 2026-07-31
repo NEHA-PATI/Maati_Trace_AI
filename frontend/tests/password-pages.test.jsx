@@ -8,13 +8,13 @@ import ForgotPasswordPage from "@/features/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import { server } from "@/test/mocks/server";
 
-const BASE = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8002";
+const BASE = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:8000";
 
 describe("password recovery pages", () => {
   it("submits a real forgot-password request", async () => {
     const user = userEvent.setup();
     let received;
-    server.use(http.post(`${BASE}/v1/auth/password/forgot`, async ({ request }) => {
+    server.use(http.post(`${BASE}/api/auth/password/forgot`, async ({ request }) => {
       received = await request.json();
       return HttpResponse.json({ message: "If an eligible account exists, a password reset email will be sent shortly.", correlation_id: "c1" });
     }));
@@ -28,7 +28,7 @@ describe("password recovery pages", () => {
   it("submits the URL reset token and new password", async () => {
     const user = userEvent.setup();
     let received;
-    server.use(http.post(`${BASE}/v1/auth/password/reset`, async ({ request }) => {
+    server.use(http.post(`${BASE}/api/auth/password/reset`, async ({ request }) => {
       received = await request.json();
       return HttpResponse.json({ message: "Password reset completed.", correlation_id: "c2" });
     }));

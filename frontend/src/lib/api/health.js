@@ -1,17 +1,17 @@
-﻿import { authClient, locationClient, farmRegistryClient, stacClient, rasterClient, lakehouseClient, hotStreamClient, analyticsClient, boundaryIndexClient } from "@/shared/api/serviceClients";
+import { gatewayClient } from "@/shared/api/serviceClients";
 
-const HEALTH_PATH = "/health/live";
+const HEALTH_ROUTE = "/api/health";
 
 export const getServiceHealth = () => ({
-  auth: authClient.request(HEALTH_PATH),
-  location: locationClient.request(HEALTH_PATH),
-  registry: farmRegistryClient.request(HEALTH_PATH),
-  boundary: boundaryIndexClient.request(HEALTH_PATH),
-  stac: stacClient.request(HEALTH_PATH),
-  raster: rasterClient.request(HEALTH_PATH),
-  lakehouse: lakehouseClient.request(HEALTH_PATH),
-  orchestrator: hotStreamClient.request(HEALTH_PATH),
-  analytics: analyticsClient.request(HEALTH_PATH),
+  auth: gatewayClient.request(`${HEALTH_ROUTE}/auth/live`),
+  location: gatewayClient.request(`${HEALTH_ROUTE}/location/live`),
+  registry: gatewayClient.request(`${HEALTH_ROUTE}/registry/live`),
+  boundary: gatewayClient.request(`${HEALTH_ROUTE}/boundary/live`),
+  stac: gatewayClient.request(`${HEALTH_ROUTE}/stac/live`),
+  raster: gatewayClient.request(`${HEALTH_ROUTE}/raster/live`),
+  lakehouse: gatewayClient.request(`${HEALTH_ROUTE}/lakehouse/live`),
+  orchestrator: gatewayClient.request(`${HEALTH_ROUTE}/orchestrator/live`),
+  analytics: gatewayClient.request(`${HEALTH_ROUTE}/analytics/live`),
 });
 
 export async function getAllServiceHealth() {
@@ -19,4 +19,3 @@ export async function getAllServiceHealth() {
   const resolved = await Promise.all(entries.map(async ([name, promise]) => [name, await promise.catch((error) => ({ status: "unhealthy", error: error?.message || "Request failed" }))]));
   return Object.fromEntries(resolved);
 }
-

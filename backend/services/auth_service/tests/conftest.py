@@ -8,7 +8,6 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from services.auth_service.app.config_validation import reset_auth_config_cache
-from services.auth_service.app.rate_limit import set_rate_limiter_for_tests
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +18,6 @@ def secure_test_environment(monkeypatch):
         "JWT_SECRET": "J" * 64,
         "TOKEN_HMAC_SECRET": "T" * 64,
         "AUDIT_HMAC_SECRET": "A" * 64,
-        "RATE_LIMIT_HMAC_SECRET": "R" * 64,
         "EMAIL_PAYLOAD_ENCRYPTION_KEY": fernet_key,
         "JWT_ALGORITHM": "HS256",
         "JWT_ISSUER": "maatitrace-auth-test",
@@ -31,16 +29,13 @@ def secure_test_environment(monkeypatch):
         "TRUSTED_HOSTS": "localhost,127.0.0.1,testserver",
         "GOOGLE_AUTH_ENABLED": "false",
         "MAIL_ENABLED": "false",
-        "RATE_LIMIT_ENABLED": "false",
         "PWNED_PASSWORDS_ENABLED": "false",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
     reset_auth_config_cache()
-    set_rate_limiter_for_tests(None)
     yield
     reset_auth_config_cache()
-    set_rate_limiter_for_tests(None)
 
 
 @pytest.fixture

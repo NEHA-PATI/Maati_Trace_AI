@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
@@ -8,7 +8,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from shared.db.postgres import engine
@@ -24,7 +23,6 @@ from services.auth_service.app.dependencies import (
 from services.auth_service.app.errors import AuthError
 from services.auth_service.app.logging_context import get_correlation_id, get_logger, log_event
 from services.auth_service.app.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
-from services.auth_service.app.rate_limit import get_rate_limiter
 from services.auth_service.app.schemas import (
     AuthResponse,
     FpoAccessRequestAdminView,
@@ -88,8 +86,6 @@ async def lifespan(_app: FastAPI):
     validate_auth_config(config)
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    if config.rate_limit_enabled:
-        get_rate_limiter().client.ping()
     log_event(logger, logging.INFO, "auth_service_started", environment=config.app_env)
     yield
     log_event(logger, logging.INFO, "auth_service_stopped")
@@ -107,8 +103,6 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=list(bootstrap_config.trusted_hosts),
 )
-if bootstrap_config.app_env == "production":
-    app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(bootstrap_config.cors_allowed_origins),
@@ -121,15 +115,13 @@ app.add_middleware(
         "X-Device-ID",
         "X-Correlation-ID",
     ],
-    expose_headers=["X-Correlation-ID", "Retry-After"],
+    expose_headers=["X-Correlation-ID"],
 )
 
 
 @app.exception_handler(AuthError)
 async def auth_error_handler(_request: Request, exc: AuthError) -> JSONResponse:
     headers: dict[str, str] = {"X-Correlation-ID": get_correlation_id()}
-    if exc.retry_after is not None:
-        headers["Retry-After"] = str(exc.retry_after)
     log_event(
         logger,
         logging.WARNING if exc.status_code < 500 else logging.ERROR,
@@ -235,10 +227,6 @@ def _clear_session_cookies(response: Response) -> None:
     )
 
 
-def _enforce(scope: str, *dimensions: tuple[str, str | None]) -> None:
-    get_rate_limiter().enforce(scope, dimensions)
-
-
 @app.get("/health/live", response_model=HealthResponse)
 def live() -> HealthResponse:
     return HealthResponse(service=SERVICE_NAME, status="live", environment=get_auth_config().app_env)
@@ -249,8 +237,6 @@ def ready() -> HealthResponse:
     config = get_auth_config()
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    if config.rate_limit_enabled:
-        get_rate_limiter().client.ping()
     return HealthResponse(service=SERVICE_NAME, status="ready", environment=config.app_env)
 
 
@@ -259,13 +245,6 @@ def signup_start_endpoint(
     payload: SignupStartRequest,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "signup_start",
-        ("ip", context.ip_address),
-        ("email", str(payload.email)),
-        ("phone", payload.phone_number),
-        ("device", context.device_id_hash),
-    )
     return start_signup(payload, context)
 
 
@@ -274,12 +253,6 @@ def signup_resend_endpoint(
     payload: SignupResendRequest,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "signup_resend",
-        ("ip", context.ip_address),
-        ("session", str(payload.signup_session_id)),
-        ("device", context.device_id_hash),
-    )
     return resend_signup_otp(payload.signup_session_id, context)
 
 
@@ -288,12 +261,6 @@ def signup_verify_endpoint(
     payload: SignupVerifyRequest,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "signup_verify",
-        ("ip", context.ip_address),
-        ("session", str(payload.signup_session_id)),
-        ("device", context.device_id_hash),
-    )
     return verify_signup_otp(payload.signup_session_id, payload.otp, context)
 
 
@@ -322,12 +289,6 @@ def login_endpoint(
     response: Response,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "login",
-        ("ip", context.ip_address),
-        ("identifier", payload.identifier.strip().lower()),
-        ("device", context.device_id_hash),
-    )
     issued = login(payload, context)
     _set_session_cookies(response, issued)
     return _auth_response(issued)
@@ -339,11 +300,6 @@ def google_endpoint(
     response: Response,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "google_login",
-        ("ip", context.ip_address),
-        ("device", context.device_id_hash),
-    )
     issued = login_with_google(payload.id_token, context)
     _set_session_cookies(response, issued)
     return _auth_response(issued)
@@ -355,11 +311,6 @@ def refresh_endpoint(
     refresh_token: str = Depends(validate_cookie_request),
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "refresh",
-        ("ip", context.ip_address),
-        ("device", context.device_id_hash),
-    )
     issued = refresh_session(refresh_token, context)
     _set_session_cookies(response, issued)
     return _auth_response(issued)
@@ -393,12 +344,6 @@ def password_forgot_endpoint(
     payload: PasswordForgotRequest,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "password_forgot",
-        ("ip", context.ip_address),
-        ("email", str(payload.email)),
-        ("device", context.device_id_hash),
-    )
     return forgot_password(payload, context)
 
 
@@ -407,12 +352,6 @@ def password_reset_endpoint(
     payload: PasswordResetRequest,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "password_reset",
-        ("ip", context.ip_address),
-        ("token", payload.token[:16]),
-        ("device", context.device_id_hash),
-    )
     return reset_password(payload, context)
 
 
@@ -425,13 +364,6 @@ def fpo_access_request_endpoint(
     payload: FpoAccessRequestCreate,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "fpo_access",
-        ("ip", context.ip_address),
-        ("email", str(payload.contact_email)),
-        ("phone", payload.contact_phone),
-        ("device", context.device_id_hash),
-    )
     return submit_fpo_access_request(payload, context)
 
 
@@ -494,12 +426,6 @@ def validate_invitation_endpoint(
     token: str = Query(min_length=40, max_length=512),
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "invitation_validate",
-        ("ip", context.ip_address),
-        ("token", token[:16]),
-        ("device", context.device_id_hash),
-    )
     return validate_invitation(token)
 
 
@@ -509,13 +435,6 @@ def accept_invitation_endpoint(
     response: Response,
     context: RequestContext = Depends(get_request_context),
 ):
-    _enforce(
-        "invitation_accept",
-        ("ip", context.ip_address),
-        ("token", payload.token[:16]),
-        ("phone", payload.phone_number),
-        ("device", context.device_id_hash),
-    )
     issued = accept_invitation(payload, context)
     _set_session_cookies(response, issued)
     return _auth_response(issued)

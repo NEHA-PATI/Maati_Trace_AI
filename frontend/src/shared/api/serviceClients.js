@@ -1,4 +1,3 @@
-import { environment } from "@/app/config/environment";
 import { clearSession, getSessionSnapshot } from "@/features/auth/session";
 import { apiClient } from "@/shared/api/apiClient";
 
@@ -6,11 +5,12 @@ export function createServiceClient(serviceName) {
   return Object.freeze({
     serviceName,
     request: (path, options = {}) => {
-      const inferredAuthMode = path.startsWith("/health")
-        ? "public"
-        : serviceName === "auth"
-          ? "public"
-          : "required";
+      const inferredAuthMode = (
+        path.startsWith("/health")
+        || path.startsWith("/api/health/")
+        || serviceName === "auth"
+        || serviceName === "gateway"
+      ) ? "public" : "required";
       return apiClient.request(path, {
         ...options,
         authMode: options.authMode || inferredAuthMode,
@@ -30,10 +30,6 @@ export const lakehouseClient = createServiceClient("lakehouse");
 export const hotStreamClient = createServiceClient("hotStream");
 export const analyticsClient = createServiceClient("analytics");
 export const gatewayClient = createServiceClient("gateway");
-
-export const API_MODE = environment.apiMode;
-export const IS_GATEWAY_MODE = environment.isGatewayMode;
-export const SERVICE_URLS = environment.serviceUrls;
 export function getSession() { return getSessionSnapshot(); }
 export function clearSessionAndRedirect() {
   clearSession();

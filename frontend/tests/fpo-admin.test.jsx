@@ -7,7 +7,7 @@ import { clearSession, setSession } from "@/features/auth/session";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
 import { server } from "@/test/mocks/server";
 
-const BASE = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8002";
+const BASE = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:8000";
 
 describe("FPO access administration", () => {
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe("FPO access administration", () => {
     let closed = false;
     let invitationPayload;
     server.use(
-      http.get(`${BASE}/v1/auth/admin/fpo-access-requests`, ({ request }) => {
+      http.get(`${BASE}/api/auth/admin/fpo-access-requests`, ({ request }) => {
         const status = new URL(request.url).searchParams.get("status");
         const item = {
           request_id: "11111111-1111-4111-8111-111111111111",
@@ -39,7 +39,7 @@ describe("FPO access administration", () => {
         const items = !closed && status === "pending" ? [item] : [];
         return HttpResponse.json({ items, total: items.length, limit: 50, offset: 0 });
       }),
-      http.patch(`${BASE}/v1/auth/admin/fpo-access-requests/:requestId`, async ({ request }) => {
+      http.patch(`${BASE}/api/auth/admin/fpo-access-requests/:requestId`, async ({ request }) => {
         const body = await request.json();
         if (body.status === "closed") closed = true;
         return HttpResponse.json({
@@ -53,7 +53,7 @@ describe("FPO access administration", () => {
           updated_at: new Date().toISOString(),
         });
       }),
-      http.post(`${BASE}/v1/auth/admin/invitations`, async ({ request }) => {
+      http.post(`${BASE}/api/auth/admin/invitations`, async ({ request }) => {
         invitationPayload = await request.json();
         return HttpResponse.json({
           invitation_id: "22222222-2222-4222-8222-222222222222",

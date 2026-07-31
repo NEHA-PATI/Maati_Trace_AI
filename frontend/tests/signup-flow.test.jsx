@@ -8,7 +8,7 @@ import { AuthContext } from "@/features/auth/context/AuthContext";
 import SignupFlow from "@/features/auth/signup/SignupFlow";
 import { server } from "@/test/mocks/server";
 
-const BASE = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8002";
+const BASE = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:8000";
 const SESSION_1 = "11111111-1111-4111-8111-111111111111";
 const SESSION_2 = "22222222-2222-4222-8222-222222222222";
 
@@ -44,7 +44,7 @@ describe("SignupFlow", () => {
     let starts = 0;
     let cancels = 0;
     server.use(
-      http.post(`${BASE}/v1/auth/signup/start`, async () => {
+      http.post(`${BASE}/api/auth/signup/start`, async () => {
         starts += 1;
         return HttpResponse.json({
           signup_session_id: starts === 1 ? SESSION_1 : SESSION_2,
@@ -53,7 +53,7 @@ describe("SignupFlow", () => {
           masked_email: "fa****@example.com",
         }, { status: 201 });
       }),
-      http.post(`${BASE}/v1/auth/signup/cancel`, () => { cancels += 1; return HttpResponse.json({ cancelled: true }); }),
+      http.post(`${BASE}/api/auth/signup/cancel`, () => { cancels += 1; return HttpResponse.json({ cancelled: true }); }),
     );
 
     renderFlow();
@@ -61,13 +61,13 @@ describe("SignupFlow", () => {
     await screen.findByText("Check your email");
     expect(starts).toBe(1);
 
-    await user.click(screen.getByRole("button", { name: "â† Change account details" }));
+    await user.click(screen.getByRole("button", { name: /Change account details/ }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Check your email");
     expect(starts).toBe(1);
     expect(cancels).toBe(0);
 
-    await user.click(screen.getByRole("button", { name: "â† Change account details" }));
+    await user.click(screen.getByRole("button", { name: /Change account details/ }));
     const email = screen.getByLabelText("Email address");
     await user.clear(email);
     await user.type(email, "changed@example.com");
@@ -79,9 +79,9 @@ describe("SignupFlow", () => {
   it("verifies, completes, signs in, and shows profile/land actions", async () => {
     const user = userEvent.setup();
     server.use(
-      http.post(`${BASE}/v1/auth/signup/start`, () => HttpResponse.json({ signup_session_id: SESSION_1, expires_in_seconds: 600, resend_available_in_seconds: 0, masked_email: "fa****@example.com" }, { status: 201 })),
-      http.post(`${BASE}/v1/auth/signup/verify`, () => HttpResponse.json({ signup_session_id: SESSION_1, verified: true })),
-      http.post(`${BASE}/v1/auth/signup/complete`, () => HttpResponse.json({ access_token: "access", expires_in_seconds: 900, user: { user_id: "1", full_name: "Neha Pati", role: "farmer" } }, { status: 201 })),
+      http.post(`${BASE}/api/auth/signup/start`, () => HttpResponse.json({ signup_session_id: SESSION_1, expires_in_seconds: 600, resend_available_in_seconds: 0, masked_email: "fa****@example.com" }, { status: 201 })),
+      http.post(`${BASE}/api/auth/signup/verify`, () => HttpResponse.json({ signup_session_id: SESSION_1, verified: true })),
+      http.post(`${BASE}/api/auth/signup/complete`, () => HttpResponse.json({ access_token: "access", expires_in_seconds: 900, user: { user_id: "1", full_name: "Neha Pati", role: "farmer" } }, { status: 201 })),
     );
     const { adoptAuthResponse } = renderFlow();
     await completeAccountForm(user);

@@ -8,7 +8,7 @@ import { AuthContext } from "@/features/auth/context/AuthContext";
 import AcceptInvitationPage from "@/features/auth/pages/AcceptInvitationPage";
 import { server } from "@/test/mocks/server";
 
-const BASE = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8002";
+const BASE = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:8000";
 const TOKEN = "i".repeat(50);
 
 describe("AcceptInvitationPage", () => {
@@ -17,8 +17,8 @@ describe("AcceptInvitationPage", () => {
     const adoptAuthResponse = vi.fn((response) => response.user);
     let accepted;
     server.use(
-      http.get(`${BASE}/v1/auth/invitations/validate`, () => HttpResponse.json({ valid: true, masked_email: "fp***@example.com", role: "fpo", expires_at: new Date(Date.now() + 3600000).toISOString() })),
-      http.post(`${BASE}/v1/auth/invitations/accept`, async ({ request }) => {
+      http.get(`${BASE}/api/auth/invitations/validate`, () => HttpResponse.json({ valid: true, masked_email: "fp***@example.com", role: "fpo", expires_at: new Date(Date.now() + 3600000).toISOString() })),
+      http.post(`${BASE}/api/auth/invitations/accept`, async ({ request }) => {
         accepted = await request.json();
         return HttpResponse.json({ access_token: "access", expires_in_seconds: 900, user: { user_id: "1", role: "fpo", full_name: "FPO Leader" } }, { status: 201 });
       }),

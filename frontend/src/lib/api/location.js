@@ -33,19 +33,19 @@ export function normalizeBlocks(response) {
 }
 
 export async function getStates() {
-  return normalizeStates(await locationClient.request("/v1/states"));
+  return normalizeStates(await locationClient.request("/v1/location/states"));
 }
 
 export async function getDistricts(stateName) {
   return normalizeDistricts(
-    await locationClient.request(`/v1/districts?state_name=${encodeURIComponent(stateName)}`),
+    await locationClient.request(`/v1/location/districts?state_name=${encodeURIComponent(stateName)}`),
   );
 }
 
 export async function getBlocks(stateName, districtName) {
   return normalizeBlocks(
     await locationClient.request(
-      `/v1/blocks?state_name=${encodeURIComponent(stateName)}&district_name=${encodeURIComponent(districtName)}`,
+      `/v1/location/blocks?state_name=${encodeURIComponent(stateName)}&district_name=${encodeURIComponent(districtName)}`,
     ),
   );
 }

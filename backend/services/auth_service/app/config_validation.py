@@ -55,7 +55,6 @@ class AuthConfig:
     refresh_token_expire_days: int
     token_hmac_secret: str
     audit_hmac_secret: str
-    rate_limit_hmac_secret: str
     email_payload_encryption_key: str
 
     frontend_public_url: str
@@ -88,9 +87,6 @@ class AuthConfig:
     email_worker_max_attempts: int
     email_worker_lock_timeout_seconds: int
 
-    redis_url: str | None
-    rate_limit_enabled: bool
-
     signup_otp_expire_minutes: int
     signup_otp_resend_cooldown_seconds: int
     signup_otp_max_resends: int
@@ -115,15 +111,17 @@ class AuthConfig:
             refresh_token_expire_days=_int("REFRESH_TOKEN_EXPIRE_DAYS", 30),
             token_hmac_secret=_env("TOKEN_HMAC_SECRET", "") or "",
             audit_hmac_secret=_env("AUDIT_HMAC_SECRET", "") or "",
-            rate_limit_hmac_secret=_env("RATE_LIMIT_HMAC_SECRET", "") or "",
             email_payload_encryption_key=_env("EMAIL_PAYLOAD_ENCRYPTION_KEY", "") or "",
             frontend_public_url=_env("FRONTEND_PUBLIC_URL", "http://localhost:5173") or "",
             frontend_password_reset_path=_env("FRONTEND_PASSWORD_RESET_PATH", "/reset-password") or "/reset-password",
             frontend_invitation_accept_path=_env("FRONTEND_INVITATION_ACCEPT_PATH", "/accept-invitation") or "/accept-invitation",
-            cors_allowed_origins=_csv("CORS_ALLOWED_ORIGINS", ("http://localhost:5173",)),
+            cors_allowed_origins=_csv(
+                "CORS_ALLOWED_ORIGINS",
+                ("http://localhost:5173", "https://app.maatitrace.com"),
+            ),
             trusted_hosts=_csv("TRUSTED_HOSTS", ("localhost", "127.0.0.1")),
             refresh_cookie_name=_env("REFRESH_COOKIE_NAME", "maatitrace_refresh") or "maatitrace_refresh",
-            refresh_cookie_path=_env("REFRESH_COOKIE_PATH", "/v1/auth") or "/v1/auth",
+            refresh_cookie_path=_env("REFRESH_COOKIE_PATH", "/api/auth") or "/api/auth",
             csrf_cookie_name=_env("CSRF_COOKIE_NAME", "maatitrace_csrf") or "maatitrace_csrf",
             cookie_domain=_env("COOKIE_DOMAIN"),
             cookie_secure=_bool("COOKIE_SECURE", app_env == "production"),
@@ -143,8 +141,6 @@ class AuthConfig:
             email_worker_poll_seconds=_float("EMAIL_WORKER_POLL_SECONDS", 3.0),
             email_worker_max_attempts=_int("EMAIL_WORKER_MAX_ATTEMPTS", 6),
             email_worker_lock_timeout_seconds=_int("EMAIL_WORKER_LOCK_TIMEOUT_SECONDS", 300),
-            redis_url=_env("REDIS_URL", "redis://127.0.0.1:6379/0"),
-            rate_limit_enabled=_bool("RATE_LIMIT_ENABLED", False),
             signup_otp_expire_minutes=_int("SIGNUP_OTP_EXPIRE_MINUTES", 10),
             signup_otp_resend_cooldown_seconds=_int("SIGNUP_OTP_RESEND_COOLDOWN_SECONDS", 60),
             signup_otp_max_resends=_int("SIGNUP_OTP_MAX_RESENDS", 3),
@@ -190,12 +186,11 @@ def validate_auth_config(config: AuthConfig) -> None:
         ("JWT_SECRET", config.jwt_secret),
         ("TOKEN_HMAC_SECRET", config.token_hmac_secret),
         ("AUDIT_HMAC_SECRET", config.audit_hmac_secret),
-        ("RATE_LIMIT_HMAC_SECRET", config.rate_limit_hmac_secret),
     ):
         _validate_secret(name, value, errors)
 
-    if len({config.jwt_secret, config.token_hmac_secret, config.audit_hmac_secret, config.rate_limit_hmac_secret}) != 4:
-        errors.append("JWT, token, audit, and rate-limit secrets must be different")
+    if len({config.jwt_secret, config.token_hmac_secret, config.audit_hmac_secret}) != 3:
+        errors.append("JWT, token, and audit secrets must be different")
 
     if config.jwt_algorithm != "HS256":
         errors.append("JWT_ALGORITHM must be HS256 for this implementation")
@@ -207,8 +202,8 @@ def validate_auth_config(config: AuthConfig) -> None:
         errors.append("COOKIE_SAME_SITE must be lax, strict, or none")
     if config.cookie_same_site == "none" and not config.cookie_secure:
         errors.append("SameSite=None requires COOKIE_SECURE=true")
-    if not config.refresh_cookie_path.startswith("/"):
-        errors.append("REFRESH_COOKIE_PATH must begin with /")
+    if config.refresh_cookie_path != "/api/auth":
+        errors.append("REFRESH_COOKIE_PATH must be /api/auth")
     if "*" in config.cors_allowed_origins:
         errors.append("Wildcard CORS origin is forbidden when credentials are enabled")
     if not config.trusted_hosts:
@@ -240,10 +235,6 @@ def validate_auth_config(config: AuthConfig) -> None:
             if not value:
                 errors.append(f"{name} is required when mail is enabled")
 
-    if config.rate_limit_enabled and not config.redis_url:
-        errors.append("REDIS_URL is required when rate limiting is enabled")
-    if config.app_env == "production" and not config.rate_limit_enabled:
-        errors.append("RATE_LIMIT_ENABLED must be true in production")
     if config.app_env == "production" and not config.mail_enabled:
         errors.append("MAIL_ENABLED must be true in production")
 
