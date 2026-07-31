@@ -75,6 +75,16 @@ def _feature_to_row(
         "nodata_pixel_count": feature.get("nodata_pixel_count", 0),
         "cloud_percentage": feature.get("cloud_percentage", 0),
 
+        "observed_area_m2": feature.get("observed_area_m2"),
+        "valid_area_m2": feature.get("valid_area_m2"),
+        "cloud_area_m2": feature.get("cloud_area_m2"),
+        "shadow_area_m2": feature.get("shadow_area_m2"),
+        "water_area_m2": feature.get("water_area_m2"),
+        "snow_area_m2": feature.get("snow_area_m2"),
+        "nodata_area_m2": feature.get("nodata_area_m2"),
+        "invalid_area_m2": feature.get("invalid_area_m2"),
+        "valid_fraction": feature.get("valid_fraction"),
+
         "mean_blue": feature.get("mean_blue"),
         "mean_green": feature.get("mean_green"),
         "mean_red": feature.get("mean_red"),
@@ -102,6 +112,22 @@ def _feature_to_row(
 
         "ndre": feature.get("ndre"),
         "reci": feature.get("reci"),
+
+        "fvc_proxy": feature.get("fvc_proxy"),
+        "nirv": feature.get("nirv"),
+
+        "optical_resolution_m": feature.get(
+            "optical_resolution_m",
+            10,
+        ),
+        "rededge_swir_resolution_m": feature.get(
+            "rededge_swir_resolution_m",
+            20,
+        ),
+        "processing_version": feature.get(
+            "processing_version",
+            "s2_zonal_v1",
+        ),
 
         "source_assets_used": payload.source_assets_used,
         "parquet_uri": parquet_uri,

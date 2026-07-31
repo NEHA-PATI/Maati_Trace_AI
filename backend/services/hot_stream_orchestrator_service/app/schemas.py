@@ -17,6 +17,8 @@ class FarmAnalysisMaterializeRequest(BaseModel):
     end_date: str = Field(..., description="YYYY-MM-DD")
     max_cloud_cover: float | None = Field(default=30, ge=0, le=100)
     h3_resolution: int = Field(default=12, ge=7, le=12)
+    min_valid_pixel_percentage: float = 1.0
+    max_candidate_scenes: int = 10
 
     provider: str = "planetary_computer"
     collection_id: str = "sentinel-2-l2a"
@@ -25,6 +27,8 @@ class FarmAnalysisMaterializeRequest(BaseModel):
     # It uses a small bbox around farm bbox center to avoid large compute.
     use_tiny_preview_bbox: bool = True
     tiny_bbox_size_deg: float = Field(default=0.00020, gt=0, le=0.01)
+
+    force_refresh: bool = False
 
 
 class FarmAnalysisMaterializeResponse(BaseModel):

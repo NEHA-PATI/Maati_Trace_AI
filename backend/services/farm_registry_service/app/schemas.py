@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class FPOCreateRequest(BaseModel):
+    user_id: UUID | None = None
+    fpo_user_role: str = Field(default="fpo_admin", max_length=50)
     fpo_name: str = Field(..., min_length=2, max_length=200)
     registration_number: str | None = Field(default=None, max_length=100)
     state_name: str = Field(default="Odisha", min_length=2, max_length=100)

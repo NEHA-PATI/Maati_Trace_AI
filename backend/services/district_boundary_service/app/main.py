@@ -1,4 +1,5 @@
-﻿from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
 from shared.logging.json_logging import configure_json_logging
@@ -26,6 +27,14 @@ configure_json_logging(SERVICE_NAME)
 app = FastAPI(
     title="District Boundary Service",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

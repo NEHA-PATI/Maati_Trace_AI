@@ -4,10 +4,15 @@ from typing import Any
 from uuid import UUID
 
 from services.analytics_query_service.app.repository import (
+    get_farm_grid_cells,
     get_history,
     get_latest_aggregate,
     get_latest_features,
+    get_farm_h3_cells,
+    get_persisted_grid_cell_count,
+    get_latest_grid_value_count,
 )
+from services.farm_registry_service.app.repository import get_farm
 
 
 def _signal_from_ndvi(value: float | None) -> str | None:
@@ -80,9 +85,11 @@ def build_latest_response(farm_id: UUID) -> dict[str, Any] | None:
     if aggregate is None:
         return None
 
-    features = get_latest_features(farm_id)
+    features = get_latest_features(farm_id, usable_only=True)
 
     aggregate["features"] = features
+    aggregate["analysis_mode"] = "latest_usable"
+    aggregate["usable_scene_max_cloud_percentage"] = 40.0
 
     return aggregate
 
@@ -99,11 +106,19 @@ def build_history_response(farm_id: UUID, limit: int) -> dict[str, Any]:
 
 def build_summary_response(farm_id: UUID) -> dict[str, Any]:
     aggregate = get_latest_aggregate(farm_id)
+    farm = get_farm(farm_id)
+    farm_h3_cells = get_farm_h3_cells(farm_id)
+    total_farm_h3_cells = int(farm.get("h3_cell_count") or len(farm.get("h3_cells") or []) or len(farm_h3_cells) or 0) if farm else len(farm_h3_cells)
+
+    persisted_grid_cell_count = get_persisted_grid_cell_count(farm_id)
+    latest_grid_value_count = get_latest_grid_value_count(farm_id)
 
     if aggregate is None:
         return {
             "farm_id": farm_id,
-            "has_analysis": False,
+            "has_analysis": True,
+            "analysis_mode": "latest_usable",
+            "usable_scene_max_cloud_percentage": 40.0,
             "latest_snapshot_date": None,
             "latest_scene_id": None,
             "vegetation_signal": None,
@@ -114,11 +129,46 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
             "avg_ndmi": None,
             "avg_bsi": None,
             "avg_cloud_percentage": None,
+            "weighted_ndvi": None,
+            "weighted_ndmi": None,
+            "weighted_ndwi": None,
+            "weighted_bsi": None,
+            "weighted_evi": None,
+            "weighted_savi": None,
+            "weighted_msi": None,
+            "weighted_nbr": None,
+            "weighted_ndre": None,
+            "weighted_surface_temp_c": None,
+            "valid_pixel_percentage": None,
+            "total_h3_cells": total_farm_h3_cells,
+            "total_farm_h3_cells": total_farm_h3_cells,
+            "processed_h3_cells": 0,
+            "latest_processed_h3_cells": 0,
+            "total_grid_cells": persisted_grid_cell_count,
+            "grid_cells_with_values": latest_grid_value_count,
+            "analysis_mode": "latest_usable",
+            "usable_scene_max_cloud_percentage": 40.0,
         }
+
+    features = get_latest_features(farm_id, usable_only=True)
+    valid_weights = [max(1.0, float(item.get("valid_pixel_count") or item.get("pixel_count") or 0)) for item in features]
+    weight_sum = sum(valid_weights) or 1.0
+
+    def wavg(field: str) -> float | None:
+        values = [item.get(field) for item in features if item.get(field) is not None]
+        if not values:
+            return None
+        return round(sum(float(item.get(field) or 0) * valid_weights[index] for index, item in enumerate(features) if item.get(field) is not None) / weight_sum, 6)
+
+    surface_temp = None
+    if features:
+        surface_temp = round(sum((float(item.get("mean_swir16") or 0) + float(item.get("mean_swir22") or 0)) / 2.0 * valid_weights[index] for index, item in enumerate(features)) / weight_sum, 6)
 
     return {
         "farm_id": farm_id,
         "has_analysis": True,
+        "analysis_mode": "latest_usable",
+        "usable_scene_max_cloud_percentage": 40.0,
         "latest_snapshot_date": aggregate["snapshot_date"],
         "latest_scene_id": aggregate["scene_id"],
         "vegetation_signal": _signal_from_ndvi(aggregate.get("avg_ndvi")),
@@ -129,4 +179,21 @@ def build_summary_response(farm_id: UUID) -> dict[str, Any]:
         "avg_ndmi": aggregate.get("avg_ndmi"),
         "avg_bsi": aggregate.get("avg_bsi"),
         "avg_cloud_percentage": aggregate.get("avg_cloud_percentage"),
+        "weighted_ndvi": wavg("ndvi"),
+        "weighted_ndmi": wavg("ndmi"),
+        "weighted_ndwi": wavg("ndwi"),
+        "weighted_bsi": wavg("bsi"),
+        "weighted_evi": wavg("evi"),
+        "weighted_savi": wavg("savi"),
+        "weighted_msi": wavg("msi"),
+        "weighted_nbr": wavg("nbr"),
+        "weighted_ndre": wavg("ndre"),
+        "weighted_surface_temp_c": surface_temp,
+        "valid_pixel_percentage": round(sum(float(item.get("valid_pixel_count") or 0) for item in features) / max(1.0, sum(float(item.get("pixel_count") or 0) for item in features)) * 100.0, 6) if features else None,
+        "total_h3_cells": total_farm_h3_cells,
+        "total_farm_h3_cells": total_farm_h3_cells,
+        "processed_h3_cells": len({item.get("h3_index") for item in features if item.get("h3_index") is not None}),
+        "latest_processed_h3_cells": len({item.get("h3_index") for item in features if item.get("h3_index") is not None}),
+        "total_grid_cells": persisted_grid_cell_count,
+        "grid_cells_with_values": latest_grid_value_count,
     }
