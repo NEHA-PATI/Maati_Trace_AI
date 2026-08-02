@@ -24,6 +24,7 @@ import {
 import { farmerProfileSchema } from "@/features/profile/profileSchemas";
 import { useProfileLocations } from "@/features/profile/hooks/useProfileLocations";
 import { ProfileControls } from "@/features/profile/components/ProfileControls";
+import { ProfilePlansSection } from "@/features/profile/components/ProfilePlansSection";
 import {
   ProfileCheckbox,
   ProfileGrid,
@@ -585,6 +586,8 @@ export function FarmerProfileForm({
           />
         </div>
       </ProfileSection>
+
+      <ProfilePlansSection />
 
       <ProfileSection
         id="export"

@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { motion as Motion } from "framer-motion";
 import {
   CheckCircle2,
   Download,
@@ -33,21 +34,36 @@ export function ProfileControls({
   }, [savedAt]);
 
   return (
-    <div className="mt-fade-up sticky bottom-4 z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 md:flex-row md:items-center md:justify-between">
+    <Motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.4,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 md:flex-row md:items-center md:justify-between"
+    >
       <div className="flex items-center gap-3">
         {justSaved ? (
-          <span
-            className="mt-pop flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--mt-forest-soft)]"
+          <Motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{
+              type: "spring",
+              stiffness: 500,
+              damping: 25,
+            }}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--mt-forest-soft)]"
             aria-hidden="true"
           >
             <CheckCircle2 className="h-5 w-5 text-[color:var(--mt-forest)]" />
-          </span>
+          </Motion.span>
         ) : null}
         <div>
           <p className="mt-font-display text-sm font-semibold text-slate-950">
             {justSaved
-            ? "Profile saved"
-            : "Review your changes"}
+              ? "Profile saved"
+              : "Review your changes"}
           </p>
           <p className="text-xs leading-5 text-slate-500">
             Only changed editable fields are sent to the backend.
@@ -75,7 +91,7 @@ export function ProfileControls({
         <button
           type="submit"
           disabled={saving}
-          className="relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-2xl bg-[color:var(--mt-forest-deep)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(18,51,31,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color:var(--mt-forest)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-70"
+          className="relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-2xl bg-[color:var(--mt-forest-deep)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(16,185,129,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color:var(--mt-forest)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-70"
         >
           {saving ? (
             <span
@@ -89,6 +105,6 @@ export function ProfileControls({
             : "Save profile"}
         </button>
       </div>
-    </div>
+    </Motion.div>
   );
 }

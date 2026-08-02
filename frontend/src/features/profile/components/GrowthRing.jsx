@@ -49,7 +49,7 @@ export function GrowthRing({
           cy={SIZE / 2}
           r={RADIUS}
           fill="none"
-          stroke="rgba(255,255,255,0.18)"
+          stroke="rgb(16 185 129 / 15%)"
           strokeWidth={STROKE}
         />
         <circle
@@ -57,7 +57,7 @@ export function GrowthRing({
           cy={SIZE / 2}
           r={RADIUS}
           fill="none"
-          stroke="#c1852f"
+          stroke="#10b981"
           strokeWidth={STROKE}
           strokeLinecap="round"
           strokeDasharray={
@@ -65,14 +65,16 @@ export function GrowthRing({
           }
           strokeDashoffset={offset}
           style={{
+            filter:
+              "drop-shadow(0 0 4px rgba(16,185,129,0.4))",
             transition:
-              "stroke-dashoffset 1.1s cubic-bezier(0.16,1,0.3,1)",
+              "stroke-dashoffset 1.2s cubic-bezier(0.16,1,0.3,1)",
           }}
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center">
-        <Sprout className="h-3.5 w-3.5 text-lime-200/90" />
-        <span className="mt-font-display text-lg font-semibold leading-none text-white">
+        <Sprout className="h-3.5 w-3.5 text-emerald-500" />
+        <span className="mt-font-display mt-0.5 text-lg font-semibold leading-none text-slate-900">
           {clamped}%
         </span>
       </div>

@@ -1,13 +1,19 @@
+import { motion as Motion } from "framer-motion";
 import {
   AlertTriangle,
-  Sprout,
   ShieldAlert,
+  Sprout,
 } from "lucide-react";
 
 export function ProfileLoading() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-[color:var(--mt-paper)] px-4">
-      <div className="mt-fade-up w-full max-w-sm rounded-[1.5rem] border border-slate-200 bg-white p-6 text-center shadow-sm">
+      <Motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-sm rounded-[1.5rem] border border-slate-200 bg-white p-6 text-center shadow-sm"
+      >
         <span className="relative mx-auto flex h-12 w-12 items-center justify-center">
           <span
             className="absolute inset-0 animate-ping rounded-full bg-[color:var(--mt-forest-soft)]"
@@ -20,16 +26,15 @@ export function ProfileLoading() {
         <p className="mt-font-display mt-4 text-base font-semibold text-slate-800">
           Loading your profile...
         </p>
-
         <div
           className="mt-5 space-y-2.5"
           aria-hidden="true"
         >
-          <div className="mt-shimmer h-3 w-full rounded-full bg-slate-100" />
-          <div className="mt-shimmer h-3 w-4/5 rounded-full bg-slate-100" />
-          <div className="mt-shimmer h-3 w-2/3 rounded-full bg-slate-100" />
+          <div className="mt-shimmer relative h-3 w-full overflow-hidden rounded-full bg-slate-100" />
+          <div className="mt-shimmer relative h-3 w-4/5 overflow-hidden rounded-full bg-slate-100" />
+          <div className="mt-shimmer relative h-3 w-2/3 overflow-hidden rounded-full bg-slate-100" />
         </div>
-      </div>
+      </Motion.div>
     </div>
   );
 }
@@ -40,7 +45,12 @@ export function ProfileLoadError({
 }) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-[color:var(--mt-paper)] px-4">
-      <div className="mt-scale-in max-w-md rounded-[1.5rem] border border-rose-100 bg-white p-6 text-center shadow-sm">
+      <Motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4 }}
+        className="max-w-md rounded-[1.5rem] border border-rose-100 bg-white p-6 text-center shadow-sm"
+      >
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--mt-rose-soft)]">
           <AlertTriangle className="h-7 w-7 text-[color:var(--mt-rose)]" />
         </span>
@@ -58,7 +68,7 @@ export function ProfileLoadError({
         >
           Retry
         </button>
-      </div>
+      </Motion.div>
     </div>
   );
 }
@@ -68,7 +78,12 @@ export function UnsupportedProfileRole({
 }) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-[color:var(--mt-paper)] px-4">
-      <div className="mt-scale-in max-w-md rounded-[1.5rem] border border-amber-100 bg-white p-6 text-center shadow-sm">
+      <Motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4 }}
+        className="max-w-md rounded-[1.5rem] border border-amber-100 bg-white p-6 text-center shadow-sm"
+      >
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--mt-harvest-soft)]">
           <ShieldAlert className="h-7 w-7 text-[color:var(--mt-harvest)]" />
         </span>
@@ -81,7 +96,7 @@ export function UnsupportedProfileRole({
         <p className="mt-font-mono mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500">
           Role: {role || "unknown"}
         </p>
-      </div>
+      </Motion.div>
     </div>
   );
 }

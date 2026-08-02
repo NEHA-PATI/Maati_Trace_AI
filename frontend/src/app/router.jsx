@@ -8,6 +8,7 @@ import RegisterPage from "@/features/auth/pages/RegisterPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
+import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
 
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
   { path: "/request-fpo-access", element: <FpoAccessRequestPage /> },
   { path: "/use-cases", element: <UseCases /> },
   { path: "/our-method", element: <OurMethod /> },
+  { path: "/plans", element: <PlansPage /> },
 
   { element: <ProtectedRoute permission="adminDashboard" />, children: [
     { path: "/admin", element: <AdminDashboard /> },

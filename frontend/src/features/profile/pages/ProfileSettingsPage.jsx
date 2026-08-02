@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { motion as Motion } from "framer-motion";
 import {
   Building2,
   Check,
@@ -10,6 +11,7 @@ import {
   MapPin,
   ShieldCheck,
   Shield,
+  Sparkles,
   User,
   Wheat,
 } from "lucide-react";
@@ -57,6 +59,11 @@ const FARMER_NAV = [
     icon: Check,
   },
   {
+    id: "plan",
+    label: "Your Plan",
+    icon: Sparkles,
+  },
+  {
     id: "export",
     label: "Export",
     icon: Download,
@@ -90,6 +97,11 @@ const FPO_NAV = [
     icon: Shield,
   },
   {
+    id: "plan",
+    label: "Your Plan",
+    icon: Sparkles,
+  },
+  {
     id: "export",
     label: "Export",
     icon: FileText,
@@ -101,33 +113,43 @@ function ProfileMissingFields({
 }) {
   if (!missingFields.length) {
     return (
-      <div className="mt-fade-up flex items-center gap-3 rounded-[1.25rem] border border-emerald-100 bg-[color:var(--mt-forest-soft)] p-4 text-sm font-semibold text-emerald-900">
+      <Motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-3 rounded-[1.25rem] border border-emerald-100 bg-[color:var(--mt-forest-soft)] p-4 text-sm font-semibold text-emerald-900"
+      >
         <ShieldCheck className="h-5 w-5 shrink-0 text-[color:var(--mt-forest)]" />
         Required profile fields are complete. The percentage can still
         increase as optional details are filled.
-      </div>
+      </Motion.div>
     );
   }
 
   return (
-    <div className="mt-fade-up rounded-[1.25rem] border border-amber-200 bg-[color:var(--mt-harvest-soft)] p-4 text-sm text-amber-950">
+    <Motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-[1.25rem] border border-amber-200 bg-[color:var(--mt-harvest-soft)] p-4 text-sm text-amber-950"
+    >
       <p className="mt-font-display font-semibold">
         Required fields still missing
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {missingFields.map((field, index) => (
-          <span
+          <Motion.span
             key={field}
-            style={{
-              "--mt-d": `${index * 40}ms`,
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{
+              delay: index * 0.05,
             }}
-            className="mt-scale-in rounded-full bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm"
+            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm"
           >
             {readableFieldName(field)}
-          </span>
+          </Motion.span>
         ))}
       </div>
-    </div>
+    </Motion.div>
   );
 }
 
@@ -237,12 +259,15 @@ export function ProfileSettingsPage() {
                 onSelect={scrollTo}
               />
               <div
-                className="mt-fade-up mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-500 shadow-sm"
+                className="mt-fade-up mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-500 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
                 style={{ "--mt-d": "120ms" }}
               >
-                Internal onboarding checks use only the core required
-                fields. The completion percentage still reflects a wider
-                optional profile-fill score.
+                <p className="mt-font-mono mb-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  How completion works
+                </p>
+                Onboarding checks use only the core required fields. The
+                completion percentage reflects a wider optional
+                profile-fill score.
               </div>
             </div>
 

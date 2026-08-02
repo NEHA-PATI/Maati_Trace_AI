@@ -25,6 +25,7 @@ import {
 import { fpoProfileSchema } from "@/features/profile/profileSchemas";
 import { useProfileLocations } from "@/features/profile/hooks/useProfileLocations";
 import { ProfileControls } from "@/features/profile/components/ProfileControls";
+import { ProfilePlansSection } from "@/features/profile/components/ProfilePlansSection";
 import {
   ProfileGrid,
   ProfileInput,
@@ -602,6 +603,8 @@ export function FpoProfileForm({
           />
         </ProfileGrid>
       </ProfileSection>
+
+      <ProfilePlansSection />
 
       <ProfileSection
         id="export"

@@ -1,25 +1,12 @@
+import { motion as Motion } from "framer-motion";
 import {
+  BadgeCheck,
   Building2,
-  CheckCircle2,
   Clock3,
-  User,
+  UserRound,
 } from "lucide-react";
 
 import { GrowthRing } from "@/features/profile/components/GrowthRing";
-
-function statusCopy(status) {
-  return status === "completed"
-    ? {
-      label: "Completed",
-      icon: CheckCircle2,
-      tone: "border-emerald-200/60 bg-white text-emerald-800",
-    }
-    : {
-      label: "Pending",
-      icon: Clock3,
-      tone: "border-amber-200/60 bg-white text-amber-800",
-    };
-}
 
 export function ProfileHeader({
   user,
@@ -31,10 +18,15 @@ export function ProfileHeader({
   const isFpo = profileType === "fpo";
   const AvatarIcon = isFpo
     ? Building2
-    : User;
-  const status =
-    statusCopy(onboardingStatus);
-  const StatusIcon = status.icon;
+    : UserRound;
+  const isCompleted =
+    onboardingStatus === "completed";
+  const StatusIcon = isCompleted
+    ? BadgeCheck
+    : Clock3;
+  const statusLabel = isCompleted
+    ? "Completed"
+    : "Pending";
 
   const title = isFpo
     ? profile?.fpo_name
@@ -49,74 +41,98 @@ export function ProfileHeader({
     : user?.email;
 
   return (
-    <div className="mt-fade-up overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.08)]">
-      <div className="relative h-40 overflow-hidden bg-[linear-gradient(135deg,#12331f_0%,#1e5c3f_45%,#6b7f34_100%)] md:h-36">
-        <div
-          className="absolute inset-0 opacity-[0.16] [background-image:radial-gradient(rgba(255,255,255,0.9)_1px,transparent_1px)] [background-size:22px_22px]"
-          aria-hidden="true"
-        />
-        <div
-          className="mt-drift absolute -right-14 -top-20 h-56 w-56 rounded-full bg-lime-200/20 blur-2xl"
-          aria-hidden="true"
-        />
-        <div
-          className="absolute -left-10 bottom-[-4rem] h-40 w-40 rounded-full bg-amber-300/10 blur-2xl"
-          aria-hidden="true"
-        />
+    <Motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/70 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl"
+    >
+      <div
+        className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(16,185,129,0.12),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(20,184,166,0.1),transparent_45%)]"
+        aria-hidden="true"
+      />
+      <div
+        className="mt-drift absolute -right-10 -top-10 h-48 w-48 rounded-full bg-emerald-200/25 blur-3xl"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute -bottom-16 -left-12 h-40 w-40 rounded-full bg-teal-200/20 blur-3xl"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-0 opacity-[0.04] [background-image:radial-gradient(#059669_1px,transparent_1px)] [background-size:20px_20px]"
+        aria-hidden="true"
+      />
 
-        <div className="absolute right-6 top-6 hidden md:block">
-          <div
-            className="mt-scale-in"
-            style={{ "--mt-d": "160ms" }}
-          >
-            <GrowthRing
-              value={completionPercentage}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="px-6 pb-6">
-        <div className="-mt-12 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div className="flex items-end gap-4">
-            <div className="mt-scale-in flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-[radial-gradient(circle_at_30%_20%,#eef4ea,#dfe9dc)] shadow-lg">
-              <AvatarIcon className="h-9 w-9 text-[color:var(--mt-forest)]" />
+      <div className="relative p-6">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative shrink-0">
+              <div
+                className="absolute inset-0 rounded-2xl bg-emerald-400/30 blur-lg"
+                aria-hidden="true"
+              />
+              <Motion.div
+                initial={{ scale: 0.7, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{
+                  delay: 0.15,
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 22,
+                }}
+                className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_8px_24px_rgba(16,185,129,0.35)]"
+              >
+                <AvatarIcon className="h-8 w-8 text-white" />
+              </Motion.div>
             </div>
-            <div className="pb-1">
-              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--mt-harvest)]">
+            <div>
+              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-600">
                 Profile settings
               </p>
-              <h1 className="mt-font-display mt-1 text-[1.9rem] font-semibold leading-[1.1] tracking-tight text-slate-950">
+              <h1 className="mt-font-display text-2xl font-semibold leading-tight text-slate-900">
                 {title}
               </h1>
-              <p className="mt-1.5 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-slate-500">
                 {subtitle}
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden">
-              <div className="relative">
-                <GrowthRing
-                  value={completionPercentage}
-                />
-              </div>
-            </div>
-            <div className="hidden rounded-2xl border border-slate-200 bg-white px-4 py-3 md:block">
-              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Completion
-              </p>
-              <p className="mt-font-display mt-1 text-xl font-semibold text-slate-950">
-                {completionPercentage}%
-              </p>
-            </div>
-            <div className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition-transform duration-300 hover:-translate-y-0.5 ${status.tone}`}>
-              <StatusIcon className="h-4 w-4" />
-              {status.label}
+          <div className="flex items-center gap-4">
+            <GrowthRing
+              value={completionPercentage}
+            />
+            <div
+              className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 ${
+                isCompleted
+                  ? "border-emerald-100 bg-emerald-50/80"
+                  : "border-amber-100 bg-amber-50/80"
+              }`}
+            >
+              <StatusIcon
+                className={`h-4 w-4 ${
+                  isCompleted
+                    ? "text-emerald-600"
+                    : "text-amber-600"
+                }`}
+              />
+              <span
+                className={`text-sm font-bold ${
+                  isCompleted
+                    ? "text-emerald-700"
+                    : "text-amber-700"
+                }`}
+              >
+                {statusLabel}
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Motion.div>
   );
 }

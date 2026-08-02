@@ -48,7 +48,7 @@ export function FieldLabel({
 }
 
 const fieldSurface =
-  "w-full rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition-all duration-200 ease-out placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-[color:var(--mt-forest)] focus:bg-white focus:shadow-[0_0_0_4px_rgba(30,92,63,0.1)] hover:border-slate-300";
+  "w-full rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition-all duration-200 ease-out placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-[color:var(--mt-forest)] focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.12)] hover:border-slate-300";
 
 export const ProfileInput = forwardRef(
   function ProfileInput(
@@ -233,20 +233,20 @@ export function ProfileSection({
     <section
       id={id}
       ref={ref}
-      className={`group/section scroll-mt-24 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md ${
+      className={`group/section scroll-mt-24 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition-all duration-300 hover:shadow-[0_18px_50px_rgba(15,23,42,0.08)] ${
         visible
           ? "mt-reveal mt-reveal-in"
           : "mt-reveal"
       }`}
     >
-      <div className="relative border-b border-slate-100 bg-slate-50 px-5 py-4">
+      <div className="relative border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-4">
         <span
-          className="absolute inset-y-0 left-0 w-1 bg-[linear-gradient(180deg,var(--mt-forest),var(--mt-harvest))] opacity-0 transition-opacity duration-300 group-hover/section:opacity-100"
+          className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--mt-forest)] to-[color:var(--mt-harvest)] opacity-0 transition-opacity duration-300 group-hover/section:opacity-100"
           aria-hidden="true"
         />
         <div className="flex items-center gap-3">
           {Icon ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--mt-forest-deep)] transition-transform duration-300 group-hover/section:scale-105">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--mt-forest-deep)] shadow-[0_6px_16px_rgba(16,185,129,0.2)] transition-transform duration-300 group-hover/section:scale-105">
               <Icon className="h-5 w-5 text-white" />
             </div>
           ) : null}
