@@ -1,1 +1,9 @@
-﻿-r ../../requirements-base.txt
+-r ../../requirements-base.txt
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+httpx
+pydantic
+email-validator
+pytest

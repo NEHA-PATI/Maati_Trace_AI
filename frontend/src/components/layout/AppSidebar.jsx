@@ -8,7 +8,7 @@ export default function AppSidebar() {
   const user = getStoredUser();
   const items = getSidebarItemsForRole(user?.role);
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-card/80 px-3 py-4 lg:block">
+    <aside className="fixed bottom-0 left-0 top-16 hidden w-64 shrink-0 overflow-hidden border-r border-border bg-card/80 px-3 py-4 lg:block">
       <nav className="space-y-1">
         {items.map((item) => {
           const active = location.pathname === item.to;
