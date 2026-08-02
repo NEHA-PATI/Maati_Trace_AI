@@ -8,6 +8,7 @@ import RegisterPage from "@/features/auth/pages/RegisterPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
+import { ProfileSettingsPage } from "@/features/profile";
 
 import AdminDashboard from "@/pages/AdminDashboard";
 import BulkUpload from "@/pages/BulkUpload";
@@ -19,7 +20,6 @@ import LandIntelligence from "@/pages/LandIntelligence";
 import MyFpo from "@/pages/MyFpo";
 import Notifications from "@/pages/Notifications";
 import OurMethod from "@/pages/OurMethod";
-import Settings from "@/pages/Settings";
 import UseCases from "@/pages/UseCases";
 
 export const router = createBrowserRouter([
@@ -50,6 +50,6 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="farmRegister" />, children: [{ path: "/farm-register", element: <FarmRegister /> }] },
   { element: <ProtectedRoute permission="bulkUpload" />, children: [{ path: "/bulk-upload", element: <BulkUpload /> }] },
   { element: <ProtectedRoute permission="notifications" />, children: [{ path: "/notifications", element: <Notifications /> }] },
-  { element: <ProtectedRoute permission="settings" />, children: [{ path: "/settings", element: <Settings /> }] },
+  { element: <ProtectedRoute permission="settings" />, children: [{ path: "/settings", element: <ProfileSettingsPage /> }] },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);

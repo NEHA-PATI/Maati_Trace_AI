@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     boundary_index_service_url: str = "http://localhost:8004"
     district_boundary_service_url: str = "http://localhost:8005"
     farm_registry_service_url: str = "http://localhost:8006"
+    profile_service_url: str = (
+        "http://localhost:8003"
+    )
     stac_catalog_service_url: str = "http://localhost:8007"
     raster_processor_service_url: str = "http://localhost:8008"
     lakehouse_writer_service_url: str = "http://localhost:8009"

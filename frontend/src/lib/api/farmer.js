@@ -4,8 +4,6 @@ export const getFarmer = (farmerId) => farmRegistryClient.request(`/v1/farmers/$
 export const getFarmerSummary = (farmerId) => farmRegistryClient.request(`/v1/farmers/${farmerId}/summary`);
 export const getFarmerFarms = (farmerId) => farmRegistryClient.request(`/v1/farmers/${farmerId}/farms`);
 export const createFarmer = (payload) => farmRegistryClient.request("/v1/farmers", { method: "POST", body: JSON.stringify(payload) });
-export const updateMyFarmerProfile = (payload) => farmRegistryClient.request("/v1/farmers/me/profile", { method: "PATCH", body: JSON.stringify(payload) });
-export const exportMyFarmerProfile = () => farmRegistryClient.request("/v1/farmers/me/profile-export");
 export const uploadFarmerDocument = async (file, documentType) => {
   void file;
   void documentType;
