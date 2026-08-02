@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -14,7 +15,7 @@ from services.auth_service.app.config_validation import get_auth_config
 from services.auth_service.app.dependencies import RequestContext
 from services.auth_service.app.errors import AuthError
 from services.auth_service.app.google_oauth import verify_google_id_token
-from services.auth_service.app.logging_context import get_correlation_id, get_logger
+from services.auth_service.app.logging_context import get_correlation_id, get_logger, log_event
 from services.auth_service.app.mail import queue_email
 from services.auth_service.app.password_breach import assert_password_not_breached
 from services.auth_service.app.repository import (
@@ -67,6 +68,83 @@ from services.auth_service.app.schemas import (
     SignupStartRequest,
 )
 logger = get_logger(__name__)
+
+
+def _database_error_details(exc: Exception) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "exception_type": type(exc).__name__,
+        "message": str(exc),
+    }
+    orig = getattr(exc, "orig", None)
+    if orig is None:
+        return details
+
+    details["orig_type"] = type(orig).__name__
+    details["orig_message"] = str(orig)
+
+    for attr in ("pgcode", "sqlstate"):
+        value = getattr(orig, attr, None)
+        if value:
+            details[attr] = value
+
+    diag = getattr(orig, "diag", None)
+    if diag is None:
+        return details
+
+    for attr in (
+        "constraint_name",
+        "table_name",
+        "column_name",
+        "schema_name",
+        "message_primary",
+        "message_detail",
+        "message_hint",
+    ):
+        value = getattr(diag, attr, None)
+        if value:
+            details[attr] = value
+
+    return details
+
+
+def _database_error_summary(exc: Exception) -> str:
+    details = _database_error_details(exc)
+    parts = [
+        details.get("exception_type"),
+        details.get("pgcode") or details.get("sqlstate"),
+        details.get("table_name"),
+        details.get("column_name"),
+        details.get("constraint_name"),
+        details.get("message_primary"),
+    ]
+    return " | ".join(str(part) for part in parts if part)
+
+
+def _signup_integrity_error(stage: str, exc: IntegrityError) -> AuthError:
+    details = _database_error_details(exc)
+    log_event(
+        logger,
+        logging.ERROR,
+        "signup_complete_db_error",
+        stage=stage,
+        database_error=details,
+    )
+
+    pgcode = details.get("pgcode") or details.get("sqlstate")
+    if stage == "create_user" and pgcode == "23505":
+        return AuthError(
+            "SIGNUP_UNAVAILABLE",
+            "An account cannot be created with these details. Try signing in or resetting the password.",
+            409,
+            internal_message=_database_error_summary(exc),
+        )
+
+    return AuthError(
+        "SIGNUP_COMPLETE_FAILED",
+        "Signup could not be completed. Try again.",
+        500,
+        internal_message=_database_error_summary(exc),
+    )
 
 
 from services.auth_service.app.security import (
@@ -422,22 +500,28 @@ def complete_signup(signup_session_id: UUID | str, context: RequestContext) -> I
             if session["otp_expires_at"] <= now:
                 raise AuthError("OTP_EXPIRED", "The verification code has expired.", 400)
 
-            user = create_user(
-                conn,
-                full_name=session["full_name"],
-                email=session["email"],
-                phone_number=session["phone_number"],
-                password_hash=session["password_hash"],
-                role="farmer",
-                is_verified=True,
-            )
+            try:
+                user = create_user(
+                    conn,
+                    full_name=session["full_name"],
+                    email=session["email"],
+                    phone_number=session["phone_number"],
+                    password_hash=session["password_hash"],
+                    role="farmer",
+                    is_verified=True,
+                )
+            except IntegrityError as exc:
+                raise _signup_integrity_error("create_user", exc) from exc
 
-            create_farmer_profile_stub(
-                conn,
-                user_id=user["user_id"],
-                full_name=user["full_name"],
-                phone_number=user.get("phone_number"),
-            )
+            try:
+                create_farmer_profile_stub(
+                    conn,
+                    user_id=user["user_id"],
+                    full_name=user["full_name"],
+                    phone_number=user.get("phone_number"),
+                )
+            except IntegrityError as exc:
+                raise _signup_integrity_error("create_farmer_profile_stub", exc) from exc
             mark_signup_completed(conn, signup_session_id)
             mark_user_login(conn, user["user_id"])
             issued = _issue_session(conn, user, context)
@@ -457,14 +541,21 @@ def complete_signup(signup_session_id: UUID | str, context: RequestContext) -> I
     except AuthError:
         raise
     except IntegrityError as exc:
-        raise AuthError(
-            "SIGNUP_UNAVAILABLE",
-            "An account cannot be created with these details. Try signing in or resetting the password.",
-            409,
-            internal_message=str(exc),
-        ) from exc
+        raise _signup_integrity_error("signup_complete", exc) from exc
     except SQLAlchemyError as exc:
-        raise AuthError("SIGNUP_COMPLETE_FAILED", "Signup could not be completed. Try again.", 500, str(exc)) from exc
+        log_event(
+            logger,
+            logging.ERROR,
+            "signup_complete_db_error",
+            stage="signup_complete",
+            database_error=_database_error_details(exc),
+        )
+        raise AuthError(
+            "SIGNUP_COMPLETE_FAILED",
+            "Signup could not be completed. Try again.",
+            500,
+            internal_message=_database_error_summary(exc),
+        ) from exc
 
 
 def _record_login_failure(identifier: str, context: RequestContext, outcome: str) -> None:

@@ -1,0 +1,265 @@
+# Production deployment for all MaatiTrace backend microservices.
+#
+# Prereqs:
+#   1. cp .env.production.example .env   (then fill in RDS/S3/JWT values)
+#   2. docker compose build
+#   3. docker compose up -d
+#
+# Topology:
+#   client -> nginx (80/443) -> api_gateway_service (8000, internal) -> the
+#   other 14 internal services, all reachable only on the maatitrace_network.
+#   Postgres is external (AWS RDS) — no DB container here.
+
+networks:
+  maatitrace_network:
+    driver: bridge
+
+x-service-defaults: &service-defaults
+  env_file:
+    - .env
+  networks:
+    - maatitrace_network
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ---------------------------------------------------------------------
+  # Public entry point
+  # ---------------------------------------------------------------------
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro
+  #     - ./nginx/certs:/etc/nginx/certs:ro
+  #   networks:
+  #     - maatitrace_network
+  #   depends_on:
+  #     api_gateway_service:
+  #       condition: service_healthy
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+  api_gateway_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: api_gateway_service
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      auth_service:
+        condition: service_healthy
+      district_boundary_service:
+        condition: service_healthy
+      boundary_index_service:
+        condition: service_healthy
+      farm_registry_service:
+        condition: service_healthy
+      stac_catalog_service:
+        condition: service_healthy
+      raster_processor_service:
+        condition: service_healthy
+      lakehouse_writer_service:
+        condition: service_healthy
+      hot_stream_orchestrator_service:
+        condition: service_healthy
+      analytics_query_service:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------
+  # Core domain services
+  # ---------------------------------------------------------------------
+  auth_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: auth_service
+    ports:
+      - "127.0.0.1:8002:8000"
+
+  boundary_index_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: boundary_index_service
+    ports:
+      - "127.0.0.1:8004:8000"
+
+  district_boundary_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: district_boundary_service
+    ports:
+      - "127.0.0.1:8005:8000"
+
+  farm_registry_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: farm_registry_service
+    ports:
+      - "127.0.0.1:8006:8000"
+    depends_on:
+      auth_service:
+        condition: service_healthy
+      district_boundary_service:
+        condition: service_healthy
+      boundary_index_service:
+        condition: service_healthy
+
+  stac_catalog_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: stac_catalog_service
+    ports:
+      - "127.0.0.1:8007:8000"
+
+  raster_processor_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: raster_processor_service
+    environment:
+      GUNICORN_WORKERS: 1
+    ports:
+      - "127.0.0.1:8008:8000"
+    depends_on:
+      stac_catalog_service:
+        condition: service_healthy
+
+  lakehouse_writer_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: lakehouse_writer_service
+    environment:
+      GUNICORN_WORKERS: 1
+    # STORAGE_MODE=local writes under the container's ephemeral filesystem
+    # and will not persist across restarts; use STORAGE_MODE=s3 (the
+    # .env.production.example default) for real production data.
+    ports:
+      - "127.0.0.1:8009:8000"
+
+  hot_stream_orchestrator_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: hot_stream_orchestrator_service
+    ports:
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      farm_registry_service:
+        condition: service_healthy
+      raster_processor_service:
+        condition: service_healthy
+      lakehouse_writer_service:
+        condition: service_healthy
+
+  analytics_query_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: analytics_query_service
+    ports:
+      - "127.0.0.1:8011:8000"
+
+  # ---------------------------------------------------------------------
+  # Scaffold / in-progress services
+  # ---------------------------------------------------------------------
+  dashboard_bff_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: dashboard_bff_service
+    ports:
+      - "127.0.0.1:8012:8000"
+
+  cold_batch_orchestrator_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: cold_batch_orchestrator_service
+    ports:
+      - "127.0.0.1:8013:8000"
+
+  ml_inference_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: ml_inference_service
+    environment:
+      GUNICORN_WORKERS: 1
+    ports:
+      - "127.0.0.1:8014:8000"
+
+  ml_training_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: ml_training_service
+    environment:
+      GUNICORN_WORKERS: 1
+    ports:
+      - "127.0.0.1:8015:8000"
+
+  observability_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: observability_service
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  alert_service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: alert_service
+    ports:
+      - "127.0.0.1:8003:8000"

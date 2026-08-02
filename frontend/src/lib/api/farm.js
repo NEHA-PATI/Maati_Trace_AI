@@ -18,7 +18,7 @@ export function getFarms(params = {}) {
 export function registerFarm(payload) {
   return farmRegistryClient.request("/v1/farms/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: payload,
   });
 }
 
@@ -29,7 +29,7 @@ export function getFarmsByFarmer(farmerId) {
 export function previewH3(payload) {
   return boundaryIndexClient.request("/v1/h3/preview", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: payload,
   });
 }
 

@@ -90,6 +90,7 @@ ALTER TABLE refresh_tokens
     ADD COLUMN IF NOT EXISTS session_id uuid,
     ADD COLUMN IF NOT EXISTS parent_refresh_token_id uuid,
     ADD COLUMN IF NOT EXISTS replaced_by_refresh_token_id uuid,
+    ADD COLUMN IF NOT EXISTS replaced_by_token_hash text,
     ADD COLUMN IF NOT EXISTS device_id_hash text,
     ADD COLUMN IF NOT EXISTS issued_ip inet,
     ADD COLUMN IF NOT EXISTS last_used_ip inet,

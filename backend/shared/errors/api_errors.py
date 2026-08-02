@@ -18,6 +18,18 @@ def unauthorized(message: str = "Unauthorized") -> HTTPException:
         detail={"code": "UNAUTHORIZED", "message": message},
     )
 
+# def unauthorized(
+#     message: str = "Unauthorized",
+#     code: str = "UNAUTHORIZED",
+# ) -> HTTPException:
+#     return HTTPException(
+#         status_code=401,
+#         detail={
+#             "code": code,
+#             "message": message,
+#         },
+#     )
+
 
 def forbidden(message: str = "Forbidden") -> HTTPException:
     return HTTPException(

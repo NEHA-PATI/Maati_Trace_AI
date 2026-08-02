@@ -1,0 +1,222 @@
+/* MaatiTrace Profile Design System
+   Frontend-only visual tokens and motion for the profile settings UI. */
+
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,600;9..144,680&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap");
+
+:root {
+  --mt-paper: #f0fdf4;
+  --mt-paper-warm: #ecfdf5;
+  --mt-paper-raised: #ffffff;
+  --mt-forest: #10b981;
+  --mt-forest-deep: #059669;
+  --mt-forest-bright: #34d399;
+  --mt-forest-mid: #34d399;
+  --mt-forest-soft: rgb(16 185 129 / 10%);
+  --mt-harvest: #f59e0b;
+  --mt-harvest-deep: #d97706;
+  --mt-harvest-soft: rgb(245 158 11 / 12%);
+  --mt-soil: #6b4a30;
+  --mt-soil-soft: #efe6dc;
+  --mt-ink: #16211a;
+  --mt-ink-soft: #5b6459;
+  --mt-line: #d7f3e3;
+  --mt-rose: #be123c;
+  --mt-rose-soft: rgb(190 18 60 / 8%);
+  --mt-sky: #3b82f6;
+  --mt-sky-soft: rgb(59 130 246 / 10%);
+  --mt-glass: rgb(255 255 255 / 72%);
+  --mt-shadow-sm: 0 4px 14px rgb(15 23 42 / 6%);
+  --mt-shadow-md: 0 18px 50px rgb(15 23 42 / 10%);
+  --mt-shadow-lg: 0 28px 90px rgb(15 23 42 / 12%);
+  --mt-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mt-font-display {
+  font-family: "Fraunces", ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+  font-feature-settings: "ss02" 1;
+}
+
+.mt-font-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+.mt-font-body {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes mt-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mt-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mt-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mt-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  60% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mt-shimmer {
+  0% {
+    background-position: -300px 0;
+  }
+
+  100% {
+    background-position: 300px 0;
+  }
+}
+
+@keyframes mt-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(-12px, 10px) scale(1.05);
+  }
+}
+
+@keyframes mt-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes mt-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.mt-reveal {
+  opacity: 0;
+  transform: translateY(22px);
+}
+
+.mt-reveal.mt-reveal-in,
+.mt-reveal-in {
+  animation: mt-fade-up 0.6s var(--mt-ease) both;
+  animation-delay: var(--mt-d, 0ms);
+}
+
+.mt-fade-up {
+  animation: mt-fade-up 0.55s var(--mt-ease) both;
+  animation-delay: var(--mt-d, 0ms);
+}
+
+.mt-fade-in {
+  animation: mt-fade-in 0.5s var(--mt-ease) both;
+  animation-delay: var(--mt-d, 0ms);
+}
+
+.mt-scale-in {
+  animation: mt-scale-in 0.45s var(--mt-ease) both;
+  animation-delay: var(--mt-d, 0ms);
+}
+
+.mt-pop {
+  animation: mt-pop 0.45s var(--mt-ease) both;
+  animation-delay: var(--mt-d, 0ms);
+}
+
+.mt-drift {
+  animation: mt-drift 7s ease-in-out infinite;
+}
+
+.mt-float {
+  animation: mt-float 4s ease-in-out infinite;
+}
+
+.mt-glow {
+  animation: mt-glow 3s ease-in-out infinite;
+}
+
+.mt-shimmer {
+  background-image:
+    linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0%) 0,
+      rgb(255 255 255 / 45%) 50%,
+      rgb(255 255 255 / 0%) 100%
+    );
+  background-repeat: no-repeat;
+  background-size: 300px 100%;
+  animation: mt-shimmer 1.6s ease-in-out infinite;
+}
+
+.mt-scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mt-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+.mt-glass {
+  background: var(--mt-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}

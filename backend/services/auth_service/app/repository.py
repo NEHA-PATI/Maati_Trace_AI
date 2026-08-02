@@ -145,6 +145,7 @@ def create_farmer_profile_stub(
     user_id: UUID | str,
     full_name: str,
     phone_number: str | None,
+    district_name: str = "Pending",
 ) -> dict[str, Any]:
     row = conn.execute(
         text(
@@ -172,7 +173,7 @@ def create_farmer_profile_stub(
                 :phone_number,
                 NULL,
                 'Odisha',
-                NULL,
+                :district_name,
                 NULL,
                 NULL,
                 NULL,
@@ -181,6 +182,14 @@ def create_farmer_profile_stub(
             )
             ON CONFLICT (user_id)
             DO UPDATE SET
+                state_name = COALESCE(
+                    NULLIF(farmer_profiles.state_name, ''),
+                    EXCLUDED.state_name
+                ),
+                district_name = COALESCE(
+                    NULLIF(farmer_profiles.district_name, ''),
+                    EXCLUDED.district_name
+                ),
                 full_name = COALESCE(
                     NULLIF(farmer_profiles.full_name, ''),
                     EXCLUDED.full_name
@@ -207,6 +216,7 @@ def create_farmer_profile_stub(
             "user_id": str(user_id),
             "full_name": full_name,
             "phone_number": phone_number,
+            "district_name": district_name,
         },
     ).mappings().one()
 

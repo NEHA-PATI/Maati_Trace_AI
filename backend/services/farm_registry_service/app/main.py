@@ -1,360 +1,264 @@
-﻿import json
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Query
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from shared.config.settings import settings
-from shared.errors.api_errors import bad_request, not_found
+from shared.db.postgres import engine
 from shared.logging.json_logging import configure_json_logging
-from shared.schemas.health import HealthResponse
-from services.farm_registry_service.app.auth_client import (
-    FarmRegistryAuthClientError,
-    get_current_user_from_auth_service,
+from services.farm_registry_service.app.dependencies import (
+    RequestContext,
+    get_request_context,
+    require_internal_farm_service,
 )
-from services.farm_registry_service.app.area_calculator import (
-    FarmGeometryError,
-    calculate_area_acres,
-)
-from services.farm_registry_service.app.external_clients import (
-    ExternalServiceError,
-    create_h3_preview,
-    validate_location,
-)
-from services.farm_registry_service.app.repository import (
-    FarmRegistryRepositoryError,
-    create_farm,
-    create_farmer,
-    create_fpo,
-    get_farm,
-    get_farmer,
-    get_farmer_by_user_id,
-    get_farmer_summary,
-    get_fpo,
-    get_fpo_by_user,
-    get_fpo_summary,
-    list_farmers_by_fpo,
-    list_farms_by_fpo,
-    list_farms_by_farmer,
-    list_farms,
-    list_fpos,
-    update_farmer_profile_by_user_id,
-    update_fpo_profile_by_user_id,
+from services.farm_registry_service.app.errors import FarmRegistryError
+from services.farm_registry_service.app.middleware import (
+    CorrelationIdMiddleware,
+    SecurityHeadersMiddleware,
+    get_correlation_id,
 )
 from services.farm_registry_service.app.schemas import (
-    FPOCreateRequest,
-    FPOResponse,
     FarmRegisterRequest,
     FarmResponse,
-    FarmerCreateRequest,
-    FarmerResponse,
+    FarmerFarmSummaryResponse,
+    FpoFarmSummaryResponse,
+    HealthResponse,
+    InternalFarmResponse,
+)
+from services.farm_registry_service.app.service import (
+    get_farm_for_requester,
+    get_farmer_summary_for_requester,
+    get_fpo_summary_for_requester,
+    get_internal_farm,
+    list_farmer_farms_for_requester,
+    list_farms_for_requester,
+    list_fpo_farms_for_requester,
+    register_farm,
 )
 
 SERVICE_NAME = "farm_registry_service"
 
 configure_json_logging(SERVICE_NAME)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    logger.info("farm_registry_service_started", extra={"environment": settings.app_env})
+    yield
+    logger.info("farm_registry_service_stopped")
+
 
 app = FastAPI(
-    title="Farm Registry Service",
-    version="1.0.0",
+    title="MaatiTrace Farm Registry Service",
+    version="2.0.0-farm-only",
+    lifespan=lifespan,
 )
 
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Correlation-ID",
+        "X-FPO-ID",
+        "X-Internal-Service-Token",
+    ],
+    expose_headers=["X-Correlation-ID"],
 )
+
+
+@app.exception_handler(FarmRegistryError)
+async def farm_registry_error_handler(_request, exc: FarmRegistryError):
+    log_method = logger.error if exc.status_code >= 500 else logger.warning
+    log_method(
+        "farm_registry_request_rejected",
+        extra={
+            "code": exc.code,
+            "status_code": exc.status_code,
+            "correlation_id": get_correlation_id(),
+            "internal_message": exc.internal_message,
+        },
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail(get_correlation_id())},
+        headers={"X-Correlation-ID": get_correlation_id()},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(_request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": {
+                "code": "VALIDATION_ERROR",
+                "message": "Check the submitted farm fields.",
+                "correlation_id": get_correlation_id(),
+                "fields": [
+                    {
+                        "type": item.get("type"),
+                        "loc": item.get("loc"),
+                        "msg": item.get("msg"),
+                    }
+                    for item in exc.errors()
+                ],
+            }
+        },
+        headers={"X-Correlation-ID": get_correlation_id()},
+    )
+
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_error_handler(_request, exc: ResponseValidationError):
+    logger.exception(
+        "farm_response_contract_failed",
+        extra={
+            "correlation_id": get_correlation_id(),
+            "error_count": len(exc.errors()),
+        },
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "code": "FARM_RESPONSE_CONTRACT_FAILED",
+                "message": "The farm response could not be prepared.",
+                "correlation_id": get_correlation_id(),
+            }
+        },
+        headers={"X-Correlation-ID": get_correlation_id()},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(_request, exc: Exception):
+    logger.exception("unhandled_farm_registry_error", extra={"correlation_id": get_correlation_id()})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "code": "INTERNAL_ERROR",
+                "message": "The farm request could not be completed.",
+                "correlation_id": get_correlation_id(),
+            }
+        },
+        headers={"X-Correlation-ID": get_correlation_id()},
+    )
 
 
 @app.get("/health/live", response_model=HealthResponse)
 def live():
-    return HealthResponse(
-        service=SERVICE_NAME,
-        status="live",
-        environment=settings.app_env,
-    )
+    return HealthResponse(service=SERVICE_NAME, status="live", environment=settings.app_env)
 
 
 @app.get("/health/ready", response_model=HealthResponse)
 def ready():
-    return HealthResponse(
-        service=SERVICE_NAME,
-        status="ready",
-        environment=settings.app_env,
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    return HealthResponse(service=SERVICE_NAME, status="ready", environment=settings.app_env)
+
+
+@app.get("/v1/fpos")
+def list_fpos_compatibility_only():
+    raise FarmRegistryError(
+        "FPO_LIST_MOVED_TO_PROFILE_SERVICE",
+        (
+            "Compatibility route retained for existing AdminDashboard callers. "
+            "Add GET /v1/profiles/fpos in profile_service, then move getFpos() to profileClient."
+        ),
+        501,
     )
 
 
-@app.post("/v1/fpos", response_model=FPOResponse)
-def create_fpo_endpoint(payload: FPOCreateRequest):
-    try:
-        location = validate_location(
-            state_name=payload.state_name,
-            district_name=payload.district_name,
-            block_name=payload.block_name,
-            block_code=payload.block_code,
-        )
-
-        data = payload.model_dump()
-        data["state_name"] = location["state_name"]
-        data["district_name"] = location["district_name"]
-        data["block_name"] = location["block_name"]
-        data["block_code"] = location["block_code"]
-
-        result = create_fpo(data)
-        return FPOResponse(**result)
-
-    except ExternalServiceError as exc:
-        raise bad_request(str(exc), code="LOCATION_VALIDATION_ERROR") from exc
-    except FarmRegistryRepositoryError as exc:
-        raise bad_request(str(exc), code="FPO_CREATE_ERROR") from exc
-
-
-@app.get("/v1/fpos", response_model=list[FPOResponse])
-def list_fpos_endpoint():
-    return [FPOResponse(**row) for row in list_fpos()]
-
-
-@app.get("/v1/fpos/me", response_model=FPOResponse)
-def get_my_fpo_endpoint(authorization: str | None = Header(default=None)):
-    try:
-        current_user = get_current_user_from_auth_service(authorization)
-    except FarmRegistryAuthClientError as exc:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "UNAUTHORIZED", "message": str(exc)},
-        ) from exc
-
-    result = get_fpo_by_user(current_user["user_id"])
-    if result is None:
-        raise not_found("Current user is not linked to an FPO")
-    return FPOResponse(**result)
-
-
-@app.patch("/v1/farmers/me/profile", response_model=FarmerResponse)
-def patch_my_farmer_profile(payload: dict, authorization: str | None = Header(default=None)):
-    current_user = get_current_user_from_auth_service(authorization)
-    result = update_farmer_profile_by_user_id(current_user["user_id"], payload)
-    if result is None:
-        raise not_found("Farmer not found")
-    return FarmerResponse(**result)
-
-
-@app.get("/v1/farmers/me/profile-export")
-def export_my_farmer_profile(authorization: str | None = Header(default=None)):
-    current_user = get_current_user_from_auth_service(authorization)
-    result = get_farmer_by_user_id(current_user["user_id"])
-    if result is None:
-      raise not_found("Farmer not found")
-    return result
-
-
-@app.patch("/v1/fpos/me/profile", response_model=FPOResponse)
-def patch_my_fpo_profile(payload: dict, authorization: str | None = Header(default=None)):
-    current_user = get_current_user_from_auth_service(authorization)
-    result = update_fpo_profile_by_user_id(current_user["user_id"], payload)
-    if result is None:
-        raise not_found("FPO not found")
-    return FPOResponse(**result)
-
-
-@app.get("/v1/fpos/me/profile-export")
-def export_my_fpo_profile(authorization: str | None = Header(default=None)):
-    current_user = get_current_user_from_auth_service(authorization)
-    result = get_fpo_by_user(current_user["user_id"])
-    if result is None:
-        raise not_found("FPO not found")
-    return result
-
-
-@app.get("/v1/fpos/{fpo_id}", response_model=FPOResponse)
-def get_fpo_endpoint(fpo_id: UUID):
-    result = get_fpo(fpo_id)
-
-    if result is None:
-        raise not_found("FPO not found")
-
-    return FPOResponse(**result)
-
-
-@app.get("/v1/fpos/{fpo_id}/summary")
-def get_fpo_summary_endpoint(fpo_id: UUID):
-    return get_fpo_summary(fpo_id)
-
-
-@app.get("/v1/fpos/{fpo_id}/farmers", response_model=list[FarmerResponse])
-def get_fpo_farmers_endpoint(fpo_id: UUID):
-    return [FarmerResponse(**row) for row in list_farmers_by_fpo(fpo_id)]
-
-
-@app.get("/v1/fpos/{fpo_id}/farms", response_model=list[FarmResponse])
-def get_fpo_farms_endpoint(fpo_id: UUID):
-    return [FarmResponse(**row) for row in list_farms_by_fpo(fpo_id)]
-
-
-@app.post("/v1/farmers", response_model=FarmerResponse)
-def create_farmer_endpoint(payload: FarmerCreateRequest):
-    try:
-        location = validate_location(
-            state_name=payload.state_name,
-            district_name=payload.district_name,
-            block_name=payload.block_name,
-            block_code=payload.block_code,
-        )
-
-        data = payload.model_dump()
-        data["district_code"] = location["district_code"]
-        data["district_name"] = location["district_name"]
-        data["state_name"] = location["state_name"]
-        data["block_name"] = location["block_name"]
-        data["block_code"] = location["block_code"]
-
-        result = create_farmer(data)
-        return FarmerResponse(**result)
-
-    except ExternalServiceError as exc:
-        raise bad_request(str(exc), code="LOCATION_VALIDATION_ERROR") from exc
-    except FarmRegistryRepositoryError as exc:
-        raise bad_request(str(exc), code="FARMER_CREATE_ERROR") from exc
-
-
-@app.get("/v1/farmers/me", response_model=FarmerResponse)
-def get_my_farmer_endpoint(authorization: str | None = Header(default=None)):
-    try:
-        current_user = get_current_user_from_auth_service(authorization)
-    except FarmRegistryAuthClientError as exc:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "UNAUTHORIZED", "message": str(exc)},
-        ) from exc
-
-    if current_user.get("role") != "farmer":
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "NOT_A_FARMER_USER",
-                "message": "Current user is not a farmer user",
-            },
-        )
-
-    result = get_farmer_by_user_id(current_user["user_id"])
-    if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "FARMER_PROFILE_NOT_FOUND",
-                "message": "No farmer profile is linked to this user",
-            },
-        )
-    return FarmerResponse(**result)
-
-
-@app.get("/v1/farmers/{farmer_id}", response_model=FarmerResponse)
-def get_farmer_endpoint(farmer_id: UUID):
-    result = get_farmer(farmer_id)
-
-    if result is None:
-        raise not_found("Farmer not found")
-
-    return FarmerResponse(**result)
-
-
-@app.get("/v1/farmers/{farmer_id}/summary")
-def get_farmer_summary_endpoint(farmer_id: UUID):
-    return get_farmer_summary(farmer_id)
-
-
-@app.post("/v1/farms/register", response_model=FarmResponse)
-def register_farm_endpoint(payload: FarmRegisterRequest):
-    farmer = get_farmer(payload.farmer_id)
-
-    if farmer is None:
-        raise not_found("Farmer not found")
-
-    try:
-        location = validate_location(
-            state_name=payload.state_name,
-            district_name=payload.district_name,
-            block_name=payload.block_name,
-            block_code=payload.block_code,
-        )
-
-        h3_result = create_h3_preview(
-            polygon=payload.polygon,
-            resolution=payload.h3_resolution,
-            max_cells=None,
-        )
-
-        area_acres = calculate_area_acres(payload.polygon)
-
-        data = {
-            "farmer_id": str(payload.farmer_id),
-            "fpo_id": str(payload.fpo_id) if payload.fpo_id else None,
-            "farm_name": payload.farm_name,
-            "survey_number": payload.survey_number,
-            "state_name": location["state_name"],
-            "district_name": location["district_name"],
-            "district_code": location["district_code"],
-            "block_name": location["block_name"],
-            "block_code": location["block_code"],
-            "village_name": payload.village_name,
-            "polygon_geojson": json.dumps(payload.polygon),
-            "h3_resolution": h3_result["resolution"],
-            "h3_cells": h3_result["h3_cells_bigint"],
-            "h3_cell_count": h3_result["cell_count"],
-            "area_acres": area_acres,
-            "bbox": json.dumps(h3_result["bbox"]),
-        }
-
-        result = create_farm(data)
-        return FarmResponse(**result)
-
-    except ExternalServiceError as exc:
-        raise bad_request(str(exc), code="EXTERNAL_VALIDATION_ERROR") from exc
-    except FarmGeometryError as exc:
-        raise bad_request(str(exc), code="FARM_GEOMETRY_ERROR") from exc
-    except FarmRegistryRepositoryError as exc:
-        raise bad_request(str(exc), code="FARM_CREATE_ERROR") from exc
+@app.post("/v1/farms/register", response_model=FarmResponse, status_code=201)
+def register_farm_endpoint(
+    payload: FarmRegisterRequest,
+    context: RequestContext = Depends(get_request_context),
+):
+    return register_farm(context, payload)
 
 
 @app.get("/v1/farms", response_model=list[FarmResponse])
 def list_farms_endpoint(
     fpo_id: UUID | None = None,
     farmer_id: UUID | None = None,
-    district_name: str | None = None,
-    block_name: str | None = None,
-    limit: int | None = None,
-    offset: int | None = None,
+    district_name: str | None = Query(default=None, max_length=100),
+    block_name: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: RequestContext = Depends(get_request_context),
 ):
-    return [
-        FarmResponse(**row)
-        for row in list_farms(
-            fpo_id=fpo_id,
-            farmer_id=farmer_id,
-            district_name=district_name,
-            block_name=block_name,
-            limit=limit,
-            offset=offset,
-        )
-    ]
+    return list_farms_for_requester(
+        context,
+        fpo_id=fpo_id,
+        farmer_id=farmer_id,
+        district_name=district_name,
+        block_name=block_name,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/v1/farms/{farm_id}", response_model=FarmResponse)
-def get_farm_endpoint(farm_id: UUID):
-    result = get_farm(farm_id)
-
-    if result is None:
-        raise not_found("Farm not found")
-
-    return FarmResponse(**result)
+def get_farm_endpoint(
+    farm_id: UUID,
+    context: RequestContext = Depends(get_request_context),
+):
+    return get_farm_for_requester(context, farm_id)
 
 
 @app.get("/v1/farmers/{farmer_id}/farms", response_model=list[FarmResponse])
-def list_farmer_farms_endpoint(farmer_id: UUID):
-    farmer = get_farmer(farmer_id)
+def list_farmer_farms_endpoint(
+    farmer_id: UUID,
+    context: RequestContext = Depends(get_request_context),
+):
+    return list_farmer_farms_for_requester(context, farmer_id)
 
-    if farmer is None:
-        raise not_found("Farmer not found")
 
-    return [FarmResponse(**row) for row in list_farms_by_farmer(farmer_id)]
+@app.get("/v1/farmers/{farmer_id}/summary", response_model=FarmerFarmSummaryResponse)
+def get_farmer_summary_endpoint(
+    farmer_id: UUID,
+    context: RequestContext = Depends(get_request_context),
+):
+    return get_farmer_summary_for_requester(context, farmer_id)
+
+
+@app.get("/v1/fpos/{fpo_id}/farms", response_model=list[FarmResponse])
+def list_fpo_farms_endpoint(
+    fpo_id: UUID,
+    context: RequestContext = Depends(get_request_context),
+):
+    return list_fpo_farms_for_requester(context, fpo_id)
+
+
+@app.get("/v1/fpos/{fpo_id}/summary", response_model=FpoFarmSummaryResponse)
+def get_fpo_summary_endpoint(
+    fpo_id: UUID,
+    context: RequestContext = Depends(get_request_context),
+):
+    return get_fpo_summary_for_requester(context, fpo_id)
+
+
+@app.get(
+    "/internal/v1/farms/{farm_id}",
+    response_model=InternalFarmResponse,
+    dependencies=[Depends(require_internal_farm_service)],
+)
+def get_internal_farm_endpoint(farm_id: UUID):
+    return get_internal_farm(farm_id)
