@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import FarmCard from "@/components/ui-custom/FarmCard";
 import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
-import { createFarmer, getMyFarmerProfile } from "@/lib/api/farmer";
+import { getMyFarmerProfile } from "@/lib/api/farmer";
 import { previewH3, registerFarm } from "@/lib/api/farm";
 import {
   getBlocks,
@@ -63,6 +63,7 @@ const SAMPLE_POLYGON = [
 ];
 
 const MAP_CENTER = [19.81, 85.85];
+const MotionDiv = motion.div;
 
 function normalizePointList(points) {
   return points
@@ -112,24 +113,8 @@ function toLatLngArray(points) {
   return normalizePointList(points).map(([lng, lat]) => [lat, lng]);
 }
 
-function toPointObjects(points) {
-  return normalizePointList(points).map(([lng, lat]) => ({ lng, lat }));
-}
-
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
-}
-
-function buildHtmlSnippet(points) {
-  const lines = points
-    .map(([lon, lat], index) => `<div style="margin:2px 0"><strong>${index + 1}.</strong> ${lat.toFixed(6)}, ${lon.toFixed(6)}</div>`)
-    .join("");
-  return `
-    <div style="font-family:Poppins,sans-serif;border:1px solid #e5e7eb;border-radius:18px;padding:16px;background:#fff">
-      <div style="font-weight:700;margin-bottom:8px">Registered Land</div>
-      ${lines}
-    </div>
-  `;
 }
 
 function MapClickCapture({ onAddPoint }) {
@@ -226,6 +211,7 @@ function MapEditor({ points, setPoints }) {
 export default function FarmRegister() {
   const navigate = useNavigate();
   const user = getStoredUser();
+  const pageRef = useRef(null);
 
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -348,13 +334,18 @@ export default function FarmRegister() {
   const canNext = useMemo(() => {
     if (step === 0) return Boolean(formData.district_name && formData.block_code);
     if (step === 1) {
-      if (user?.role === "farmer") return true;
-      return Boolean(formData.farmer_id || formData.farmer_name);
+      if (user?.role === "farmer") {
+        return Boolean(
+          linkedFarmer?.farmer_id
+          && linkedFarmer?.onboarding_status === "completed",
+        );
+      }
+      return Boolean(formData.farmer_id);
     }
     if (step === 2) return Boolean(polygonGeoJson);
     if (step === 3) return true;
     return true;
-  }, [formData, step, polygonGeoJson, user?.role]);
+  }, [formData, step, polygonGeoJson, user?.role, linkedFarmer]);
 
   const successFarmCard = useMemo(() => {
     if (!registeredFarm) return null;
@@ -398,18 +389,14 @@ export default function FarmRegister() {
         if (user?.role === "farmer") {
           throw new Error("Complete your farmer profile first");
         }
-        const farmerPayload = await createFarmer({
-          user_id: null,
-          full_name: formData.farmer_name,
-          state_name: validated.state_name,
-          district_name: validated.district_name,
-          block_name: validated.block_name,
-          block_code: validated.block_code,
-          village_name: formData.village_name || null,
-          phone_number: user?.phone_number || null,
-        });
-        farmerId = farmerPayload.farmer_id;
-        setLinkedFarmer(farmerPayload);
+        throw new Error("Select an existing farmer profile before registering a farm.");
+      }
+
+      if (
+        user?.role === "farmer"
+        && linkedFarmer?.onboarding_status !== "completed"
+      ) {
+        throw new Error("Complete your farmer profile before registering a farm.");
       }
 
       const geoJson = polygonGeoJson || null;
@@ -441,32 +428,31 @@ export default function FarmRegister() {
         polygon: geoJson,
         h3_resolution: 12,
       };
-      if (user?.role === "admin" || user?.role === "fpo") {
-        registerPayload.fpo_id = linkedFarmer?.fpo_id || null;
-      }
 
       setPipelineStatus("Registering farm...");
       setPipelineStage(2);
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
-      setPipelineStatus("Materializing analysis...");
-      setPipelineStage(3);
-      await materializeFarmAnalysis(farmPayload.farm_id, {
-        start_date: "2025-12-01",
-        end_date: "2025-12-31",
-        max_cloud_cover: 30,
-        h3_resolution: 12,
-        provider: "planetary_computer",
-        collection_id: "sentinel-2-l2a",
-        use_tiny_preview_bbox: true,
-        tiny_bbox_size_deg: 0.0002,
-      }).catch(() => setValidationWarning("Farm analysis endpoint pending. Registration still completed."));
+      if (formData.runNow) {
+        setPipelineStatus("Materializing analysis...");
+        setPipelineStage(3);
+        await materializeFarmAnalysis(farmPayload.farm_id, {
+          start_date: "2025-12-01",
+          end_date: "2025-12-31",
+          max_cloud_cover: 30,
+          h3_resolution: 12,
+          provider: "planetary_computer",
+          collection_id: "sentinel-2-l2a",
+          use_tiny_preview_bbox: true,
+          tiny_bbox_size_deg: 0.0002,
+        }).catch(() => setValidationWarning("Farm analysis endpoint pending. Registration still completed."));
 
-      await materializeFarmTrends(farmPayload.farm_id, {}).catch(() => null);
-      setPipelineStage(7);
-      await materializeFarmGrid(farmPayload.farm_id, {}).catch(() => null);
-      setPipelineStage(8);
+        await materializeFarmTrends(farmPayload.farm_id, {}).catch(() => null);
+        setPipelineStage(7);
+        await materializeFarmGrid(farmPayload.farm_id, {}).catch(() => null);
+        setPipelineStage(8);
+      }
 
       setPipelineStatus("Registered. Redirecting to land intelligence...");
       setPipelineStage(9);
@@ -494,13 +480,13 @@ export default function FarmRegister() {
   const labelClass = "text-[10px] font-bold uppercase tracking-widest text-gray-400";
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100" style={{ fontFamily: "'Poppins', sans-serif" }}>
+    <div ref={pageRef} className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-10 lg:px-12">
-        <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <MotionDiv initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-500">Farm Registration</span>
           <h1 className="mt-1 text-3xl font-black text-gray-900">Register a Land Parcel</h1>
           <p className="mt-1 text-sm text-gray-400">Enter into the MaatiTrace satellite intelligence pipeline</p>
-        </motion.div>
+        </MotionDiv>
 
         <div className="mb-8 flex gap-2 overflow-x-auto pb-1">
           {STEPS.map((item, index) => {
@@ -560,7 +546,7 @@ export default function FarmRegister() {
           <div className="rounded-3xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-sm">Loading registration lookup data...</div>
         ) : (
           <AnimatePresence mode="wait">
-            <motion.div
+            <MotionDiv
               key={step}
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
@@ -771,10 +757,10 @@ export default function FarmRegister() {
               )}
 
               {step === 4 && registeredFarm && (
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }} className="space-y-5 rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm">
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }} className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl shadow-emerald-500/30">
+                <MotionDiv initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }} className="space-y-5 rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm">
+                  <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }} className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl shadow-emerald-500/30">
                     <Check className="h-10 w-10 text-white" strokeWidth={3} />
-                  </motion.div>
+                  </MotionDiv>
                   <div>
                     <h2 className="text-2xl font-black text-gray-900">Farm Registered!</h2>
                     <p className="mt-1 text-sm text-gray-400">Land registered. Analysis started or completed.</p>
@@ -805,21 +791,20 @@ export default function FarmRegister() {
                       setPipelineStatus("");
                       setValidationWarning("");
                       setPolygonPoints([]);
-                      setSnapshotDataUrl("");
                       setH3Preview(null);
                       setFormData(EMPTY_FORM);
                     }} className="h-11 flex-1 rounded-2xl border-gray-200 text-sm font-semibold">
                       Register Another
                     </Button>
                   </div>
-                </motion.div>
+                </MotionDiv>
               )}
-            </motion.div>
+            </MotionDiv>
           </AnimatePresence>
         )}
 
         {step < 4 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 flex items-center justify-between">
+          <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 flex items-center justify-between">
             <Button variant="ghost" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || loading} className="h-10 rounded-2xl px-5 text-sm font-semibold text-gray-500 hover:text-gray-800">
               <ChevronLeft className="mr-1 h-4 w-4" />
               Back
@@ -830,7 +815,7 @@ export default function FarmRegister() {
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}
-          </motion.div>
+          </MotionDiv>
         )}
 
       </div>
