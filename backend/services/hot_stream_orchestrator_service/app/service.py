@@ -3,16 +3,16 @@ from __future__ import annotations
 import json
 from datetime import date
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from shapely.geometry import shape
 
 from services.farm_registry_service.app.area_calculator import calculate_area_acres, validate_farm_polygon
 from services.farm_registry_service.app.external_clients import (
-    ExternalServiceError,
     create_h3_preview,
     validate_location,
 )
+from services.farm_registry_service.app.errors import FarmRegistryError
 from services.farm_registry_service.app.repository import get_farm_for_repair, update_farm_derived_fields
 from services.hot_stream_orchestrator_service.app.clients import (
     OrchestratorClientError,
@@ -175,10 +175,15 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
             area_acres = None
 
     h3_resolution = int(farm.get("h3_resolution") or 12)
+    correlation_id = str(uuid4())
 
     try:
-        preview = create_h3_preview(polygon=polygon, resolution=h3_resolution, max_cells=None)
-    except ExternalServiceError as exc:
+        preview = create_h3_preview(
+            polygon=polygon,
+            resolution=h3_resolution,
+            correlation_id=correlation_id,
+        )
+    except FarmRegistryError as exc:
         raise HotStreamOrchestratorError(
             f"H3 preview failed: {exc}",
             code="H3_PREVIEW_ERROR",
@@ -202,13 +207,14 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
                 district_name=farm["district_name"],
                 block_name=farm.get("block_name"),
                 block_code=farm.get("block_code"),
+                correlation_id=correlation_id,
             )
             location_updates = {
                 "district_code": location.get("district_code"),
                 "block_code": location.get("block_code"),
             }
             repaired_fields.extend([key for key, value in location_updates.items() if value is not None])
-        except ExternalServiceError as exc:
+        except FarmRegistryError as exc:
             warnings.append(f"Location validation skipped: {exc}")
         except Exception as exc:
             warnings.append(f"Location validation skipped: {exc}")
