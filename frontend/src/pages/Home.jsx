@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import { Link } from "react-router-dom";
-import { motion, useInView, useScroll, useTransform } from "framer-motion";
+import { motion as Motion, useInView, useScroll, useTransform } from "framer-motion";
 import { ChevronDown, Satellite, Map, BarChart3, Shield, Users, Leaf, ArrowRight, Globe, Database, Layers } from "lucide-react";
 import PublicNav from "@/components/layout/PublicNav";
 
@@ -91,12 +91,12 @@ const FEATURES = [
 ];
 
 // ─── Stage Card (one-sided: 25% left text / 75% right image) ─────────────────
-function StageCard({ stage, index }) {
+function StageCard({ stage }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-60px" });
 
   return (
-    <motion.div
+    <Motion.div
       ref={ref}
       initial={{ opacity: 0, y: 40 }}
       animate={isInView ? { opacity: 1, y: 0 } : {}}
@@ -115,7 +115,7 @@ function StageCard({ stage, index }) {
       </div>
 
       {/* Right — 75% — image */}
-      <motion.div
+      <Motion.div
         whileHover={{ scale: 1.015 }}
         transition={{ duration: 0.4 }}
         className="w-full md:w-3/4 relative overflow-hidden min-h-[220px] md:min-h-0"
@@ -128,8 +128,8 @@ function StageCard({ stage, index }) {
           loading="lazy"
         />
         <div className="absolute inset-0 bg-gradient-to-l from-transparent to-black/5" />
-      </motion.div>
-    </motion.div>
+      </Motion.div>
+    </Motion.div>
   );
 }
 
@@ -139,7 +139,7 @@ function FeatureCard({ feature, index }) {
   const isInView = useInView(ref, { once: true, margin: "-60px" });
   const Icon = feature.icon;
   return (
-    <motion.div
+    <Motion.div
       ref={ref}
       initial={{ opacity: 0, y: 30 }}
       animate={isInView ? { opacity: 1, y: 0 } : {}}
@@ -152,7 +152,7 @@ function FeatureCard({ feature, index }) {
       </div>
       <h4 className="font-bold text-gray-800 text-sm">{feature.title}</h4>
       <p className="text-xs text-gray-400 leading-relaxed">{feature.desc}</p>
-    </motion.div>
+    </Motion.div>
   );
 }
 
@@ -161,7 +161,7 @@ function GalleryImg({ src, index }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-40px" });
   return (
-    <motion.div
+    <Motion.div
       ref={ref}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={isInView ? { opacity: 1, scale: 1 } : {}}
@@ -172,7 +172,7 @@ function GalleryImg({ src, index }) {
     >
       <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
       <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors rounded-2xl" />
-    </motion.div>
+    </Motion.div>
   );
 }
 
@@ -189,31 +189,31 @@ export default function Home() {
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section ref={heroRef} className="relative h-screen overflow-hidden">
-        <motion.div style={{ y: heroY }} className="absolute inset-0">
+        <Motion.div style={{ y: heroY }} className="absolute inset-0">
           <video autoPlay muted loop playsInline className="w-full h-full object-cover"
             src="https://res.cloudinary.com/dkst917dg/video/upload/v1782894887/home_page_vdo_1_vcroju.mp4" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/70" />
-        </motion.div>
+        </Motion.div>
 
         {/* Hero text overlay */}
-        <motion.div
+        <Motion.div
           style={{ opacity: heroOpacity }}
           className="relative z-10 flex flex-col items-center justify-center h-full text-center px-6"
         >
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.2 }}
             className="space-y-5 max-w-3xl"
           >
-            <motion.span
+            <Motion.span
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, delay: 0.5 }}
               className="inline-block text-[10px] uppercase tracking-[0.4em] text-white/60 border border-white/20 rounded-full px-4 py-1.5 backdrop-blur-sm bg-white/5"
             >
               Satellite-Backed Field Intelligence
-            </motion.span>
+            </Motion.span>
             <h1 className="text-5xl md:text-7xl font-black text-white leading-none tracking-tight"
               style={{ fontFamily: "'Poppins', sans-serif", textShadow: "0 2px 40px rgba(0,0,0,0.4)" }}>
               MaatiTrace
@@ -221,7 +221,7 @@ export default function Home() {
             <p className="text-base md:text-lg text-white/70 max-w-xl mx-auto leading-relaxed font-light">
               From soil to satellite — verifiable land intelligence for India's agricultural ecosystem.
             </p>
-            <motion.div
+            <Motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
@@ -235,19 +235,19 @@ export default function Home() {
                 className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-2xl backdrop-blur-sm border border-white/20 transition-all">
                 Our Method
               </Link>
-            </motion.div>
-          </motion.div>
-        </motion.div>
+            </Motion.div>
+          </Motion.div>
+        </Motion.div>
 
         {/* Scroll cue */}
-        <motion.div
+        <Motion.div
           animate={{ y: [0, 8, 0] }}
           transition={{ repeat: Infinity, duration: 2 }}
           className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1"
         >
           <span className="text-[9px] uppercase tracking-[0.3em] text-white/40">Scroll</span>
           <ChevronDown className="w-4 h-4 text-white/40" />
-        </motion.div>
+        </Motion.div>
       </section>
 
       {/* ── STATS STRIP ──────────────────────────────────────────────────── */}
@@ -256,7 +256,7 @@ export default function Home() {
           {STATS.map((s, i) => {
             const Icon = s.icon;
             return (
-              <motion.div
+              <Motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -269,7 +269,7 @@ export default function Home() {
                 </div>
                 <p className="text-3xl font-black text-gray-900">{s.value}</p>
                 <p className="text-xs text-gray-400 font-medium">{s.label}</p>
-              </motion.div>
+              </Motion.div>
             );
           })}
         </div>
@@ -278,7 +278,7 @@ export default function Home() {
       {/* ── WHAT WE DO ───────────────────────────────────────────────────── */}
       <section className="py-20 px-6 bg-white">
         <div className="max-w-4xl mx-auto text-center mb-16">
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -291,7 +291,7 @@ export default function Home() {
             <p className="text-sm text-gray-400 mt-5 max-w-2xl mx-auto leading-relaxed">
               MaatiTrace connects ground-level field surveys with satellite remote sensing to produce verified, tamper-proof farm intelligence — enabling farmers, FPOs, banks, and insurers to act on real data.
             </p>
-          </motion.div>
+          </Motion.div>
         </div>
         <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {FEATURES.map((f, i) => <FeatureCard key={i} feature={f} index={i} />)}
@@ -302,13 +302,13 @@ export default function Home() {
       <section className="py-24 px-6 bg-gradient-to-b from-gray-50/80 to-white">
         <div className="max-w-5xl mx-auto">
           <div className="mb-20 text-center">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <Motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
               <span className="text-[10px] uppercase tracking-[0.35em] text-gray-400">From Field to Intelligence</span>
               <h2 className="text-4xl md:text-5xl font-black text-gray-900 mt-3" style={{ fontFamily: "'Poppins', sans-serif" }}>
                 The MaatiTrace Pipeline
               </h2>
               <p className="text-sm text-gray-400 mt-4 max-w-xl mx-auto">Eight stages from ground survey to verified, satellite-backed intelligence.</p>
-            </motion.div>
+            </Motion.div>
           </div>
           <div className="space-y-20">
             {STAGES.map((stage, i) => <StageCard key={stage.num} stage={stage} index={i} />)}
@@ -320,10 +320,10 @@ export default function Home() {
       <section className="py-20 px-6 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="mb-14 text-center">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <Motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
               <span className="text-[10px] uppercase tracking-[0.35em] text-gray-400">Ground Coverage</span>
               <h2 className="text-4xl font-black text-gray-900 mt-3" style={{ fontFamily: "'Poppins', sans-serif" }}>In the Field</h2>
-            </motion.div>
+            </Motion.div>
           </div>
           <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
             {FEATURE_IMAGES.map((src, i) => <GalleryImg key={i} src={src} index={i} />)}
@@ -337,7 +337,7 @@ export default function Home() {
         <div className="absolute inset-0 opacity-10"
           style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="max-w-3xl mx-auto text-center relative">
-          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="space-y-6">
+          <Motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="space-y-6">
             <h2 className="text-4xl md:text-5xl font-black text-white" style={{ fontFamily: "'Poppins', sans-serif" }}>
               Ready to map your fields?
             </h2>
@@ -354,7 +354,7 @@ export default function Home() {
                 Sign In
               </Link>
             </div>
-          </motion.div>
+          </Motion.div>
         </div>
       </section>
 
@@ -373,6 +373,7 @@ export default function Home() {
           <div className="flex items-center gap-5 text-[11px] text-gray-400">
             <Link to="/use-cases" className="hover:text-gray-900 transition-colors">Use Cases</Link>
             <Link to="/our-method" className="hover:text-gray-900 transition-colors">Methodology</Link>
+            <Link to="/plans" className="hover:text-gray-900 transition-colors">Plans</Link>
             <Link to="/login" className="hover:text-gray-900 transition-colors">Sign In</Link>
           </div>
           <p className="text-[10px] text-gray-300 w-full md:w-auto text-center md:text-right">© 2026 MaatiTrace. All rights reserved.</p>

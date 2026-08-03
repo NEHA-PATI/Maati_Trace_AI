@@ -90,6 +90,8 @@ const PATH_PERMISSION_MAP = Object.freeze({
   "/use-cases": "publicInternal",
 
   "/our-method": "publicInternal",
+
+  "/plans": "publicInternal",
 });
 
 export function hasRole(user, allowedRoles = []) {
@@ -180,6 +182,10 @@ const COMMON_SIDEBAR_ITEMS = Object.freeze([
   {
     to: "/settings",
     label: "Settings / Profile",
+  },
+  {
+    to: "/plans",
+    label: "Plans",
   },
   {
     to: "/use-cases",

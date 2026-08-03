@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { getMyFarmerProfile, getFarmerFarms } from "@/lib/api/farmer";
-import { getMyFpo, getFpoFarmers, getFpoFarms } from "@/lib/api/fpo";
+import { profileApi } from "@/features/profile/api/profileApi";
+import { getFarmerFarms } from "@/lib/api/farmer";
+import { getFpoFarmers, getFpoFarms } from "@/lib/api/fpo";
 
 const KEY = "maatitrace_land_prompt_dismissed";
 export default function PostLoginLandPrompt({ user }) {
@@ -12,18 +13,25 @@ export default function PostLoginLandPrompt({ user }) {
     (async () => {
       try {
         if (user?.role === "farmer") {
-          const farmer = await getMyFarmerProfile(); const farms = await getFarmerFarms(farmer.farmer_id).catch(() => []);
+          const envelope = await profileApi.getMyProfile();
+          const farmerId = envelope?.profile?.farmer_id;
+          const farms = farmerId ? await getFarmerFarms(farmerId).catch(() => []) : [];
           if (!farms.length) setOpen(true);
         } else if (user?.role === "fpo") {
-          const fpo = await getMyFpo(); const farmers = await getFpoFarmers(fpo.fpo_id).catch(() => []); const farms = await getFpoFarms(fpo.fpo_id).catch(() => []);
+          const envelope = await profileApi.getMyProfile();
+          const fpoId = envelope?.profile?.fpo_id;
+          const farmers = fpoId ? await getFpoFarmers(fpoId).catch(() => []) : [];
+          const farms = fpoId ? await getFpoFarms(fpoId).catch(() => []) : [];
           if (!farmers.length || !farms.length) setOpen(true);
         }
-      } catch {}
+      } catch (_error) {
+        setOpen(false);
+      }
     })();
   }, [user?.role]);
   const dismiss = () => { sessionStorage.setItem(KEY, "1"); setOpen(false); };
-  return <AnimatePresence>{open && <motion.div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-    <motion.div initial={{ y: 20, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, scale: 0.95 }} className="w-full max-w-lg rounded-[2rem] border border-white/40 bg-white/85 p-6 shadow-2xl">
+  return <AnimatePresence>{open && <Motion.div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <Motion.div initial={{ y: 20, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, scale: 0.95 }} className="w-full max-w-lg rounded-[2rem] border border-white/40 bg-white/85 p-6 shadow-2xl">
       <h3 className="text-2xl font-black">{user?.role === "farmer" ? "Register your first land" : "Start your FPO workspace"}</h3>
       <p className="mt-2 text-sm text-slate-600">{user?.role === "farmer" ? "MaatiTrace needs your farm boundary to start satellite intelligence." : "Add farmers, register land, or upload in bulk to unlock the workspace."}</p>
       <div className="mt-5 flex flex-wrap gap-3">
@@ -34,5 +42,5 @@ export default function PostLoginLandPrompt({ user }) {
         </>}
         <button onClick={dismiss} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold">Later</button>
       </div>
-    </motion.div></motion.div>}</AnimatePresence>;
+    </Motion.div></Motion.div>}</AnimatePresence>;
 }
