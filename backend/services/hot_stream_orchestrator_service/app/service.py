@@ -13,7 +13,7 @@ from services.farm_registry_service.app.external_clients import (
     validate_location,
 )
 from services.farm_registry_service.app.errors import FarmRegistryError
-from services.farm_registry_service.app.repository import get_farm_for_repair, update_farm_derived_fields
+from services.farm_registry_service.app.repository import get_complete_farm, update_farm_derived_fields
 from services.hot_stream_orchestrator_service.app.clients import (
     OrchestratorClientError,
     get_farm,
@@ -126,7 +126,7 @@ def _choose_analysis_bbox(
 
 
 def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
-    farm = get_farm_for_repair(farm_id)
+    farm = get_complete_farm(farm_id)
     if farm is None:
         raise HotStreamOrchestratorError("Farm not found", code="FARM_NOT_FOUND", status_code=404)
 
