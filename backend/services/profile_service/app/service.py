@@ -743,6 +743,9 @@ async def update_my_farmer_profile(
                     if complete
                     else "pending"
                 ),
+                sync_phone_number=(
+                    "phone_number" in changes
+                ),
             )
 
             record_profile_audit_event(

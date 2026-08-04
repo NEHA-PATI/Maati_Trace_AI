@@ -1,13 +1,32 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Cloud, Hexagon, Leaf, RefreshCw, Thermometer, Waves, Mountain, Droplets } from "lucide-react";
-import { motion } from "framer-motion";
+import { useParams } from "react-router-dom";
+import {
+  Activity,
+  CalendarDays,
+  Cloud,
+  FileText,
+  Hexagon,
+  Leaf,
+  MapPin,
+  Mountain,
+  RefreshCw,
+  ScanLine,
+  Sparkles,
+  Waves,
+} from "lucide-react";
+import { motion as Motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import PipelineStepper from "@/components/ui-custom/PipelineStepper";
-import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
+import {
+  getLandMetric,
+  interpretLandMetric,
+  LAND_METRICS,
+  metricValueFromCell,
+  metricValueFromSummary,
+} from "@/features/land-intelligence/metricInterpretation";
 import { getFarm } from "@/lib/api/farm";
 import {
   getFarmGridCellDetails,
@@ -24,17 +43,10 @@ import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
 
 const PARAMETERS = [
-  { key: "ndvi", label: "NDVI" },
-  { key: "evi", label: "EVI" },
-  { key: "savi", label: "SAVI" },
-  { key: "ndre", label: "NDRE" },
-  { key: "ndmi", label: "NDMI" },
-  { key: "ndwi", label: "NDWI" },
-  { key: "msi", label: "MSI" },
-  { key: "bsi", label: "BSI" },
-  { key: "temperature", label: "Surface Temp" },
-  { key: "cloud", label: "Cloud" },
-  { key: "valid_pixels", label: "Valid Pixels" },
+  ...LAND_METRICS,
+  { key: "temperature", name: "Surface Temperature" },
+  { key: "cloud", name: "Cloud Cover" },
+  { key: "valid_pixels", name: "Data Quality" },
 ];
 
 const PIPELINE_STEPS = [
@@ -56,14 +68,14 @@ function normalizeList(payload) {
 }
 
 function pretty(value, digits = 2) {
-  if (value === null || value === undefined || value === "") return "â€”";
+  if (value === null || value === undefined || value === "") return "--";
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   return num.toFixed(digits);
 }
 
 function formatDate(value) {
-  if (!value) return "â€”";
+  if (!value) return "--";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("en-GB", {
@@ -71,10 +83,6 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   });
-}
-
-function pickTrend(summary, trends, key) {
-  return trends?.[0]?.[key] || summary?.[key] || "stable";
 }
 
 function valueFor(cell, param) {
@@ -96,6 +104,8 @@ function valueFor(cell, param) {
       return fallback(cell.msi, cell.weighted_msi);
     case "bsi":
       return fallback(cell.bsi, cell.weighted_bsi);
+    case "nbr":
+      return fallback(cell.nbr, cell.weighted_nbr);
     case "temperature":
       return fallback(cell.surface_temp_c, cell.weighted_surface_temp_c);
     case "cloud":
@@ -107,22 +117,55 @@ function valueFor(cell, param) {
   }
 }
 
-function tone(value, param) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return "text-gray-500";
-  if (param === "cloud") return num > 40 ? "text-slate-500" : "text-emerald-700";
-  if (param === "temperature") return num > 35 ? "text-rose-600" : "text-amber-700";
-  if (param === "bsi") return num > 0.15 ? "text-amber-700" : "text-emerald-700";
-  return num >= 0.45 ? "text-emerald-700" : num >= 0.25 ? "text-lime-700" : "text-amber-700";
-}
-
 function recommendationFor(cell = {}) {
   const notes = [];
-  if (Number(cell.ndvi ?? cell.weighted_ndvi ?? 0) < 0.25) notes.push("Vegetation stress detected");
-  if (Number(cell.ndmi ?? cell.weighted_ndmi ?? 0) < 0.05 || Number(cell.ndwi ?? cell.weighted_ndwi ?? 0) < 0.05) notes.push("Moisture stress possible");
-  if (Number(cell.bsi ?? cell.weighted_bsi ?? 0) > 0.15) notes.push("Bare soil exposure is high");
+  LAND_METRICS
+    .map((metric) => ({
+      metric,
+      result: interpretLandMetric(metric.key, metricValueFromCell(cell, metric.key)),
+    }))
+    .filter(({ result }) => ["critical", "needs_attention"].includes(result.status))
+    .slice(0, 3)
+    .forEach(({ metric, result }) => notes.push(`${metric.name}: ${result.interpretation}`));
   if (Number(cell.cloud_percentage ?? cell.avg_cloud_percentage ?? 0) > 40) notes.push("Satellite data quality reduced by cloud");
-  return notes.length ? notes.join(". ") : "Conditions look stable";
+  return notes.length ? notes.join(". ") : "All available indicators are stable or within monitoring range.";
+}
+
+function MetricStatusBadge({ metricKey, value, compact = false }) {
+  const result = interpretLandMetric(metricKey, value);
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border font-semibold ${result.badgeClass} ${compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[10px]"}`}>
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: result.color }} />
+      {compact ? result.shortLabel : result.label}
+    </span>
+  );
+}
+
+function MetricInterpretationText({ metricKey, value, className = "" }) {
+  const result = interpretLandMetric(metricKey, value);
+
+  return <span className={`${result.textClass} ${className}`}>{result.interpretation}</span>;
+}
+
+function MetricReading({ metricKey, value, compact = false }) {
+  const metric = getLandMetric(metricKey);
+  const result = interpretLandMetric(metricKey, value);
+
+  if (!metric) return null;
+
+  return (
+    <div className={`group rounded-2xl border transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${result.surfaceClass} ${compact ? "p-3" : "p-4"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className={`${compact ? "text-xs" : "text-sm"} min-w-0 font-semibold text-slate-900`}>{metric.name}</p>
+        <MetricStatusBadge metricKey={metricKey} value={value} compact />
+      </div>
+      <div className="mt-3">
+        <MetricInterpretationText metricKey={metricKey} value={value} className="font-heading text-lg font-bold leading-tight" />
+        {!compact && <p className="mt-1 text-[10px] leading-4 text-slate-500">{metric.description}</p>}
+      </div>
+    </div>
+  );
 }
 
 export default function LandIntelligence() {
@@ -134,15 +177,14 @@ export default function LandIntelligence() {
   const [farm, setFarm] = useState(null);
   const [summary, setSummary] = useState(null);
   const [latestSentinel, setLatestSentinel] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [trends, setTrends] = useState([]);
+  const [, setHistory] = useState([]);
+  const [, setTrends] = useState([]);
   const [gridCells, setGridCells] = useState([]);
   const [gridValues, setGridValues] = useState([]);
   const [h3Cells, setH3Cells] = useState([]);
   const [selectedParameter, setSelectedParameter] = useState("ndvi");
   const [selectedCell, setSelectedCell] = useState(null);
   const [selectedDetails, setSelectedDetails] = useState(null);
-  const [hoveredCell, setHoveredCell] = useState(null);
   const [showH3, setShowH3] = useState(false);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [pipelineStage, setPipelineStage] = useState(0);
@@ -232,13 +274,30 @@ export default function LandIntelligence() {
   const latestSceneId = latestSentinel?.scene_id || latestSummary.latest_scene_id;
   const hasAnalysis = Boolean(latestSummary.has_analysis || latestSummary.latest_snapshot_date || latestSentinel?.scene_id);
   const stats = [
-    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "â€”", unit: "ac" },
-    { label: "Grid cells", value: displayCells.length || "â€”", unit: "" },
-    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "â€”", unit: "" },
+    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "--", unit: "ac" },
+    { label: "Grid cells", value: displayCells.length || "--", unit: "" },
+    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "--", unit: "" },
     { label: "Latest scene", value: latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet", unit: "" },
-    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "â€”", unit: "%" },
-    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "â€”", unit: "%" },
+    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "--", unit: "%" },
+    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "--", unit: "%" },
   ];
+  const selectedParameterInfo = PARAMETERS.find((item) => item.key === selectedParameter);
+  const summaryMetricReadings = LAND_METRICS.map((metric) => ({
+    metric,
+    value: metricValueFromSummary(latestSummary, metric.key),
+    result: interpretLandMetric(metric.key, metricValueFromSummary(latestSummary, metric.key)),
+  }));
+  const statusPriority = {
+    critical: 5,
+    needs_attention: 4,
+    watch: 3,
+    good: 2,
+    excellent: 1,
+    unavailable: 0,
+  };
+  const priorityReading = [...summaryMetricReadings]
+    .filter(({ result }) => result.status !== "unavailable")
+    .sort((a, b) => statusPriority[b.result.status] - statusPriority[a.result.status])[0];
 
   async function runLatestAnalysis() {
     setRefreshing(true);
@@ -252,7 +311,7 @@ export default function LandIntelligence() {
 
       const payload = {
         start_date: "2025-12-01",
-        end_date: "2025-12-31",
+        end_date: "2026-08-03",
         max_cloud_cover: 30,
         h3_resolution: 12,
         provider: "planetary_computer",
@@ -298,7 +357,11 @@ export default function LandIntelligence() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+    <Motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.10),_transparent_32%),linear-gradient(180deg,#f7faf6_0%,#f8fafc_55%,#f3f6f2_100%)]"
+    >
       <PipelineGlassLoader
         open={pipelineOpen}
         title="Land analysis pipeline"
@@ -326,65 +389,129 @@ export default function LandIntelligence() {
         }
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-emerald-600">Land Intelligence</p>
-          <h1 className="mt-1 text-2xl font-black text-gray-900">
-            {farm?.farm_name || "Farm"}
-            {farm?.survey_number ? ` Â· ${farm.survey_number}` : ""}
-          </h1>
-          <p className="text-sm text-gray-500">
-            {farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene date: {latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet"}</span>
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene ID: {latestSceneId || "No scene processed yet"}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {canViewTechnicalH3Layer(user) && (
-            <Button variant="outline" className="rounded-xl" onClick={() => setShowH3((v) => !v)}>
-              <Hexagon className="mr-1 h-4 w-4" />
-              {showH3 ? "Hide H3" : "Show H3"}
+      <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6 lg:p-8">
+        <section
+          className="relative overflow-hidden rounded-[2.25rem] border border-emerald-900/10 bg-[#f7fbe9] bg-cover bg-center shadow-[0_22px_55px_rgba(31,78,48,0.16)] xl:aspect-[5/1]"
+          style={{ backgroundImage: "url('/image.png')" }}
+        >
+          <div className="relative flex min-h-[610px] flex-col px-6 pb-8 pt-12 sm:px-10 md:px-14 lg:px-16 xl:absolute xl:inset-0 xl:min-h-0 xl:px-14 xl:py-4">
+            <div className="max-w-[790px]">
+              <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.28em] text-[#247a58] md:text-sm xl:text-xs">
+                <ScanLine className="h-4 w-4 md:h-5 md:w-5 xl:h-4 xl:w-4" />
+                Land Intelligence
+              </div>
+              <h1 className="mt-4 font-heading text-5xl font-bold tracking-[-0.04em] text-[#123f31] md:text-6xl xl:mt-1 xl:text-3xl">
+                {farm?.farm_name || "Your farm"}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-base font-medium text-[#527b6d] md:text-lg xl:mt-1 xl:text-sm">
+                <span className="inline-flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-emerald-500 md:h-6 md:w-6 xl:h-4 xl:w-4" />
+                  {farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}
+                </span>
+                {farm?.survey_number && <span className="text-sm text-[#6f9487]">Survey {farm.survey_number}</span>}
+              </div>
+
+              <div className="mt-4 flex max-w-full flex-col gap-3 sm:flex-row xl:mt-2 xl:gap-2">
+                <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#6f9d8c]/70 bg-white/80 px-5 py-3 text-xs font-semibold text-[#194f3d] shadow-sm backdrop-blur-sm md:text-sm xl:px-4 xl:py-1.5 xl:text-xs">
+                  <CalendarDays className="h-4 w-4 text-emerald-500" />
+                  Scene {latestSceneDate ? formatDate(latestSceneDate) : "not processed"}
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-2 rounded-full border border-[#6f9d8c]/70 bg-white/80 px-5 py-3 text-xs font-semibold text-[#194f3d] shadow-sm backdrop-blur-sm md:text-sm xl:max-w-xl xl:px-4 xl:py-1.5 xl:text-xs">
+                  <FileText className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <span className="truncate">{latestSceneId || "No satellite scene yet"}</span>
+                </span>
+              </div>
+            </div>
+
+            <Button
+              onClick={runLatestAnalysis}
+              disabled={refreshing}
+              className="mt-6 h-14 self-start rounded-2xl bg-[#d8fa78] px-7 text-base font-bold text-[#123f31] shadow-[0_12px_25px_rgba(47,104,50,0.2)] hover:bg-[#c9f45b] xl:absolute xl:right-14 xl:top-[32%] xl:mt-0 xl:h-10 xl:px-6 xl:text-sm"
+            >
+              <RefreshCw className={`mr-3 h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
+              Run Latest Analysis
             </Button>
-          )}
-          <Button onClick={runLatestAnalysis} disabled={refreshing} className="rounded-xl bg-emerald-600 text-white">
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            Run Latest Analysis
-          </Button>
-        </div>
-      </div>
 
-      {loading && <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">Loading land intelligence...</div>}
-      {error && <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
+            <div className="mt-auto grid gap-4 pt-8 md:grid-cols-3 xl:gap-3 xl:pt-2">
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+                <div className="absolute -bottom-12 -left-8 h-20 w-64 rounded-[50%] bg-lime-300/55 blur-sm" />
+                <p className="relative text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Priority signal</p>
+                <div className="relative mt-5 flex flex-wrap items-center justify-between gap-3 xl:mt-1">
+                  <span className="font-heading text-xl font-bold text-[#123f31] xl:text-base">{priorityReading?.metric.name || "Awaiting analysis"}</span>
+                  {priorityReading && <MetricStatusBadge metricKey={priorityReading.metric.key} value={priorityReading.value} />}
+                </div>
+              </div>
 
-      <StatStrip items={stats.map((item) => ({ ...item, icon: item.label === "Cloud cover" ? Cloud : item.label === "Valid pixels" ? Waves : item.label === "Farm area" ? Mountain : item.label === "H3 cells" ? Hexagon : item.label === "Latest scene" ? RefreshCw : Leaf }))} />
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+                <div className="absolute -bottom-14 right-0 h-24 w-72 rounded-[50%] bg-lime-300/40 blur-sm" />
+                <p className="relative text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Analysed area</p>
+                <p className="relative mt-4 font-heading text-4xl font-bold text-[#123f31] xl:mt-1 xl:text-2xl">
+                  {farm?.area_acres ? pretty(farm.area_acres, 2) : "--"}
+                  <span className="ml-2 text-base font-medium text-[#709488]">acres</span>
+                </p>
+              </div>
 
-      <PipelineStepper steps={["Location", "Farmer", "Boundary", "Grid", "Satellite", "Raster", "Intelligence"]} currentStep={7} />
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Coverage</p>
+                <p className="mt-4 font-heading text-4xl font-bold text-[#123f31] xl:mt-1 xl:text-2xl">
+                  {displayCells.length || "--"}
+                  <span className="ml-2 text-base font-medium text-[#709488]">land cells</span>
+                </p>
+                <div className="absolute bottom-5 right-5 grid grid-cols-4 gap-1 xl:bottom-3 xl:right-3">
+                  {Array.from({ length: 12 }, (_, index) => (
+                    <span key={index} className={`h-4 w-4 rounded-[4px] xl:h-3 xl:w-3 ${index > 8 ? "bg-[#246b4e]" : index > 5 ? "bg-emerald-300" : "bg-emerald-100"}`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        {loading && <div className="rounded-3xl border border-emerald-100 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading land intelligence...</div>}
+        {error && <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
+
+        <StatStrip
+          desktopColumnsClass="lg:grid-cols-6"
+          items={stats.map((item) => ({ ...item, icon: item.label === "Cloud cover" ? Cloud : item.label === "Valid pixels" ? Waves : item.label === "Farm area" ? Mountain : item.label === "H3 cells" ? Hexagon : item.label === "Latest scene" ? RefreshCw : Leaf }))}
+        />
+
+        <PipelineStepper steps={["Location", "Farmer", "Boundary", "Grid", "Satellite", "Raster", "Intelligence"]} currentStep={7} />
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
         <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-              <div className="flex flex-wrap gap-2">
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-4 md:px-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-bold text-slate-950"><ScanLine className="h-4 w-4 text-emerald-700" /> Land health map</p>
+                  <p className="mt-0.5 text-xs text-slate-500">Viewing {selectedParameterInfo?.name || selectedParameter}</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Visual grid</span>
+                  {canViewTechnicalH3Layer(user) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowH3((value) => !value)}
+                      className={`rounded-full px-3 py-1 font-semibold transition ${h3Enabled ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                    >
+                      H3 {h3Enabled ? "on" : "off"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {PARAMETERS.map((item) => (
                   <button
                     key={item.key}
                     onClick={() => setSelectedParameter(item.key)}
-                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${selectedParameter === item.key ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                    className={`shrink-0 rounded-xl border px-3 py-2 text-left transition ${selectedParameter === item.key ? "border-emerald-800 bg-emerald-900 text-white shadow-md" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50"}`}
                   >
-                    {item.label}
+                    <span className="block text-[11px] font-semibold">{item.name}</span>
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Visual grid default</span>
-                <span className={`rounded-full px-3 py-1 font-semibold ${h3Enabled ? "bg-violet-50 text-violet-700" : "bg-gray-100 text-gray-500"}`}>
-                  {h3Enabled ? "H3 technical layer on" : "H3 technical layer off"}
-                </span>
-              </div>
             </div>
-            <div className="p-4">
+            <div className="p-3 md:p-4">
               <LandGridMap
                 farm={farm}
                 gridCells={displayCells}
@@ -395,37 +522,45 @@ export default function LandIntelligence() {
                 selectedGridCellId={displaySelected?.grid_cell_id}
                 showH3Layer={h3Enabled}
                 userRole={user?.role}
-                onGridCellHover={setSelectedCell}
               />
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <p className="text-sm font-bold text-gray-900">Grid Cells</p>
-              <p className="text-xs text-gray-500">{displayCells.length || 0} cells</p>
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.06)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-sm font-bold text-slate-950">Cell-by-cell readings</p>
+                <p className="text-xs text-slate-500">Select a row to inspect its full analysis</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">{displayCells.length || 0} cells</span>
             </div>
-            <div className="max-h-80 overflow-auto">
+            <div className="max-h-96 overflow-auto">
               <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-gray-50">
-                  <tr className="text-gray-500">
-                    <th className="px-3 py-2">Cell</th>
-                    <th className="px-3 py-2">NDVI</th>
-                    <th className="px-3 py-2">NDMI</th>
-                    <th className="px-3 py-2">BSI</th>
-                    <th className="px-3 py-2">Temp</th>
-                    <th className="px-3 py-2">Cloud</th>
+                <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+                  <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                    <th className="px-4 py-3">Cell</th>
+                    <th className="px-3 py-3">{selectedParameterInfo?.name || "Reading"}</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="hidden px-3 py-3 sm:table-cell">Crop Moisture</th>
+                    <th className="hidden px-3 py-3 md:table-cell">Bare Land</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayCells.map((cell, index) => (
-                    <tr key={cell.grid_cell_id || index} onClick={() => setSelectedCell(cell)} className={`cursor-pointer border-t border-gray-100 hover:bg-emerald-50 ${displaySelected?.grid_cell_id === cell.grid_cell_id ? "bg-emerald-50" : ""}`}>
-                      <td className="px-3 py-2 font-semibold">{String(index + 1).padStart(2, "0")}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "ndvi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "ndmi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "bsi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "temperature"), 1)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "cloud"), 0)}</td>
+                    <tr key={cell.grid_cell_id || index} onClick={() => setSelectedCell(cell)} className={`cursor-pointer border-t border-slate-100 transition hover:bg-emerald-50/70 ${displaySelected?.grid_cell_id === cell.grid_cell_id ? "bg-emerald-50" : ""}`}>
+                      <td className="px-4 py-3 font-bold text-slate-800">{String(index + 1).padStart(2, "0")}</td>
+                      <td className="px-3 py-3 font-semibold text-slate-900">
+                        {getLandMetric(selectedParameter)
+                          ? <MetricInterpretationText metricKey={selectedParameter} value={valueFor(cell, selectedParameter)} className="font-semibold" />
+                          : pretty(valueFor(cell, selectedParameter), selectedParameter === "temperature" ? 1 : 3)}
+                      </td>
+                      <td className="px-3 py-3">
+                        {getLandMetric(selectedParameter)
+                          ? <MetricStatusBadge metricKey={selectedParameter} value={valueFor(cell, selectedParameter)} compact />
+                          : <span className="text-slate-400">Raw reading</span>}
+                      </td>
+                      <td className="hidden px-3 py-3 sm:table-cell"><MetricInterpretationText metricKey="ndmi" value={valueFor(cell, "ndmi")} className="font-medium" /></td>
+                      <td className="hidden px-3 py-3 md:table-cell"><MetricInterpretationText metricKey="bsi" value={valueFor(cell, "bsi")} className="font-medium" /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -435,104 +570,109 @@ export default function LandIntelligence() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">{displaySelected ? "Grid cell details" : "Farm summary"}</p>
-            {displaySelected ? (
-              <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-400">Cell ID</span><span className="font-mono text-[11px]">{displaySelected.grid_cell_id}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Row / Col</span><span>{displaySelected.grid_row ?? "â€”"} / {displaySelected.grid_col ?? "â€”"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Coverage</span><span>{pretty(selectedDetails?.grid_cell?.coverage_ratio ?? displaySelected.coverage_ratio, 2)}</span></div>
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  {[
-                    ["NDVI", selectedDetails?.weighted_average?.ndvi ?? displaySelected.ndvi],
-                    ["NDMI", selectedDetails?.weighted_average?.ndmi ?? displaySelected.ndmi],
-                    ["NDWI", selectedDetails?.weighted_average?.ndwi ?? displaySelected.ndwi],
-                    ["EVI", selectedDetails?.weighted_average?.evi ?? displaySelected.evi],
-                    ["SAVI", selectedDetails?.weighted_average?.savi ?? displaySelected.savi],
-                    ["MSI", selectedDetails?.weighted_average?.msi ?? displaySelected.msi],
-                    ["NBR", selectedDetails?.weighted_average?.nbr ?? displaySelected.nbr],
-                    ["NDRE", selectedDetails?.weighted_average?.ndre ?? displaySelected.ndre],
-                    ["BSI", selectedDetails?.weighted_average?.bsi ?? displaySelected.bsi],
-                    ["Temp", selectedDetails?.weighted_average?.surface_temp_c ?? displaySelected.surface_temp_c],
-                    ["Cloud", selectedDetails?.weighted_average?.cloud_percentage ?? displaySelected.cloud_percentage],
-                    ["Valid", selectedDetails?.weighted_average?.valid_pixel_percentage ?? displaySelected.valid_pixel_percentage],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-2xl border border-gray-100 bg-gray-50 p-2">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</div>
-                      <div className={`text-sm font-semibold ${tone(value, label.toLowerCase())}`}>{pretty(value, 3)}</div>
-                    </div>
-                  ))}
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.07)] xl:sticky xl:top-5">
+            <div className="border-b border-slate-100 bg-[#f8faf7] px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">{displaySelected ? "Selected land cell" : "Farm snapshot"}</p>
+                  <h2 className="mt-1 font-heading text-xl font-bold text-slate-950">{displaySelected ? `Cell ${displaySelected.grid_row ?? "-"} / ${displaySelected.grid_col ?? "-"}` : "Latest field reading"}</h2>
                 </div>
-                <div className="rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">{recommendationFor(selectedDetails?.latest_values || displaySelected)}</div>
-                <div className="rounded-2xl border border-gray-100 bg-white p-3">
-                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">H3 contributions</div>
-                  <div className="space-y-2">
-                    {(selectedDetails?.h3_contributions || []).slice(0, 6).map((row) => (
-                      <div key={row.h3_index} className="rounded-xl border border-gray-100 p-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono">{String(row.h3_index)}</span>
-                          <span className="font-semibold">{row.overlap_percentage}%</span>
-                        </div>
-                        <div className="mt-1 text-gray-500">NDVI {pretty(row.ndvi, 3)} Â· NDMI {pretty(row.ndmi, 3)} Â· BSI {pretty(row.bsi, 3)}</div>
+                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-900 text-white"><Activity className="h-5 w-5" /></span>
+              </div>
+              {displaySelected && (
+                <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-slate-500">
+                  <span className="truncate font-mono">{displaySelected.grid_cell_id}</span>
+                  <button type="button" onClick={() => setSelectedCell(null)} className="shrink-0 font-semibold text-emerald-700 hover:text-emerald-900">Show farm summary</button>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 md:p-5">
+              {displaySelected ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {LAND_METRICS.map((metric) => (
+                      <MetricReading
+                        key={metric.key}
+                        metricKey={metric.key}
+                        value={selectedDetails?.weighted_average?.[metric.backendKey] ?? metricValueFromCell(displaySelected, metric.key)}
+                        compact
+                      />
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-900 text-white"><Sparkles className="h-4 w-4" /></span>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-950">Field interpretation</p>
+                        <p className="mt-1 text-xs leading-5 text-emerald-900/70">{recommendationFor(selectedDetails?.latest_values || displaySelected)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      ["Temperature", selectedDetails?.weighted_average?.surface_temp_c ?? displaySelected.surface_temp_c, "C"],
+                      ["Cloud cover", selectedDetails?.weighted_average?.cloud_percentage ?? displaySelected.cloud_percentage, "%"],
+                      ["Valid pixels", selectedDetails?.weighted_average?.valid_pixel_percentage ?? displaySelected.valid_pixel_percentage, "%"],
+                    ].map(([label, value, unit]) => (
+                      <div key={label} className="rounded-2xl bg-slate-50 p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                        <p className="mt-1 font-heading text-lg font-bold text-slate-800">{pretty(value, 1)}<span className="ml-0.5 text-[10px] text-slate-400">{unit}</span></p>
                       </div>
                     ))}
                   </div>
+
+                  {(selectedDetails?.h3_contributions || []).length > 0 && (
+                    <div className="rounded-2xl border border-slate-100 bg-white p-3">
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Technical H3 contributions</div>
+                      <div className="space-y-2">
+                        {(selectedDetails?.h3_contributions || []).slice(0, 6).map((row) => (
+                          <div key={row.h3_index} className="rounded-xl border border-slate-100 bg-slate-50/70 p-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate font-mono text-[10px] text-slate-500">{String(row.h3_index)}</span>
+                              <span className="font-semibold text-slate-800">{row.overlap_percentage}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <div><span className="block text-gray-400">Weighted NDVI</span><span className={`font-semibold ${tone(latestSummary.weighted_ndvi ?? latestSummary.avg_ndvi, "ndvi")}`}>{pretty(latestSummary.weighted_ndvi ?? latestSummary.avg_ndvi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDMI</span><span className={`font-semibold ${tone(latestSummary.weighted_ndmi ?? latestSummary.avg_ndmi, "ndmi")}`}>{pretty(latestSummary.weighted_ndmi ?? latestSummary.avg_ndmi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDWI</span><span className="font-semibold">{pretty(latestSummary.weighted_ndwi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted BSI</span><span className={`font-semibold ${tone(latestSummary.weighted_bsi ?? latestSummary.avg_bsi, "bsi")}`}>{pretty(latestSummary.weighted_bsi ?? latestSummary.avg_bsi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted EVI</span><span className="font-semibold">{pretty(latestSummary.weighted_evi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted SAVI</span><span className="font-semibold">{pretty(latestSummary.weighted_savi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted MSI</span><span className="font-semibold">{pretty(latestSummary.weighted_msi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDRE</span><span className="font-semibold">{pretty(latestSummary.weighted_ndre, 3)}</span></div>
-                <div><span className="block text-gray-400">Cloud</span><span className="font-semibold">{pretty(latestSummary.avg_cloud_percentage, 0)}</span></div>
-                <div><span className="block text-gray-400">Valid pixels</span><span className="font-semibold">{pretty(latestSummary.valid_pixel_percentage, 0)}</span></div>
-                <div><span className="block text-gray-400">Farm H3 cells</span><span className="font-semibold">{latestSummary.total_farm_h3_cells ?? latestSummary.total_h3_cells ?? h3Cells.length ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Processed H3 cells</span><span className="font-semibold">{latestSummary.processed_h3_cells ?? latestSummary.latest_processed_h3_cells ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Grid cells</span><span className="font-semibold">{latestSummary.total_grid_cells ?? displayCells.length ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Grid cells with values</span><span className="font-semibold">{latestSummary.grid_cells_with_values ?? displayCells.length ?? "â€”"}</span></div>
-                <div className="col-span-2 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">Vegetation: {pickTrend(latestSummary, trends, "vegetation_trend")} Â· Moisture: {pickTrend(latestSummary, trends, "moisture_trend")} Â· Soil: {pickTrend(latestSummary, trends, "soil_exposure_trend")}</div>
-                {!hasAnalysis && (
-                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    Analysis not yet computed for this farm. Click Run Latest Analysis.
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                    <p className="text-xs font-semibold text-slate-800">Select any square on the map</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">You will see its raw readings translated into Crop Greenness, Crop Moisture, Water Stress, Crop Nutrition and other practical signals.</p>
                   </div>
-                )}
-                {Number(latestSummary.total_grid_cells || displayCells.length || 0) > 0 && Number(latestSummary.grid_cells_with_values || 0) === 0 && (
-                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    Grid geometry exists, but weighted satellite values are not computed yet.
+
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {[
+                      ["Cloud cover", `${pretty(latestSummary.avg_cloud_percentage, 0)}%`],
+                      ["Valid pixels", `${pretty(latestSummary.valid_pixel_percentage, 0)}%`],
+                      ["Farm H3 cells", latestSummary.total_farm_h3_cells ?? latestSummary.total_h3_cells ?? h3Cells.length ?? "--"],
+                      ["Processed H3", latestSummary.processed_h3_cells ?? latestSummary.latest_processed_h3_cells ?? "--"],
+                      ["Grid cells", latestSummary.total_grid_cells ?? displayCells.length ?? "--"],
+                      ["Cells with values", latestSummary.grid_cells_with_values ?? displayCells.length ?? "--"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-2xl border border-slate-100 p-3">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                        <span className="mt-1 block font-heading text-lg font-bold text-slate-900">{value}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
-                {!latestSummary.latest_snapshot_date && (
-                  <div className="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                    No scene processed yet.
-                  </div>
-                )}
-              </div>
-            )}
+
+                  {!hasAnalysis && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Analysis is not available yet. Run the latest analysis to create the first reading.</div>}
+                  {Number(latestSummary.total_grid_cells || displayCells.length || 0) > 0 && Number(latestSummary.grid_cells_with_values || 0) === 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">The land grid exists, but satellite values have not been computed yet.</div>}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Trend summary</p>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-400">Vegetation</span><span className="font-semibold">{pickTrend(latestSummary, trends, "vegetation_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Moisture</span><span className="font-semibold">{pickTrend(latestSummary, trends, "moisture_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Soil</span><span className="font-semibold">{pickTrend(latestSummary, trends, "soil_exposure_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">History points</span><span className="font-semibold">{history.length || "â€”"}</span></div>
-            </div>
-            <div className="mt-4 text-xs text-gray-500">
-              {canViewTechnicalH3Layer(user) ? "H3 technical layer available through the toggle." : "Farmer view defaults to the square visual grid."}
-            </div>
-            <div className="mt-3">
-              <Link to={`/farmers/${farm?.farmer_id || ""}`} className="text-xs font-semibold text-emerald-700 hover:underline">Open farmer profile</Link>
-            </div>
-          </div>
         </div>
       </div>
-    </motion.div>
+      </div>
+    </Motion.div>
   );
 }
-
