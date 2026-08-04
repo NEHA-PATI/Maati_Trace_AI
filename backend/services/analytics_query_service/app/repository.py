@@ -10,7 +10,7 @@ from shapely.geometry import Point, Polygon, mapping, shape
 import uuid
 import h3
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, ResourceClosedError, SQLAlchemyError
 
 from shared.db.postgres import engine
 
@@ -914,20 +914,33 @@ def get_grid_cell_details(farm_id: UUID | str, grid_cell_id: UUID | str) -> dict
         ORDER BY c.overlap_ratio DESC;
         """
     )
-    with engine.connect() as conn:
-        cell = conn.execute(cell_query, {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)}).mappings().first()
-        if cell is None:
-            return None
-        latest = conn.execute(
-    value_query,
-    {
-        "farm_id": str(farm_id),
-        "grid_cell_id": str(grid_cell_id),
-        "min_valid": USABLE_SCENE_MIN_VALID_PIXEL_PERCENTAGE,
-        "max_cloud": USABLE_SCENE_MAX_CLOUD_PERCENTAGE,
-    },
-    ).mappings().first()
-    contributions = conn.execute(contrib_query, {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)}).mappings().all()
+    for attempt in range(2):
+        try:
+            with engine.connect() as conn:
+                cell = conn.execute(
+                    cell_query,
+                    {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)},
+                ).mappings().first()
+                if cell is None:
+                    return None
+                latest = conn.execute(
+                    value_query,
+                    {
+                        "farm_id": str(farm_id),
+                        "grid_cell_id": str(grid_cell_id),
+                        "min_valid": USABLE_SCENE_MIN_VALID_PIXEL_PERCENTAGE,
+                        "max_cloud": USABLE_SCENE_MAX_CLOUD_PERCENTAGE,
+                    },
+                ).mappings().first()
+                contributions = conn.execute(
+                    contrib_query,
+                    {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)},
+                ).mappings().all()
+            break
+        except (ResourceClosedError, OperationalError):
+            if attempt == 1:
+                raise
+            engine.dispose()
     features_by_h3 = _latest_feature_rows_by_h3(farm_id)
 
     def _recommendations(data: dict[str, Any]) -> list[str]:
