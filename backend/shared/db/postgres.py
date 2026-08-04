@@ -15,10 +15,10 @@ def get_database_url() -> str:
 engine = create_engine(
     get_database_url(),
     pool_pre_ping=True,
+    pool_recycle=1800,
     pool_size=5,
     max_overflow=10,
 )
-
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
