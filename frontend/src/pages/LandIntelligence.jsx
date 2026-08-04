@@ -313,7 +313,8 @@ export default function LandIntelligence() {
         start_date: "2025-12-01",
         end_date: "2026-08-03",
         max_cloud_cover: 30,
-        h3_resolution: 12,
+        // Resolution is selected by the orchestrator service default.
+        // h3_resolution: 12,
         provider: "planetary_computer",
         collection_id: "sentinel-2-l2a",
         use_tiny_preview_bbox: true,

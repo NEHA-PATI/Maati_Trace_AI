@@ -20,7 +20,7 @@ const STAGES = [
   },
   {
     num: 3, title: "H3 Hexagonal Grid Overlay",
-    desc: "Farm polygons are tessellated into Uber's H3 hexagonal grid (resolution 10–12), enabling standardized, sub-parcel spatial analysis at scale.",
+    desc: "Farm polygons are tessellated into Uber's H3 hexagonal grid, enabling standardized, sub-parcel spatial analysis at scale.",
     img: "https://res.cloudinary.com/dkst917dg/image/upload/v1780464057/33_eevoop.jpg",
     tag: "Geospatial", color: "from-violet-400 to-purple-500"
   },
