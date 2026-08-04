@@ -20,7 +20,7 @@ describe("HexagonPipelineLoader", () => {
         steps={steps}
         currentStep={2}
         status="Registering farm..."
-        details={["H3 res: 12"]}
+        details={[]}
       />,
     );
 
@@ -29,7 +29,7 @@ describe("HexagonPipelineLoader", () => {
     })).toBeInTheDocument();
     expect(screen.getByText("Registering land boundary")).toBeInTheDocument();
     expect(screen.getByText("Registering farm...")).toBeInTheDocument();
-    expect(screen.getByText("H3 res: 12")).toBeInTheDocument();
+    expect(screen.queryByText(/H3 res:/i)).not.toBeInTheDocument();
   });
 
   it("renders nothing while the pipeline is closed", () => {

@@ -408,7 +408,8 @@ export default function FarmRegister() {
       try {
         const preview = await previewH3({
           polygon: geoJson,
-          resolution: 12,
+          // Resolution is selected by the boundary service default.
+          // resolution: 12,
           include_cells: false,
         });
         setH3Preview(preview);
@@ -426,7 +427,8 @@ export default function FarmRegister() {
         block_code: validated.block_code,
         village_name: formData.village_name || null,
         polygon: geoJson,
-        h3_resolution: 12,
+        // Resolution is selected by the farm registry service default.
+        // h3_resolution: 12,
       };
 
       setPipelineStatus("Registering farm...");
@@ -439,9 +441,10 @@ export default function FarmRegister() {
         setPipelineStage(3);
         await materializeFarmAnalysis(farmPayload.farm_id, {
           start_date: "2025-12-01",
-          end_date: "2025-12-31",
+          end_date: "2026-08-03",
           max_cloud_cover: 30,
-          h3_resolution: 12,
+          // Resolution is selected by the orchestrator service default.
+          // h3_resolution: 12,
           provider: "planetary_computer",
           collection_id: "sentinel-2-l2a",
           use_tiny_preview_bbox: true,
@@ -536,7 +539,6 @@ export default function FarmRegister() {
             `State: ${formData.state_name || "â€”"}`,
             `District: ${formData.district_name || "â€”"}`,
             `Block: ${formData.block_name || "â€”"}`,
-            `H3 res: 12`,
             `Points: ${polygonPoints.length}`,
           ]}
           failure={error || null}
