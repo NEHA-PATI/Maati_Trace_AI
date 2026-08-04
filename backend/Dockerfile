@@ -17,6 +17,7 @@ ENV SERVICE_NAME=${SERVICE_NAME} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
+ENV PORT=8000
 
 RUN test -n "$SERVICE_NAME" || (echo "SERVICE_NAME build-arg is required" && exit 1)
 
@@ -42,16 +43,15 @@ COPY services/${SERVICE_NAME}/requirements.txt services/${SERVICE_NAME}/requirem
 RUN pip install --no-cache-dir -r services/${SERVICE_NAME}/requirements.txt
 
 COPY shared/ shared/
-#COPY services/${SERVICE_NAME}/ services/${SERVICE_NAME}/
 COPY services/ services/
 
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8000
+EXPOSE ${PORT}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).status == 200 else 1)"
+    CMD python -c "import os, urllib.request, sys; port=os.getenv('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{port}/health/live', timeout=3).status == 200 else 1)"
 
-CMD ["sh", "-c", "gunicorn services.${SERVICE_NAME}.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2}"]
+CMD ["sh", "-c", "gunicorn services.${SERVICE_NAME}.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT} --workers ${GUNICORN_WORKERS:-2}"]
