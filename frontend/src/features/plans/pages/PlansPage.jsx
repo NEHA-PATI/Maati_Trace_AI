@@ -65,51 +65,81 @@ const PLANS = [
     id: "maatitrace",
     name: "MaatiTrace",
     tagline:
-      "For individual farmers starting their satellite land intelligence journey.",
+      "Essential satellite-based crop monitoring for small and individual farmers.",
     storage: {
       icon: Cloud,
-      value: "2 GB storage",
+      value: "Up to 1 acre",
     },
     monthly: 0,
     annual: 0,
     cta: "Start Free",
     ctaTo: "/register",
-    audience: "Individual Farmer",
+    audience: "Individual Farmers",
     highlights: [
       {
-        icon: TrendingUp,
-        label: "Up to 3 parcels",
+        icon: MapPin,
+        label: "Farm registration up to 1 acre",
       },
       {
-        icon: Zap,
-        label: "5-day satellite cadence",
+        icon: Satellite,
+        label: "Satellite imagery analysis",
       },
     ],
     features: [
       {
         icon: MapPin,
-        title: "Register up to 3 land parcels",
-        desc: "GPS-tagged farm boundaries with H3 grid overlay.",
+        title: "Farm registration up to 1 acre",
+        desc: "Register and map one farm with a total area of up to 1 acre.",
       },
       {
         icon: Satellite,
-        title: "Sentinel-2 satellite monitoring",
-        desc: "10 m multispectral imagery every 5 to 10 days.",
+        title: "Satellite imagery analysis",
+        desc: "Monitor farm conditions using processed satellite imagery.",
+      },
+      {
+        icon: Leaf,
+        title: "Crop Greenness",
+        desc: "Understand how green and healthy the crop appears.",
+      },
+      {
+        icon: TrendingUp,
+        title: "Crop Growth",
+        desc: "Track the overall strength and development of crop growth.",
+      },
+      {
+        icon: Sparkles,
+        title: "Early Crop Growth",
+        desc: "Monitor crop establishment during the early growth stage.",
+      },
+      {
+        icon: Cloud,
+        title: "Crop Moisture",
+        desc: "Identify moisture conditions within the crop vegetation.",
+      },
+      {
+        icon: Database,
+        title: "Water Availability",
+        desc: "Understand the level of water available in the farm.",
+      },
+      {
+        icon: Zap,
+        title: "Water Stress",
+        desc: "Detect signs of crop stress caused by insufficient water.",
+      },
+      {
+        icon: Leaf,
+        title: "Crop Nutrition",
+        desc: "Identify possible changes in crop nutrient condition.",
+      },
+      {
+        icon: Layers,
+        title: "Bare Land",
+        desc: "Detect areas where soil is exposed or vegetation is absent.",
       },
       {
         icon: BarChart3,
-        title: "Basic NDVI and crop health",
-        desc: "Vegetation index per parcel, updated each scene.",
-      },
-      {
-        icon: Shield,
-        title: "Verified land certificate",
-        desc: "Tamper-proof farm health report for credit and insurance.",
-      },
-      {
-        icon: Users,
-        title: "Link to one FPO",
-        desc: "Optional connection with your farmer producer organisation.",
+        title: "Crop Condition",
+        desc: "View the overall condition of crops across the registered farm.",
       },
     ],
   },
@@ -117,62 +147,57 @@ const PLANS = [
     id: "maatitrace_pro",
     name: "MaatiTrace Pro",
     tagline:
-      "For FPOs, cooperatives and institutions managing many farmers at scale.",
+      "Advanced farm intelligence with actionable crop recommendations and alerts.",
     storage: {
       icon: Cloud,
-      value: "50 GB storage",
+      value: "Charged per acre",
     },
-    monthly: 1999,
-    annual: 19999,
+    monthly: 100,
+    annual: 100,
     cta: "Get MaatiTrace Pro",
     ctaTo: "/register",
     recommended: true,
-    audience: "FPOs and Institutions",
+    audience: "Farmers and FPOs",
     highlights: [
       {
         icon: TrendingUp,
-        label: "Unlimited farms",
+        label: "\u20B9100 per acre",
       },
       {
-        icon: Zap,
-        label: "Real-time API plus bulk",
+        icon: Sparkles,
+        label: "Advanced analytics",
       },
     ],
     features: [
       {
-        icon: MapPin,
-        title: "Unlimited land parcels",
-        desc: "Register every member farm with bulk CSV upload.",
-      },
-      {
-        icon: Satellite,
-        title: "Premium satellite stack",
-        desc: "Sentinel-2 plus Sentinel-1 SAR and Landsat, cloud-masked.",
+        icon: Sparkles,
+        title: "MaatiTrace Advanced Analytics",
+        desc: "Access advanced satellite-based farm and crop analytics.",
       },
       {
         icon: BarChart3,
-        title: "Advanced NDVI, moisture and yield models",
-        desc: "Per-H3 cell analytics with seasonal trend lines.",
+        title: "Crop Insights",
+        desc: "Receive clear insights about crop growth, health and field condition.",
       },
       {
-        icon: Users,
-        title: "Unlimited farmer memberships",
-        desc: "Invite, manage and audit your entire FPO portfolio.",
+        icon: Zap,
+        title: "Crop Stress Detection",
+        desc: "Detect possible water, moisture and vegetation stress early.",
       },
       {
-        icon: Database,
-        title: "Bulk data pipeline",
-        desc: "Batch raster processing with full audit logs.",
-      },
-      {
-        icon: Layers,
-        title: "Block and district dashboards",
-        desc: "Aggregated intelligence for officers and admins.",
+        icon: Leaf,
+        title: "Fertilizer Recommendation",
+        desc: "Receive fertilizer guidance based on crop and farm conditions.",
       },
       {
         icon: Shield,
-        title: "Priority verification and API access",
-        desc: "Faster KYC turnaround plus REST API access.",
+        title: "Pesticide Alerts",
+        desc: "Receive alerts when crop conditions indicate possible pest risk.",
+      },
+      {
+        icon: TrendingUp,
+        title: "Yield Insights",
+        desc: "View expected crop yield and changes in yield potential.",
       },
     ],
   },
@@ -180,62 +205,110 @@ const PLANS = [
 
 const COMPARE_ROWS = [
   {
-    feature: "Land parcels",
-    icon: MapPin,
-    basic: "Up to 3",
-    pro: "Unlimited",
-  },
-  {
-    feature: "Satellite imagery",
-    icon: Satellite,
-    basic: "Sentinel-2",
-    pro: "Sentinel-2 plus SAR and Landsat",
-  },
-  {
-    feature: "NDVI and crop health",
+    feature: "Pricing",
     icon: BarChart3,
-    basic: "Basic indices",
-    pro: "Per-H3 plus trend models",
+    basic: "Free",
+    pro: "\u20B9100 per acre",
   },
   {
-    feature: "Soil moisture SAR",
+    feature: "Farm registration",
+    icon: MapPin,
+    basic: "Up to 1 acre",
+    pro: "Based on paid acreage",
+  },
+  {
+    feature: "Satellite imagery analysis",
     icon: Satellite,
-    basic: false,
+    basic: true,
     pro: true,
   },
   {
-    feature: "Farmer memberships",
-    icon: Users,
-    basic: "1 self",
-    pro: "Unlimited",
+    feature: "Crop Greenness",
+    icon: Leaf,
+    basic: true,
+    pro: true,
   },
   {
-    feature: "Bulk CSV upload",
+    feature: "Crop Growth",
+    icon: TrendingUp,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Early Crop Growth",
+    icon: Sparkles,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Crop Moisture",
+    icon: Cloud,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Water Availability",
     icon: Database,
-    basic: false,
+    basic: true,
     pro: true,
   },
   {
-    feature: "Block and district dashboards",
+    feature: "Water Stress",
+    icon: Zap,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Crop Nutrition",
+    icon: Leaf,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Bare Land",
     icon: Layers,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Crop Condition",
+    icon: BarChart3,
+    basic: true,
+    pro: true,
+  },
+  {
+    feature: "Advanced Analytics",
+    icon: Sparkles,
     basic: false,
     pro: true,
   },
   {
-    feature: "REST API access",
+    feature: "Crop Insights",
+    icon: BarChart3,
+    basic: false,
+    pro: true,
+  },
+  {
+    feature: "Crop Stress Detection",
     icon: Zap,
     basic: false,
     pro: true,
   },
   {
-    feature: "Verified land certificates",
-    icon: Shield,
-    basic: true,
+    feature: "Fertilizer Recommendation",
+    icon: Leaf,
+    basic: false,
     pro: true,
   },
   {
-    feature: "Priority KYC and support",
-    icon: Star,
+    feature: "Pesticide Alerts",
+    icon: Shield,
+    basic: false,
+    pro: true,
+  },
+  {
+    feature: "Yield Insights",
+    icon: TrendingUp,
     basic: false,
     pro: true,
   },
@@ -251,7 +324,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "I registered 3 acres for free and got a satellite-backed land certificate my bank actually accepted.",
+      "I registered my one-acre farm for free and started monitoring crop conditions from one place.",
     author: "Ramesh Sahoo",
     role: "Smallholder Farmer, Odisha",
     accent: "bg-blue-500",
@@ -261,11 +334,11 @@ const TESTIMONIALS = [
 const FAQS = [
   {
     q: "Is MaatiTrace really free for individual farmers?",
-    a: "Yes. The free tier supports up to 3 land parcels with Sentinel-2 monitoring and verified certificates.",
+    a: "Yes. The free tier supports registration and satellite imagery analysis for one farm with a total area of up to 1 acre.",
   },
   {
     q: "How are Pro plans billed?",
-    a: "Monthly billing is Rs. 1,999 per month. Annual billing is Rs. 19,999 per year. GST will be handled when backend billing is added.",
+    a: "MaatiTrace Pro is charged at \u20B9100 per registered acre. Applicable taxes and payment processing will be handled when backend billing is connected.",
   },
   {
     q: "Can I upgrade or downgrade later?",
@@ -277,7 +350,7 @@ const FAQS = [
   },
   {
     q: "Do you support FPOs with many farmers?",
-    a: "Yes. Pro is designed for bulk upload, unlimited memberships and block-level aggregate dashboards.",
+    a: "Yes. MaatiTrace Pro is intended for both farmers and FPOs that need advanced crop insights, alerts and recommendations across paid acreage.",
   },
 ];
 
@@ -289,53 +362,14 @@ function normalizePlanId(plan) {
   return "maatitrace";
 }
 
-function BillingToggle({
-  billing,
-  setBilling,
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 p-1">
-        {["monthly", "annual"].map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setBilling(option)}
-            className={`rounded-full px-6 py-2 text-xs font-bold capitalize transition-all ${
-              billing === option
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-emerald-700 hover:text-emerald-800"
-            }`}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-      <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-        <Sparkles
-          className="h-3.5 w-3.5"
-          strokeWidth={2.5}
-        />
-        Save 16% when you pay annually
-      </p>
-    </div>
-  );
-}
-
 function PlanCard({
   plan,
-  billing,
   authenticated,
   currentPlan,
   selectedPlan,
   onSelect,
 }) {
-  const price =
-    billing === "annual"
-      ? plan.annual
-      : plan.monthly;
   const StorageIcon = plan.storage.icon;
-  const isFree = price === 0;
   const isCurrent =
     authenticated && currentPlan === plan.id;
   const isSelected =
@@ -448,35 +482,22 @@ function PlanCard({
 
         <div className="mb-1">
           <span className="text-3xl font-black text-gray-900">
-            {isFree
+            {plan.id === "maatitrace"
               ? "Free"
-              : `Rs. ${price.toLocaleString("en-IN")}`}
+              : `\u20B9${plan.monthly.toLocaleString("en-IN")}`}
           </span>
-          {!isFree ? (
+          {plan.id === "maatitrace_pro" ? (
             <span className="text-sm font-medium text-gray-400">
-              /{billing === "annual" ? "yr" : "mo"}
+              /acre
             </span>
           ) : null}
         </div>
 
-        {!isFree && billing === "annual" ? (
-          <p className="mb-1 text-xs text-gray-400">
-            <span className="line-through">
-              Rs. {(plan.monthly * 12).toLocaleString("en-IN")}
-            </span>{" "}
-            billed yearly
-          </p>
-        ) : null}
-        {!isFree && billing === "monthly" ? (
-          <p className="mb-1 text-xs text-gray-400">
-            billed monthly, cancel anytime
-          </p>
-        ) : null}
-        {isFree ? (
-          <p className="mb-1 text-xs text-gray-400">
-            forever free for smallholders
-          </p>
-        ) : null}
+        <p className="mb-1 text-xs text-gray-400">
+          {plan.id === "maatitrace"
+            ? "Free for farm registration up to 1 acre"
+            : "Pay only for the registered farm area"}
+        </p>
 
         {authenticated ? (
           <button
@@ -618,7 +639,7 @@ function ComparisonTable() {
                   MaatiTrace Pro
                 </span>
                 <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wider text-emerald-600">
-                  Rs. 1,999/mo
+                  {"\u20B9"}100 per acre
                 </span>
               </th>
             </tr>
@@ -778,8 +799,6 @@ function PlansContent({
   authenticated,
   user,
 }) {
-  const [billing, setBilling] =
-    useState("annual");
   const currentPlan =
     normalizePlanId(user?.plan);
   const [selectedPlan, setSelectedPlan] =
@@ -797,7 +816,7 @@ function PlansContent({
         aria-hidden="true"
       />
 
-      <div className="relative mx-auto max-w-5xl px-6 py-16 md:py-20">
+      <div className="relative mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-20 lg:px-10">
         <div className="mb-10 text-center">
           <Motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -814,8 +833,8 @@ function PlansContent({
               MaatiTrace satellite intelligence
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-gray-400">
-              Cancel anytime. Billing and entitlement enforcement will be
-              connected to the backend later.
+              Start free with one acre, then unlock advanced intelligence at
+              a simple per-acre price.
             </p>
             {authenticated ? (
               <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 py-2 text-xs font-bold text-emerald-700 shadow-sm">
@@ -830,13 +849,6 @@ function PlansContent({
               </div>
             ) : null}
           </Motion.div>
-
-          <div className="mt-8">
-            <BillingToggle
-              billing={billing}
-              setBilling={setBilling}
-            />
-          </div>
         </div>
 
         {/* <div className="mx-auto mb-14 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
@@ -879,12 +891,11 @@ function PlansContent({
           })}
         </div> */}
 
-        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-2">
           {PLANS.map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
-              billing={billing}
               authenticated={authenticated}
               currentPlan={currentPlan}
               selectedPlan={selectedPlan}
@@ -912,7 +923,7 @@ function PlansContent({
           <ComparisonTable />
         </div>
 
-        <div className="mt-24">
+        {/* <div className="mt-24">
           <div className="mb-8 text-center">
             <span className="text-[10px] uppercase tracking-[0.3em] text-gray-400">
               Trusted on the ground
@@ -930,7 +941,7 @@ function PlansContent({
               />
             ))}
           </div>
-        </div>
+        </div> */}
 
         <div className="mx-auto mt-24 max-w-2xl">
           <div className="mb-6 text-center">
