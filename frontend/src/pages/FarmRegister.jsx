@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import FarmCard from "@/components/ui-custom/FarmCard";
-import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
+import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import { getMyFarmerProfile } from "@/lib/api/farmer";
 import { previewH3, registerFarm } from "@/lib/api/farm";
 import {
@@ -515,7 +515,7 @@ export default function FarmRegister() {
         {error && <div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-600">{error}</div>}
         {validationWarning && <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">{validationWarning}</div>}
         {pipelineStatus && <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">{pipelineStatus}</div>}
-        <PipelineGlassLoader
+        <HexagonPipelineLoader
           open={pipelineOpen}
           title="Land registration pipeline"
           status={pipelineStatus}
