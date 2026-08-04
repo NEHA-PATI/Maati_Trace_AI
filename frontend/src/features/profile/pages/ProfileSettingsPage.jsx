@@ -33,79 +33,23 @@ import {
 } from "@/features/profile/profileMappers";
 
 const FARMER_NAV = [
-  {
-    id: "account",
-    label: "Account",
-    icon: User,
-  },
-  {
-    id: "identity",
-    label: "Identity",
-    icon: Shield,
-  },
-  {
-    id: "location",
-    label: "Location",
-    icon: MapPin,
-  },
-  {
-    id: "role",
-    label: "Role Details",
-    icon: Wheat,
-  },
-  {
-    id: "consent",
-    label: "Consent",
-    icon: Check,
-  },
-  {
-    id: "plan",
-    label: "Your Plan",
-    icon: Sparkles,
-  },
-  {
-    id: "export",
-    label: "Export",
-    icon: Download,
-  },
+  { id: "account", label: "Account", icon: User },
+  { id: "identity", label: "Identity", icon: Shield },
+  { id: "location", label: "Location", icon: MapPin },
+  { id: "role", label: "Role Details", icon: Wheat },
+  { id: "consent", label: "Consent", icon: Check },
+  { id: "plan", label: "Your Plan", icon: Sparkles },
+  { id: "export", label: "Export", icon: Download },
 ];
 
 const FPO_NAV = [
-  {
-    id: "organisation",
-    label: "Organisation",
-    icon: Building2,
-  },
-  {
-    id: "contact",
-    label: "Contact",
-    icon: User,
-  },
-  {
-    id: "location",
-    label: "Location",
-    icon: MapPin,
-  },
-  {
-    id: "operations",
-    label: "Operations",
-    icon: Wheat,
-  },
-  {
-    id: "verification",
-    label: "Verification",
-    icon: Shield,
-  },
-  {
-    id: "plan",
-    label: "Your Plan",
-    icon: Sparkles,
-  },
-  {
-    id: "export",
-    label: "Export",
-    icon: FileText,
-  },
+  { id: "organisation", label: "Organisation", icon: Building2 },
+  { id: "contact", label: "Contact", icon: User },
+  { id: "location", label: "Location", icon: MapPin },
+  { id: "operations", label: "Operations", icon: Wheat },
+  { id: "verification", label: "Verification", icon: Shield },
+  { id: "plan", label: "Your Plan", icon: Sparkles },
+  { id: "export", label: "Export", icon: FileText },
 ];
 
 function ProfileMissingFields({
@@ -179,9 +123,7 @@ export function ProfileSettingsPage() {
 
   useEffect(() => {
     if (profileType === "fpo") {
-      setActiveSection(
-        "organisation",
-      );
+      setActiveSection("organisation");
     } else {
       setActiveSection("account");
     }
@@ -234,7 +176,7 @@ export function ProfileSettingsPage() {
   };
 
   return (
-    <div className="mt-font-body min-h-screen bg-[color:var(--mt-paper)] px-4 py-6 text-slate-900 md:px-6">
+    <div className="mt-font-body min-h-screen px-4 py-6 text-slate-900 md:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="space-y-5">
           <ProfileHeader
@@ -253,9 +195,7 @@ export function ProfileSettingsPage() {
             <div className="lg:sticky lg:top-5 lg:self-start">
               <ProfileNavigation
                 items={nav}
-                activeSection={
-                  activeSection
-                }
+                activeSection={activeSection}
                 onSelect={scrollTo}
               />
               <div

@@ -6,6 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { Bell } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
 
@@ -15,6 +16,8 @@ const NAV_ITEMS = [
   { to: "/our-method", label: "Our Method" },
   { to: "/use-cases", label: "Use Cases" },
   { to: "/plans", label: "Plans" },
+  { to: "/settings", label: "Profile" },
+  { to: "/farm-register", label: "Register" },
 ];
 
 function MaatiLogo() {
@@ -99,7 +102,19 @@ export default function AppTopbar() {
           })}
         </nav>
 
-        <div className="justify-self-end">
+        <div className="flex items-center justify-self-end gap-2">
+          <Link
+            to="/notifications"
+            aria-label="Notifications"
+            title="Notifications"
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-colors ${
+              location.pathname === "/notifications"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-foreground/75 hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            <Bell className="h-4 w-4" aria-hidden="true" />
+          </Link>
           <span className="flex flex-col items-end gap-1">
             <button
               type="button"

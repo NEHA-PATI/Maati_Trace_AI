@@ -839,7 +839,7 @@ function PlansContent({
           </div>
         </div>
 
-        <div className="mx-auto mb-14 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
+        {/* <div className="mx-auto mb-14 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
           {TRUST_STATS.map((stat, index) => {
             const Icon = stat.icon;
 
@@ -877,7 +877,7 @@ function PlansContent({
               </Motion.div>
             );
           })}
-        </div>
+        </div> */}
 
         <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6 md:grid-cols-2">
           {PLANS.map((plan) => (

@@ -360,7 +360,7 @@ export default function LandIntelligence() {
     <Motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.10),_transparent_32%),linear-gradient(180deg,#f7faf6_0%,#f8fafc_55%,#f3f6f2_100%)]"
+      className="min-h-screen"
     >
       <PipelineGlassLoader
         open={pipelineOpen}
@@ -391,11 +391,16 @@ export default function LandIntelligence() {
 
       <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6 lg:p-8">
         <section
-          className="relative overflow-hidden rounded-[2.25rem] border border-emerald-900/10 bg-[#f7fbe9] bg-cover bg-center shadow-[0_22px_55px_rgba(31,78,48,0.16)] xl:aspect-[5/1]"
-          style={{ backgroundImage: "url('/image.png')" }}
+          className="relative overflow-hidden rounded-[2.25rem] border border-emerald-900/10 bg-[#f7fbe9] shadow-[0_22px_55px_rgba(31,78,48,0.16)] xl:h-[320px]"
+          style={{
+            backgroundImage: "url('/image.png')",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "106% 122%",
+          }}
         >
           <div className="relative flex min-h-[610px] flex-col px-6 pb-8 pt-12 sm:px-10 md:px-14 lg:px-16 xl:absolute xl:inset-0 xl:min-h-0 xl:px-14 xl:py-4">
-            <div className="max-w-[790px]">
+            <div className="max-w-[790px] xl:absolute xl:left-14 xl:top-5">
               <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.28em] text-[#247a58] md:text-sm xl:text-xs">
                 <ScanLine className="h-4 w-4 md:h-5 md:w-5 xl:h-4 xl:w-4" />
                 Land Intelligence
@@ -426,14 +431,14 @@ export default function LandIntelligence() {
             <Button
               onClick={runLatestAnalysis}
               disabled={refreshing}
-              className="mt-6 h-14 self-start rounded-2xl bg-[#d8fa78] px-7 text-base font-bold text-[#123f31] shadow-[0_12px_25px_rgba(47,104,50,0.2)] hover:bg-[#c9f45b] xl:absolute xl:right-14 xl:top-[32%] xl:mt-0 xl:h-10 xl:px-6 xl:text-sm"
+              className="mt-6 h-14 self-start rounded-2xl bg-[#d8fa78] px-7 text-base font-bold text-[#123f31] shadow-[0_12px_25px_rgba(47,104,50,0.2)] hover:bg-[#c9f45b] xl:absolute xl:right-14 xl:top-[88px] xl:mt-0 xl:h-11 xl:px-7 xl:text-sm"
             >
               <RefreshCw className={`mr-3 h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
               Run Latest Analysis
             </Button>
 
-            <div className="mt-auto grid gap-4 pt-8 md:grid-cols-3 xl:gap-3 xl:pt-2">
-              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+            <div className="mt-auto grid gap-4 pt-8 md:grid-cols-3 xl:absolute xl:bottom-4 xl:left-14 xl:right-14 xl:h-[94px] xl:gap-3 xl:pt-0">
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:h-full xl:min-h-0 xl:rounded-2xl xl:p-3">
                 <div className="absolute -bottom-12 -left-8 h-20 w-64 rounded-[50%] bg-lime-300/55 blur-sm" />
                 <p className="relative text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Priority signal</p>
                 <div className="relative mt-5 flex flex-wrap items-center justify-between gap-3 xl:mt-1">
@@ -442,7 +447,7 @@ export default function LandIntelligence() {
                 </div>
               </div>
 
-              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:h-full xl:min-h-0 xl:rounded-2xl xl:p-3">
                 <div className="absolute -bottom-14 right-0 h-24 w-72 rounded-[50%] bg-lime-300/40 blur-sm" />
                 <p className="relative text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Analysed area</p>
                 <p className="relative mt-4 font-heading text-4xl font-bold text-[#123f31] xl:mt-1 xl:text-2xl">
@@ -451,7 +456,7 @@ export default function LandIntelligence() {
                 </p>
               </div>
 
-              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:min-h-20 xl:rounded-2xl xl:p-3">
+              <div className="relative min-h-32 overflow-hidden rounded-[1.6rem] border border-emerald-900/10 bg-white/95 p-5 shadow-[0_10px_24px_rgba(28,66,45,0.14)] backdrop-blur-sm xl:h-full xl:min-h-0 xl:rounded-2xl xl:p-3">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#247a58] md:text-sm">Coverage</p>
                 <p className="mt-4 font-heading text-4xl font-bold text-[#123f31] xl:mt-1 xl:text-2xl">
                   {displayCells.length || "--"}

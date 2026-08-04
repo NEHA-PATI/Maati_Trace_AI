@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Authentication
     jwt_secret: str
     jwt_algorithm: str = "HS256"
+    jwt_issuer: str = "maatitrace-auth"
+    jwt_audience: str = "maatitrace-web"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
     password_hash_scheme: str = "bcrypt"
@@ -70,6 +72,13 @@ class Settings(BaseSettings):
     lakehouse_writer_service_url: str = "http://localhost:8009"
     hot_stream_orchestrator_service_url: str = "http://localhost:8010"
     analytics_query_service_url: str = "http://localhost:8011"
+
+    # API gateway upstream connection pool
+    gateway_upstream_timeout_seconds: float = 180.0
+    gateway_connect_timeout_seconds: float = 10.0
+    gateway_max_connections: int = 100
+    gateway_max_keepalive_connections: int = 20
+    gateway_keepalive_expiry_seconds: float = 30.0
 
     # STAC providers
     default_stac_provider: str = "planetary_computer"

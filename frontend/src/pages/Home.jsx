@@ -251,7 +251,8 @@ export default function Home() {
       </section>
 
       {/* ── STATS STRIP ──────────────────────────────────────────────────── */}
-      <section className="py-16 px-6 bg-gradient-to-b from-gray-50 to-white">
+      {/* {
+        <section className="py-16 px-6 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
           {STATS.map((s, i) => {
             const Icon = s.icon;
@@ -274,6 +275,7 @@ export default function Home() {
           })}
         </div>
       </section>
+      } */}
 
       {/* ── WHAT WE DO ───────────────────────────────────────────────────── */}
       <section className="py-20 px-6 bg-white">

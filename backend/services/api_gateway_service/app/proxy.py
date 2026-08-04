@@ -11,6 +11,9 @@ class GatewayProxyError(RuntimeError):
     pass
 
 
+UPSTREAM_CLIENT_STATE_KEY = "upstream_http_client"
+
+
 ROUTE_TARGETS = {
     "auth": settings.auth_service_url,
     "location": settings.district_boundary_service_url,
@@ -43,6 +46,29 @@ HEALTH_ROUTE_TARGETS = {
 
 def get_route_targets() -> dict[str, str]:
     return ROUTE_TARGETS.copy()
+
+
+def create_upstream_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(
+            settings.gateway_upstream_timeout_seconds,
+            connect=settings.gateway_connect_timeout_seconds,
+        ),
+        limits=httpx.Limits(
+            max_connections=settings.gateway_max_connections,
+            max_keepalive_connections=(
+                settings.gateway_max_keepalive_connections
+            ),
+            keepalive_expiry=settings.gateway_keepalive_expiry_seconds,
+        ),
+    )
+
+
+def _get_upstream_client(request: Request) -> httpx.AsyncClient:
+    client = getattr(request.app.state, UPSTREAM_CLIENT_STATE_KEY, None)
+    if client is None or client.is_closed:
+        raise GatewayProxyError("Gateway upstream client is not available")
+    return client
 
 
 def _build_target_url(prefix: str, rest_path: str, query_string: bytes) -> str:
@@ -135,14 +161,14 @@ async def _proxy_request(
         if key.lower() not in excluded_headers
     }
 
+    client = _get_upstream_client(request)
     try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            upstream_response = await client.request(
-                method=method or request.method,
-                url=target_url,
-                headers=headers,
-                content=body if (method or request.method) != "GET" else None,
-            )
+        upstream_response = await client.request(
+            method=method or request.method,
+            url=target_url,
+            headers=headers,
+            content=body if (method or request.method) != "GET" else None,
+        )
     except httpx.RequestError as exc:
         raise GatewayProxyError(f"Failed to reach upstream service: {exc}") from exc
 

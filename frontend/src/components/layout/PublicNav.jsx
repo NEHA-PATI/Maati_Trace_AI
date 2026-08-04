@@ -6,6 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { Bell } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
 
@@ -25,6 +26,14 @@ const AUTHENTICATED_NAV_ITEMS = [
   {
     to: "/farmer/me",
     label: "Dashboard",
+  },
+  {
+    to: "/settings",
+    label: "Profile",
+  },
+  {
+    to: "/farm-register",
+    label: "Register",
   },
 ];
 
@@ -113,26 +122,40 @@ export default function PublicNav() {
 
         <div className="flex items-center justify-end gap-2">
           {initialising ? null : isAuthenticated ? (
-            <span className="flex flex-col items-end gap-1">
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="rounded-full border border-border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-foreground/75 transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            <div className="flex items-start gap-2">
+              <Link
+                to="/notifications"
+                aria-label="Notifications"
+                title="Notifications"
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-colors ${
+                  location.pathname === "/notifications"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-foreground/75 hover:bg-secondary hover:text-foreground"
+                }`}
               >
-                {loggingOut
-                  ? "Logging out..."
-                  : "Log out"}
-              </button>
-              {logoutError ? (
-                <span
-                  role="alert"
-                  className="max-w-48 text-right text-[10px] font-semibold text-rose-600"
+                <Bell className="h-4 w-4" aria-hidden="true" />
+              </Link>
+              <span className="flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="rounded-full border border-border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-foreground/75 transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {logoutError}
-                </span>
-              ) : null}
-            </span>
+                  {loggingOut
+                    ? "Logging out..."
+                    : "Log out"}
+                </button>
+                {logoutError ? (
+                  <span
+                    role="alert"
+                    className="max-w-48 text-right text-[10px] font-semibold text-rose-600"
+                  >
+                    {logoutError}
+                  </span>
+                ) : null}
+              </span>
+            </div>
           ) : (
             <>
               <Link

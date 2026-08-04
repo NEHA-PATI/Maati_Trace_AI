@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
-import requests
 from pydantic import BaseModel
 
-from shared.config.settings import settings
 from services.farm_registry_service.app.errors import FarmRegistryError
+from shared.security.local_auth import (
+    CurrentUserUnavailableError,
+    InvalidAccessTokenError,
+    MissingAuthorizationError,
+    PrincipalLookupError,
+    load_current_user,
+)
 
 
 class AuthPrincipal(BaseModel):
@@ -19,18 +23,6 @@ class AuthPrincipal(BaseModel):
     is_active: bool = True
     is_verified: bool = False
     onboarding_status: str | None = None
-
-
-def _error_message(response: requests.Response) -> str:
-    try:
-        payload = response.json()
-    except ValueError:
-        return response.text or "Invalid or expired bearer token."
-
-    detail = payload.get("detail")
-    if isinstance(detail, dict):
-        return detail.get("message") or "Invalid or expired bearer token."
-    return payload.get("message") or "Invalid or expired bearer token."
 
 
 def get_current_user_from_auth_service(
@@ -46,15 +38,20 @@ def get_current_user_from_auth_service(
         )
 
     try:
-        response = requests.get(
-            f"{settings.auth_service_url}/v1/auth/me",
-            headers={
-                "Authorization": authorization,
-                "X-Correlation-ID": correlation_id,
-            },
-            timeout=30,
-        )
-    except requests.RequestException as exc:
+        payload = load_current_user(authorization)
+    except (InvalidAccessTokenError, CurrentUserUnavailableError) as exc:
+        raise FarmRegistryError(
+            "UNAUTHORIZED",
+            "Invalid or expired bearer token.",
+            401,
+        ) from exc
+    except MissingAuthorizationError as exc:
+        raise FarmRegistryError(
+            "UNAUTHORIZED",
+            "Missing Authorization header.",
+            401,
+        ) from exc
+    except PrincipalLookupError as exc:
         raise FarmRegistryError(
             "AUTH_SERVICE_UNAVAILABLE",
             "Authentication is temporarily unavailable.",
@@ -62,15 +59,7 @@ def get_current_user_from_auth_service(
             internal_message=str(exc),
         ) from exc
 
-    if response.status_code != 200:
-        raise FarmRegistryError(
-            "UNAUTHORIZED",
-            _error_message(response),
-            401,
-        )
-
     try:
-        payload: dict[str, Any] = response.json()
         return AuthPrincipal.model_validate(payload)
     except Exception as exc:
         raise FarmRegistryError(

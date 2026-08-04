@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import httpx
+from starlette.concurrency import run_in_threadpool
 
-from services.profile_service.app.config_validation import (
-    get_profile_config,
-)
 from services.profile_service.app.errors import ProfileError
 from services.profile_service.app.schemas import (
     AuthenticatedUser,
+)
+from shared.security.local_auth import (
+    CurrentUserUnavailableError,
+    InvalidAccessTokenError,
+    MissingAuthorizationError,
+    PrincipalLookupError,
+    load_current_user,
 )
 
 
@@ -21,19 +25,24 @@ async def get_current_user_from_auth_service(
             401,
         )
 
-    config = get_profile_config()
-
     try:
-        async with httpx.AsyncClient(
-            timeout=config.request_timeout_seconds,
-        ) as client:
-            response = await client.get(
-                f"{config.auth_service_url}/v1/auth/me",
-                headers={
-                    "Authorization": authorization,
-                },
-            )
-    except httpx.HTTPError as exc:
+        payload = await run_in_threadpool(
+            load_current_user,
+            authorization,
+        )
+    except (InvalidAccessTokenError, CurrentUserUnavailableError) as exc:
+        raise ProfileError(
+            "INVALID_AUTH_SESSION",
+            "Your authentication session is invalid or expired.",
+            401,
+        ) from exc
+    except MissingAuthorizationError as exc:
+        raise ProfileError(
+            "AUTH_REQUIRED",
+            "Authentication is required.",
+            401,
+        ) from exc
+    except PrincipalLookupError as exc:
         raise ProfileError(
             "AUTH_SERVICE_UNAVAILABLE",
             "Authentication could not be verified.",
@@ -41,25 +50,8 @@ async def get_current_user_from_auth_service(
             internal_message=str(exc),
         ) from exc
 
-    if response.status_code in {401, 403}:
-        raise ProfileError(
-            "INVALID_AUTH_SESSION",
-            "Your authentication session is invalid or expired.",
-            401,
-        )
-
-    if response.status_code != 200:
-        raise ProfileError(
-            "AUTH_SERVICE_ERROR",
-            "Authentication could not be verified.",
-            503,
-            internal_message=response.text[:1000],
-        )
-
     try:
-        principal = AuthenticatedUser.model_validate(
-            response.json()
-        )
+        principal = AuthenticatedUser.model_validate(payload)
     except Exception as exc:
         raise ProfileError(
             "INVALID_AUTH_RESPONSE",

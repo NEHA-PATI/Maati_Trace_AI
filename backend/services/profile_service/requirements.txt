@@ -4,6 +4,7 @@ uvicorn[standard]
 sqlalchemy
 psycopg2-binary
 httpx
+python-jose[cryptography]==3.3.0
 pydantic
 email-validator
 pytest
