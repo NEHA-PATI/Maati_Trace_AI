@@ -313,22 +313,28 @@ def update_user_profile_projection(
     *,
     user_id: UUID | str,
     full_name: str,
-    phone_number: str | None,
+    phone_number: str | None = None,
     profile_image_url: str | None,
     onboarding_status: str,
+    sync_phone_number: bool = True,
 ) -> None:
+    phone_number_clause = (
+        "phone_number = :phone_number,"
+        if sync_phone_number
+        else ""
+    )
     conn.execute(
         text(
             """
             UPDATE users
             SET
                 full_name = :full_name,
-                phone_number = :phone_number,
+                {phone_number_clause}
                 profile_image_url = :profile_image_url,
                 onboarding_status = :onboarding_status,
                 updated_at = now()
             WHERE user_id = :user_id;
-            """
+            """.format(phone_number_clause=phone_number_clause)
         ),
         {
             "user_id": str(user_id),

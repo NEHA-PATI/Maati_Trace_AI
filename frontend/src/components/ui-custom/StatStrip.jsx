@@ -9,9 +9,9 @@ const ICON_COLORS = [
   "text-cyan-500 bg-cyan-50",
 ];
 
-export default function StatStrip({ items }) {
+export default function StatStrip({ items, desktopColumnsClass = "lg:grid-cols-5" }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${desktopColumnsClass}`}>
       {items.map((item, i) => {
         const colorClass = ICON_COLORS[i % ICON_COLORS.length];
         return (
