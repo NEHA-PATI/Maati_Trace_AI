@@ -11,7 +11,6 @@ import {
   MapPin,
   ShieldCheck,
   Shield,
-  Sparkles,
   User,
   Wheat,
 } from "lucide-react";
@@ -38,7 +37,6 @@ const FARMER_NAV = [
   { id: "location", label: "Location", icon: MapPin },
   { id: "role", label: "Role Details", icon: Wheat },
   { id: "consent", label: "Consent", icon: Check },
-  { id: "plan", label: "Your Plan", icon: Sparkles },
   { id: "export", label: "Export", icon: Download },
 ];
 
@@ -48,7 +46,6 @@ const FPO_NAV = [
   { id: "location", label: "Location", icon: MapPin },
   { id: "operations", label: "Operations", icon: Wheat },
   { id: "verification", label: "Verification", icon: Shield },
-  { id: "plan", label: "Your Plan", icon: Sparkles },
   { id: "export", label: "Export", icon: FileText },
 ];
 

@@ -20,6 +20,14 @@ from services.hot_stream_orchestrator_service.app.service import (
     ensure_farm_analysis_ready,
     materialize_farm_analysis,
 )
+from services.hot_stream_orchestrator_service.app.environment_schemas import (
+    EnvironmentRefreshRequest,
+    EnvironmentRefreshResponse,
+)
+from services.hot_stream_orchestrator_service.app.environment_service import (
+    EnvironmentRefreshError,
+    materialize_environment,
+)
 from services.analytics_query_service.app.repository import (
     get_farm_grid_cells,
     get_latest_features,
@@ -221,3 +229,29 @@ def full_refresh_farm_endpoint(farm_id: UUID, payload: FarmAnalysisMaterializeRe
         return {"farm_id": str(farm_id), "status": "partial", "stages": stages}
 
     return {"farm_id": str(farm_id), "status": "succeeded", "stages": stages}
+
+
+@app.post(
+    "/v1/hot-stream/farms/{farm_id}/environment-refresh",
+    response_model=EnvironmentRefreshResponse,
+)
+def environment_refresh_endpoint(farm_id: UUID, payload: EnvironmentRefreshRequest):
+    """
+    New Tier-A/Tier-B enrichment pipeline.
+
+    Sentinel-2 is intentionally NOT handled here; the existing full-refresh
+    endpoint remains the protected Sentinel-2 path.
+    """
+    try:
+        result = materialize_environment(farm_id, payload)
+        return EnvironmentRefreshResponse(**result)
+    except EnvironmentRefreshError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "ENVIRONMENT_REFRESH_ERROR", "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "ENVIRONMENT_REFRESH_ERROR", "message": str(exc)},
+        ) from exc

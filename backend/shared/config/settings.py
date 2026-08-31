@@ -1,23 +1,22 @@
-﻿from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Application
     app_env: str = "local"
     log_level: str = "INFO"
-
     cors_allowed_origins: str = (
         "http://localhost:5173,"
         "http://127.0.0.1:5173,"
         "https://app.maatitrace.com"
     )
 
-    # PostgreSQL
+    # PostgreSQL - password is intentionally required from environment.
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = "maati_trace_ai"
     postgres_user: str = "postgres"
-    postgres_password: str = "Mikaelson"
+    postgres_password: str
 
     # Authentication
     jwt_secret: str
@@ -64,9 +63,7 @@ class Settings(BaseSettings):
     boundary_index_service_url: str = "http://localhost:8004"
     district_boundary_service_url: str = "http://localhost:8005"
     farm_registry_service_url: str = "http://localhost:8006"
-    profile_service_url: str = (
-        "http://localhost:8003"
-    )
+    profile_service_url: str = "http://localhost:8003"
     stac_catalog_service_url: str = "http://localhost:8007"
     raster_processor_service_url: str = "http://localhost:8008"
     lakehouse_writer_service_url: str = "http://localhost:8009"
@@ -82,23 +79,33 @@ class Settings(BaseSettings):
 
     # STAC providers
     default_stac_provider: str = "planetary_computer"
-
     planetary_computer_stac_url: str = (
         "https://planetarycomputer.microsoft.com/api/stac/v1"
     )
-    earth_search_stac_url: str = (
-        "https://earth-search.aws.element84.com/v1"
-    )
-    copernicus_stac_url: str = (
-        "https://catalogue.dataspace.copernicus.eu/stac"
-    )
-    nasa_cmr_stac_url: str = (
-        "https://cmr.earthdata.nasa.gov/stac"
-    )
-    nasa_cmr_cloudstac_url: str = (
-        "https://cmr.earthdata.nasa.gov/cloudstac"
-    )
+    earth_search_stac_url: str = "https://earth-search.aws.element84.com/v1"
+    copernicus_stac_url: str = "https://catalogue.dataspace.copernicus.eu/stac"
+    nasa_cmr_stac_url: str = "https://cmr.earthdata.nasa.gov/stac"
+    nasa_cmr_cloudstac_url: str = "https://cmr.earthdata.nasa.gov/cloudstac"
     nasa_cmr_enabled: bool = False
+
+    # Multi-source catalog / remote access
+    catalog_http_timeout_seconds: int = 120
+    source_download_timeout_seconds: int = 600
+
+    # NASA Earthdata / CMR. Token must be supplied through .env when used.
+    earthdata_token: str = ""
+    nasa_cmr_granules_url: str = "https://cmr.earthdata.nasa.gov/search/granules.json"
+
+    # Copernicus Climate Data Store (ERA5-Land)
+    cds_api_url: str = "https://cds.climate.copernicus.eu/api"
+    cds_api_key: str = ""
+    era5_max_days_per_request: int = 31
+
+    # SoilGrids WCS
+    soilgrids_wcs_base_url: str = "https://maps.isric.org/mapserv"
+
+    # Weather forecast provider
+    open_meteo_forecast_url: str = "https://api.open-meteo.com/v1/forecast"
 
     # Raster processing
     raster_http_timeout_seconds: int = 120

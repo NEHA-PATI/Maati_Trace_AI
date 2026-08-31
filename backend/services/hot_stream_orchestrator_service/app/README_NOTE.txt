@@ -1,0 +1,1 @@
+This patch adds environment-refresh as a NEW endpoint. The existing Sentinel-2 materialize/full-refresh code is not replaced. Apply this orchestrator patch only after the catalog, raster and lakehouse endpoints pass their direct service tests.

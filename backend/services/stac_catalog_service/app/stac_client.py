@@ -14,7 +14,6 @@ class StacCatalogError(RuntimeError):
 
 def open_client(provider: str) -> Client:
     url = get_provider_url(provider)
-
     try:
         return Client.open(url)
     except Exception as exc:
@@ -38,42 +37,32 @@ def safe_collection_to_dict(collection: Collection) -> dict[str, Any]:
 
 def list_provider_collections(provider: str) -> list[dict[str, Any]]:
     client = open_client(provider)
-
     try:
         collections = list(client.get_collections())
     except Exception as exc:
         raise StacCatalogError(f"Failed to list provider collections: {exc}") from exc
-
     return [safe_collection_to_dict(collection) for collection in collections]
 
 
-def get_collection_details(
-    provider: str,
-    collection_id: str,
-) -> dict[str, Any]:
+def get_collection_details(provider: str, collection_id: str) -> dict[str, Any]:
     client = open_client(provider)
-
     try:
         collection = client.get_collection(collection_id)
     except Exception as exc:
         raise StacCatalogError(
             f"Failed to get collection {collection_id} from {provider}: {exc}"
         ) from exc
-
     if collection is None:
         raise StacCatalogError(
             f"Collection not found: {collection_id} on provider {provider}"
         )
-
     return safe_collection_to_dict(collection)
 
 
 def extract_asset_summary_keys(collection_details: dict[str, Any]) -> list[str]:
     summaries = collection_details.get("summaries") or {}
-
     if "assets" in summaries and isinstance(summaries["assets"], dict):
         return sorted(list(summaries["assets"].keys()))
-
     if "eo:bands" in summaries:
         bands = summaries.get("eo:bands") or []
         keys = []
@@ -83,34 +72,31 @@ def extract_asset_summary_keys(collection_details: dict[str, Any]) -> list[str]:
                 if name:
                     keys.append(str(name))
         return sorted(set(keys))
-
     return []
 
 
-def normalize_asset(
-    key: str,
-    asset: Any,
-    provider: str,
-) -> dict[str, Any]:
-    href = asset.href
+def _first_band_metadata(extra_fields: dict[str, Any]) -> dict[str, Any]:
+    # eo:bands and raster:bands are both common in modern STAC collections.
+    result: dict[str, Any] = {}
+    eo_bands = extra_fields.get("eo:bands")
+    if isinstance(eo_bands, list) and eo_bands and isinstance(eo_bands[0], dict):
+        result.update(eo_bands[0])
+    raster_bands = extra_fields.get("raster:bands")
+    if isinstance(raster_bands, list) and raster_bands and isinstance(raster_bands[0], dict):
+        # raster metadata should override generic EO metadata for scale/nodata/unit.
+        result.update(raster_bands[0])
+    return result
 
+
+def normalize_asset(key: str, asset: Any, provider: str) -> dict[str, Any]:
+    href = asset.href
     if should_sign_assets(provider):
         href = planetary_computer.sign(href)
 
     extra_fields = asset.extra_fields or {}
+    band = _first_band_metadata(extra_fields)
 
-    common_name = None
-    center_wavelength = None
-    full_width_half_max = None
-
-    bands = extra_fields.get("eo:bands")
-    if isinstance(bands, list) and bands:
-        first_band = bands[0]
-        if isinstance(first_band, dict):
-            common_name = first_band.get("common_name") or first_band.get("name")
-            center_wavelength = first_band.get("center_wavelength")
-            full_width_half_max = first_band.get("full_width_half_max")
-
+    common_name = band.get("common_name") or band.get("name")
     return {
         "key": key,
         "href": href,
@@ -118,29 +104,34 @@ def normalize_asset(
         "media_type": asset.media_type,
         "roles": asset.roles or [],
         "common_name": common_name,
-        "center_wavelength": center_wavelength,
-        "full_width_half_max": full_width_half_max,
+        "center_wavelength": band.get("center_wavelength"),
+        "full_width_half_max": band.get("full_width_half_max"),
+        "unit": band.get("unit"),
+        "scale": band.get("scale"),
+        "offset": band.get("offset"),
+        "nodata": band.get("nodata"),
+        "spatial_resolution_m": band.get("spatial_resolution"),
+        "metadata": {
+            "eo:bands": extra_fields.get("eo:bands"),
+            "raster:bands": extra_fields.get("raster:bands"),
+        },
     }
 
 
-def normalize_item(
-    item: Any,
-    provider: str,
-    collection_id: str,
-) -> dict[str, Any]:
+def normalize_item(item: Any, provider: str, collection_id: str) -> dict[str, Any]:
     properties = dict(item.properties or {})
-
     cloud_cover = (
         properties.get("eo:cloud_cover")
-        or properties.get("s2:cloud_cover")
-        or properties.get("landsat:cloud_cover")
+        if properties.get("eo:cloud_cover") is not None
+        else properties.get("s2:cloud_cover")
     )
+    if cloud_cover is None:
+        cloud_cover = properties.get("landsat:cloud_cover")
 
     assets = [
         normalize_asset(key=key, asset=asset, provider=provider)
         for key, asset in item.assets.items()
     ]
-
     return {
         "provider": provider,
         "collection_id": collection_id,
@@ -156,12 +147,7 @@ def normalize_item(
 def build_query(max_cloud_cover: float | None) -> dict[str, Any] | None:
     if max_cloud_cover is None:
         return None
-
-    return {
-        "eo:cloud_cover": {
-            "lt": max_cloud_cover,
-        }
-    }
+    return {"eo:cloud_cover": {"lt": max_cloud_cover}}
 
 
 def search_items(
@@ -174,9 +160,7 @@ def search_items(
     limit: int,
 ) -> list[dict[str, Any]]:
     client = open_client(provider)
-
     query = build_query(max_cloud_cover)
-
     try:
         search = client.search(
             collections=[collection_id],
@@ -192,17 +176,8 @@ def search_items(
         raise StacCatalogError(f"STAC search failed: {exc}") from exc
 
     normalized_items = [
-        normalize_item(
-            item=item,
-            provider=provider,
-            collection_id=collection_id,
-        )
+        normalize_item(item=item, provider=provider, collection_id=collection_id)
         for item in items[:limit]
     ]
-
-    normalized_items.sort(
-        key=lambda row: row.get("datetime") or "",
-        reverse=True,
-    )
-
+    normalized_items.sort(key=lambda row: row.get("datetime") or "", reverse=True)
     return normalized_items
