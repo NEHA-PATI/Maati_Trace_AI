@@ -441,7 +441,7 @@ export default function FarmRegister() {
         setPipelineStage(3);
         await materializeFarmAnalysis(farmPayload.farm_id, {
           start_date: "2025-12-01",
-          end_date: "2026-08-03",
+          end_date: new Date().toISOString().slice(0, 10),
           max_cloud_cover: 30,
           // Resolution is selected by the orchestrator service default.
           // h3_resolution: 12,

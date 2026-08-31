@@ -4,6 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.config.settings import settings
 from shared.errors.api_errors import bad_request
 from shared.logging.json_logging import configure_json_logging
+from services.stac_catalog_service.app.catalog_service import (
+    CatalogDispatchError,
+    search_dataset,
+)
 from services.stac_catalog_service.app.collection_registry import (
     get_candidate_collection_ids,
     list_registered_datasets,
@@ -14,6 +18,8 @@ from services.stac_catalog_service.app.providers import (
     list_supported_providers,
 )
 from services.stac_catalog_service.app.schemas import (
+    CatalogSearchRequest,
+    CatalogSearchResponse,
     CollectionAssetsResponse,
     DatasetAvailabilityItem,
     DatasetAvailabilityRequest,
@@ -34,14 +40,9 @@ from services.stac_catalog_service.app.stac_client import (
 )
 
 SERVICE_NAME = "stac_catalog_service"
-
 configure_json_logging(SERVICE_NAME)
 
-app = FastAPI(
-    title="STAC Catalog Service",
-    version="1.0.0",
-)
-
+app = FastAPI(title="STAC Catalog Service", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins_list,
@@ -53,22 +54,15 @@ app.add_middleware(
 
 @app.get("/health/live", response_model=HealthResponse)
 def live():
-    return HealthResponse(
-        service=SERVICE_NAME,
-        status="live",
-        environment=settings.app_env,
-    )
+    return HealthResponse(service=SERVICE_NAME, status="live", environment=settings.app_env)
 
 
 @app.get("/health/ready", response_model=HealthResponse)
 def ready():
-    return HealthResponse(
-        service=SERVICE_NAME,
-        status="ready",
-        environment=settings.app_env,
-    )
+    return HealthResponse(service=SERVICE_NAME, status="ready", environment=settings.app_env)
 
 
+# ---------------- Existing API: preserved ----------------
 @app.get("/v1/stac/providers")
 def providers():
     return {
@@ -106,26 +100,17 @@ def dataset_availability(payload: DatasetAvailabilityRequest):
     provider_collection_map = {
         collection["id"]: collection for collection in provider_collections_list
     }
-
     response_items: list[DatasetAvailabilityItem] = []
 
     for dataset in list_registered_datasets():
         candidate_ids = get_candidate_collection_ids(
-            dataset_key=dataset["dataset_key"],
-            provider=payload.provider,
+            dataset_key=dataset["dataset_key"], provider=payload.provider
         )
-
         available_ids = [
-            collection_id
-            for collection_id in candidate_ids
+            collection_id for collection_id in candidate_ids
             if collection_id in provider_collection_map
         ]
-
-        matched_collections = [
-            provider_collection_map[collection_id]
-            for collection_id in available_ids
-        ]
-
+        matched_collections = [provider_collection_map[cid] for cid in available_ids]
         response_items.append(
             DatasetAvailabilityItem(
                 dataset_key=dataset["dataset_key"],
@@ -137,11 +122,7 @@ def dataset_availability(payload: DatasetAvailabilityRequest):
                 matched_collections=matched_collections,
             )
         )
-
-    return DatasetAvailabilityResponse(
-        provider=payload.provider,
-        datasets=response_items,
-    )
+    return DatasetAvailabilityResponse(provider=payload.provider, datasets=response_items)
 
 
 @app.get(
@@ -150,21 +131,15 @@ def dataset_availability(payload: DatasetAvailabilityRequest):
 )
 def collection_assets(provider: str, collection_id: str):
     try:
-        details = get_collection_details(
-            provider=provider,
-            collection_id=collection_id,
-        )
+        details = get_collection_details(provider=provider, collection_id=collection_id)
     except (StacProviderError, StacCatalogError) as exc:
         raise bad_request(str(exc), code="STAC_COLLECTION_ERROR") from exc
-
-    asset_keys = extract_asset_summary_keys(details)
-
     return CollectionAssetsResponse(
         provider=provider,
         collection_id=collection_id,
         title=details.get("title"),
         description=details.get("description"),
-        available_asset_keys_from_summaries=asset_keys,
+        available_asset_keys_from_summaries=extract_asset_summary_keys(details),
         summaries=details.get("summaries") or {},
     )
 
@@ -183,7 +158,6 @@ def search(payload: StacSearchRequest):
         )
     except (StacProviderError, StacCatalogError) as exc:
         raise bad_request(str(exc), code="STAC_SEARCH_ERROR") from exc
-
     return StacSearchResponse(
         provider=payload.provider,
         collection_id=payload.collection_id,
@@ -206,12 +180,37 @@ def latest(payload: LatestSceneRequest):
         )
     except (StacProviderError, StacCatalogError) as exc:
         raise bad_request(str(exc), code="STAC_LATEST_ERROR") from exc
-
     latest_items = items[:1]
-
     return StacSearchResponse(
         provider=payload.provider,
         collection_id=payload.collection_id,
         returned_count=len(latest_items),
         items=latest_items,
     )
+
+
+# ---------------- New generic multi-source API ----------------
+@app.get("/v1/catalog/datasets", response_model=list[DatasetRegistryItem])
+def catalog_datasets():
+    return list_registered_datasets()
+
+
+@app.post("/v1/catalog/search", response_model=CatalogSearchResponse)
+def catalog_search(payload: CatalogSearchRequest):
+    try:
+        result = search_dataset(
+            dataset_key=payload.dataset_key,
+            bbox=payload.bbox,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            limit=payload.limit,
+            max_cloud_cover=payload.max_cloud_cover,
+            provider=payload.provider,
+        )
+        return CatalogSearchResponse(**result)
+    except CatalogDispatchError as exc:
+        raise bad_request(str(exc), code="CATALOG_SEARCH_ERROR") from exc
+    except Exception as exc:
+        raise bad_request(
+            f"Unexpected catalog search error: {exc}", code="CATALOG_SEARCH_ERROR"
+        ) from exc

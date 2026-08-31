@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class DatasetRegistryItem(BaseModel):
+    # Existing fields are preserved.
     dataset_key: str
     display_name: str
     priority: int
@@ -15,6 +16,14 @@ class DatasetRegistryItem(BaseModel):
     hot_stream_use: bool
     cold_batch_use: bool
     compute_frequency: str
+
+    # New optional execution metadata. Backward-compatible for old callers.
+    processor_key: str | None = None
+    temporal_type: str | None = None
+    native_resolution_m: float | None = None
+    storage_table: str | None = None
+    spatial_level: str | None = None
+    processing_version: str | None = None
 
 
 class ProviderCollectionResponse(BaseModel):
@@ -63,14 +72,24 @@ class StacSearchRequest(BaseModel):
 
 
 class StacAsset(BaseModel):
+    # Existing fields are preserved.
     key: str
     href: str
     title: str | None = None
     media_type: str | None = None
-    roles: list[str] = []
+    roles: list[str] = Field(default_factory=list)
     common_name: str | None = None
     center_wavelength: float | None = None
     full_width_half_max: float | None = None
+
+    # New optional raster metadata. This prevents scale/unit knowledge from being
+    # hidden inside processors when the STAC item already describes it.
+    unit: str | None = None
+    scale: float | None = None
+    offset: float | None = None
+    nodata: float | int | None = None
+    spatial_resolution_m: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class StacSearchItem(BaseModel):
@@ -98,6 +117,25 @@ class LatestSceneRequest(BaseModel):
     start_date: str
     end_date: str
     max_cloud_cover: float | None = Field(default=None, ge=0, le=100)
+
+
+class CatalogSearchRequest(BaseModel):
+    dataset_key: str = Field(..., min_length=2)
+    bbox: list[float] = Field(..., min_length=4, max_length=4)
+    start_date: str = Field(..., description="YYYY-MM-DD")
+    end_date: str = Field(..., description="YYYY-MM-DD")
+    limit: int = Field(default=10, ge=1, le=200)
+    max_cloud_cover: float | None = Field(default=None, ge=0, le=100)
+    provider: str | None = None
+
+
+class CatalogSearchResponse(BaseModel):
+    dataset_key: str
+    provider: str
+    acquisition_method: str
+    returned_count: int
+    items: list[dict[str, Any]]
+    errors: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
