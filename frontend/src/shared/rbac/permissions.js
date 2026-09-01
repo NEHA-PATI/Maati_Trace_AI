@@ -27,6 +27,16 @@ export const ROUTE_RULES = Object.freeze({
     ROLES.FARMER,
   ],
 
+  cropDiary: [
+    ROLES.ADMIN,
+    ROLES.FPO,
+    ROLES.FARMER,
+  ],
+
+  cropObservationAdmin: [
+    ROLES.ADMIN,
+  ],
+
   landIntelligence: [
     ROLES.ADMIN,
     ROLES.FPO,
@@ -78,6 +88,14 @@ const PATH_PERMISSION_MAP = Object.freeze({
   "/farmers/:farmerId": "farmerProfile",
 
   "/land/:farmId": "landIntelligence",
+
+  "/my-crops": "cropDiary",
+  "/my-crops/:farmId/:cropCycleId/:stageCode": "cropDiary",
+  "/my-crops/:farmId/:cropCycleId/history": "cropDiary",
+
+  "/admin/crop-observations": "cropObservationAdmin",
+  "/admin/crop-observations/config": "cropObservationAdmin",
+  "/admin/crop-observations/config/:cropCode": "cropObservationAdmin",
 
   "/farm-register": "farmRegister",
 

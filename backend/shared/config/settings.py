@@ -57,6 +57,20 @@ class Settings(BaseSettings):
     athena_database: str = ""
     athena_workgroup: str = ""
 
+    # Crop observation media (photos / voice notes uploaded directly to S3
+    # via presigned URLs). Optional — the service only needs these when a
+    # media upload is actually requested.
+    crop_observation_s3_bucket: str = ""
+    s3_presigned_upload_ttl_seconds: int = 300
+    s3_presigned_download_ttl_seconds: int = 300
+    max_images_per_owner: int = 2
+    max_image_bytes: int = 8 * 1024 * 1024
+    allowed_image_mime_types: str = "image/jpeg,image/png,image/webp"
+    max_audio_per_owner: int = 1
+    max_audio_bytes: int = 5 * 1024 * 1024
+    max_audio_duration_seconds: int = 60
+    allowed_audio_mime_types: str = "audio/webm,audio/ogg,audio/mp4,audio/mpeg"
+
     # Service URLs
     api_gateway_service_url: str = "http://localhost:8000"
     auth_service_url: str = "http://localhost:8002"
@@ -69,6 +83,7 @@ class Settings(BaseSettings):
     lakehouse_writer_service_url: str = "http://localhost:8009"
     hot_stream_orchestrator_service_url: str = "http://localhost:8010"
     analytics_query_service_url: str = "http://localhost:8011"
+    crop_observation_service_url: str = "http://localhost:8015"
 
     # API gateway upstream connection pool
     gateway_upstream_timeout_seconds: float = 180.0
@@ -125,6 +140,14 @@ class Settings(BaseSettings):
             for origin in self.cors_allowed_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def allowed_image_mime_types_list(self) -> list[str]:
+        return [v.strip() for v in self.allowed_image_mime_types.split(",") if v.strip()]
+
+    @property
+    def allowed_audio_mime_types_list(self) -> list[str]:
+        return [v.strip() for v in self.allowed_audio_mime_types.split(",") if v.strip()]
 
 
 settings = Settings()
