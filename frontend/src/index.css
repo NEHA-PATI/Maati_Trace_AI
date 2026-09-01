@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Sans+Oriya:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
@@ -114,6 +115,53 @@
   --survey-amber: 32 80% 50%;
   --satellite-blue: 200 50% 45%;
   --alert-red: 4 72% 48%;
+
+  /* ---- MatiTrace farmer-facing reference palette ---- */
+  --mt-paper: #FFFFFF;
+  --mt-paper-warm: #F7F8F3;
+  --mt-ink: #1D2117;
+  --mt-ink-soft: #5B6055;
+  --mt-ink-faint: #9A9E90;
+  --mt-line: #E9E7DC;
+
+  --mt-leaf: #4B6B3A;
+  --mt-leaf-deep: #33492A;
+  --mt-leaf-tint: #E1F1D6;
+
+  --mt-gold: #FFA726;
+  --mt-gold-text: #B36B00;
+  --mt-gold-tint: #FFF2D9;
+
+  --mt-clay: #FF5A36;
+  --mt-clay-text: #D63B12;
+  --mt-clay-tint: #FFE2D8;
+
+  --mt-sky: #29B6F6;
+  --mt-sky-text: #0277BD;
+  --mt-sky-tint: #DEF5FF;
+
+  --mt-radius-lg: 22px;
+  --mt-radius-md: 18px;
+  --mt-radius-sm: 12px;
+  --mt-radius-pill: 999px;
+  --mt-tap: 48px;
+}
+
+/* Farmer-facing screens use the single Noto Sans family (Odia + English) */
+.mt-surface,
+.mt-surface h1,
+.mt-surface h2,
+.mt-surface h3,
+.mt-surface h4 {
+  font-family: 'Noto Sans', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+.mt-tabbar-safe {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .mt-tabbar-safe { padding-bottom: 0; }
 }
 
 * {
