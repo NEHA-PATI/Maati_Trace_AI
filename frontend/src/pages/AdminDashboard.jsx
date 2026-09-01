@@ -312,6 +312,22 @@ export default function AdminDashboard() {
               ))}
             </div>
           </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-4 py-3">
+              <span className="text-sm font-semibold text-gray-800">Crop Observations</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              <Link to="/admin/crop-observations/config" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <p className="text-sm font-semibold text-gray-800">Crop Configuration</p>
+                <p className="text-xs text-gray-500">Stages, practices, fields</p>
+              </Link>
+              <Link to="/admin/crop-observations" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <p className="text-sm font-semibold text-gray-800">Farmer Observations</p>
+                <p className="text-xs text-gray-500">Monitor daily updates</p>
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-5">

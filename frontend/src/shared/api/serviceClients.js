@@ -60,6 +60,9 @@ export const analyticsClient =
 export const gatewayClient =
   createServiceClient("gateway");
 
+export const cropObservationClient =
+  createServiceClient("cropObservations");
+
 export function getSession() {
   return getSessionSnapshot();
 }

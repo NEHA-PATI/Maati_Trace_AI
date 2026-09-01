@@ -8,6 +8,16 @@ import RegisterPage from "@/features/auth/pages/RegisterPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
+import {
+  CropStagePage,
+  MyCropsPage,
+  ObservationHistoryPage,
+} from "@/features/crop-observation";
+import {
+  CropConfigurationEditorPage,
+  CropConfigurationPage,
+  FarmerObservationMonitorPage,
+} from "@/features/crop-observation-admin";
 import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
 
@@ -39,6 +49,14 @@ export const router = createBrowserRouter([
     { path: "/admin", element: <AdminDashboard /> },
     { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
   ] },
+  {
+    element: <ProtectedRoute permission="cropObservationAdmin" />,
+    children: [
+      { path: "/admin/crop-observations", element: <FarmerObservationMonitorPage /> },
+      { path: "/admin/crop-observations/config", element: <CropConfigurationPage /> },
+      { path: "/admin/crop-observations/config/:cropCode", element: <CropConfigurationEditorPage /> },
+    ],
+  },
   { element: <ProtectedRoute permission="fpoDashboard" />, children: [{ path: "/fpo/me", element: <FpoDashboard /> }] },
   { element: <ProtectedRoute permission="myFpo" />, children: [{ path: "/my-fpo", element: <MyFpo /> }] },
   {
@@ -49,6 +67,14 @@ export const router = createBrowserRouter([
     ],
   },
   { element: <ProtectedRoute permission="landIntelligence" />, children: [{ path: "/land/:farmId", element: <LandIntelligence /> }] },
+  {
+    element: <ProtectedRoute permission="cropDiary" />,
+    children: [
+      { path: "/my-crops", element: <MyCropsPage /> },
+      { path: "/my-crops/:farmId/:cropCycleId/history", element: <ObservationHistoryPage /> },
+      { path: "/my-crops/:farmId/:cropCycleId/:stageCode", element: <CropStagePage /> },
+    ],
+  },
   { element: <ProtectedRoute permission="farmRegister" />, children: [{ path: "/farm-register", element: <FarmRegister /> }] },
   { element: <ProtectedRoute permission="bulkUpload" />, children: [{ path: "/bulk-upload", element: <BulkUpload /> }] },
   { element: <ProtectedRoute permission="notifications" />, children: [{ path: "/notifications", element: <Notifications /> }] },
