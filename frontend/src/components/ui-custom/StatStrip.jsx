@@ -1,34 +1,44 @@
 import React from "react";
 
-const ICON_COLORS = [
-  "text-emerald-500 bg-emerald-50",
-  "text-blue-500 bg-blue-50",
-  "text-violet-500 bg-violet-50",
-  "text-amber-500 bg-amber-50",
-  "text-rose-500 bg-rose-50",
-  "text-cyan-500 bg-cyan-50",
+const ICON_TINTS = [
+  "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]",
+  "bg-[var(--mt-sky-tint)] text-[var(--mt-sky-text)]",
+  "bg-[var(--mt-gold-tint)] text-[var(--mt-gold-text)]",
+  "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]",
+  "bg-[var(--mt-clay-tint)] text-[var(--mt-clay-text)]",
+  "bg-[var(--mt-sky-tint)] text-[var(--mt-sky-text)]",
 ];
 
 export default function StatStrip({ items, desktopColumnsClass = "lg:grid-cols-5" }) {
   return (
-    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${desktopColumnsClass}`}>
+    <div className={`mt-surface grid grid-cols-2 gap-3 sm:grid-cols-3 ${desktopColumnsClass}`}>
       {items.map((item, i) => {
-        const colorClass = ICON_COLORS[i % ICON_COLORS.length];
+        const tint = ICON_TINTS[i % ICON_TINTS.length];
+        const longValue = typeof item.value === "string" && item.value.length > 4;
         return (
-          <div key={i} className="bg-white border border-gray-100 rounded-2xl px-4 py-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2.5 mb-2">
-              {item.icon && (
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${colorClass}`}>
-                  <item.icon className="w-4 h-4" />
-                </div>
-              )}
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{item.label}</span>
+          <div
+            key={i}
+            className="flex items-center gap-3 rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white px-4 py-4"
+          >
+            {item.icon && (
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tint}`}>
+                <item.icon className="h-5 w-5" strokeWidth={2.1} />
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-1">
+                <span
+                  className={`font-extrabold leading-none text-[var(--mt-ink)] ${longValue ? "text-[17px]" : "text-[21px]"}`}
+                >
+                  {item.value}
+                </span>
+                {item.unit && (
+                  <span className="text-[12px] font-bold text-[var(--mt-ink-faint)]">{item.unit}</span>
+                )}
+              </div>
+              <div className="mt-1 truncate text-[12.5px] font-bold text-[var(--mt-ink-soft)]">{item.label}</div>
+              {item.sub && <div className="text-[11px] font-semibold text-[var(--mt-ink-faint)]">{item.sub}</div>}
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold text-gray-800">{item.value}</span>
-              {item.unit && <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{item.unit}</span>}
-            </div>
-            {item.sub && <span className="text-[10px] text-gray-400 mt-0.5 block">{item.sub}</span>}
           </div>
         );
       })}

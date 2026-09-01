@@ -1,15 +1,14 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
-  User, MapPin, Phone, Mail, Hexagon, Plus, Calendar,
-  Leaf, Droplets, Building2, Camera, X, Upload, CheckCircle2,
+  User, MapPin, Phone, Hexagon, Plus, Calendar,
+  Leaf, Droplets, Camera, X, Upload, CheckCircle2,
+  BadgeCheck, Pencil, Map as MapIcon, Bell,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import FarmCard from "@/components/ui-custom/FarmCard";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
-import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import FarmerLandMap from "@/components/ui-custom/FarmerLandMap";
 import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import {
@@ -246,136 +245,178 @@ export default function FarmerProfile() {
     setShowPhotoModal(false);
   };
 
+  const firstName = (farmer.name || "").trim().split(/\s+/)[0] || "there";
+  const healthLabel =
+    !avgNdvi || avgNdvi <= 0
+      ? "Checking"
+      : avgNdvi > 0.5
+        ? "Healthy"
+        : avgNdvi > 0.3
+          ? "Okay"
+          : "Needs care";
+  const lastCheck = summary?.latest_observation_date || "Waiting";
+
+  const callablePhoneHref = useMemo(() => {
+    const raw = farmer.phone;
+    if (!raw || raw === "Not available") return null;
+    const digitsAndPlus = String(raw).replace(/(?!^\+)[^\d]/g, "");
+    const normalised = digitsAndPlus.startsWith("+")
+      ? digitsAndPlus
+      : digitsAndPlus.length === 10
+        ? `+91${digitsAndPlus}`
+        : digitsAndPlus;
+    return normalised ? `tel:${normalised}` : null;
+  }, [farmer.phone]);
+
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6" style={{ fontFamily: "'Poppins', sans-serif" }}>
+    <div className="mt-surface mx-auto max-w-[1180px] space-y-4 p-4 md:p-6">
       <AnimatePresence>
         {showPhotoModal && (
           <PhotoModal onClose={() => setShowPhotoModal(false)} onSave={handleSavePhoto} />
         )}
       </AnimatePresence>
 
+      <div>
+        <h1 className="text-[22px] font-extrabold text-[var(--mt-ink)]">Welcome back, {firstName}</h1>
+        <p className="mt-0.5 text-[13px] font-semibold text-[var(--mt-ink-soft)]">
+          Here&rsquo;s how your farms are doing today
+        </p>
+      </div>
+
       {loading && (
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-sm">
-          Loading farmer profile...
+        <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
+          Loading your profile…
         </div>
       )}
 
       {!loading && error && (
-        <div className="rounded-3xl border border-rose-100 bg-rose-50 p-6 text-sm text-rose-600 shadow-sm">
+        <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-clay)]/30 bg-[var(--mt-clay-tint)] p-6 text-sm font-semibold text-[var(--mt-clay-text)]">
           {error}
         </div>
       )}
 
-      <motion.div
+      <motion.section
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm"
+        className="flex flex-col gap-4 rounded-[var(--mt-radius-lg)] border border-[var(--mt-line)] bg-white p-5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-5 md:p-6"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-5 py-3">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Field Record - Farmer Identity</span>
-          <VerificationStamp label="REGISTERED" type="success" compact />
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0">
+            <div className="flex h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-full bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]">
+              {farmer.photo ? (
+                <img src={farmer.photo} alt={farmer.name} className="h-full w-full object-cover" />
+              ) : (
+                <User className="h-8 w-8" strokeWidth={2} />
+              )}
+            </div>
+            <button
+              onClick={() => setShowPhotoModal(true)}
+              className="absolute -bottom-0.5 -right-0.5 flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-white bg-[var(--mt-leaf)] text-white"
+              aria-label="Change profile photo"
+              title="Change profile photo"
+            >
+              {farmer.photo ? <Camera className="h-3.5 w-3.5" strokeWidth={2.6} /> : <Plus className="h-3.5 w-3.5" strokeWidth={3} />}
+            </button>
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[19px] font-extrabold text-[var(--mt-ink)] sm:text-[21px]">{farmer.name}</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mt-leaf)] px-2.5 py-1 text-[11.5px] font-bold text-white">
+                <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2.6} />
+                Registered
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--mt-ink-soft)]">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--mt-clay)]" strokeWidth={2.2} />
+              <span className="truncate">{[farmer.village, farmer.block, farmer.district].filter(Boolean).join(", ")}</span>
+            </div>
+            <span className="mt-2 inline-block rounded-full bg-[var(--mt-leaf-tint)] px-3 py-1 text-[12px] font-bold text-[var(--mt-leaf-deep)]">
+              {farmer.fpoName}
+            </span>
+          </div>
         </div>
 
-        <div className="p-5 md:p-6">
-          <div className="flex flex-col gap-6 md:flex-row">
-            <div className="flex flex-shrink-0 flex-col items-center gap-2">
-              <div className="relative">
-                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-emerald-100 bg-gray-50 shadow-md">
-                  {farmer.photo ? (
-                    <img src={farmer.photo} alt={farmer.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <User className="h-10 w-10 text-gray-300" strokeWidth={1.5} />
-                  )}
-                </div>
-                <button
-                  onClick={() => setShowPhotoModal(true)}
-                  className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow transition-colors hover:bg-emerald-600"
-                  title="Upload photo"
-                >
-                  {farmer.photo ? (
-                    <Camera className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5 text-white" strokeWidth={3} />
-                  )}
-                </button>
-              </div>
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">ID: {farmer.id}</span>
+        <div className="grid grid-cols-2 gap-3 border-t border-[var(--mt-line)] pt-4 md:flex md:w-auto md:gap-8 md:border-0 md:px-1 md:pt-0">
+          <div>
+            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">Phone</div>
+            <div className="mt-1 flex items-center gap-1.5 text-[14px] font-bold text-[var(--mt-ink)]">
+              <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--mt-leaf)]" strokeWidth={2.4} />
+              <span className="truncate">{farmer.phone}</span>
             </div>
-
-            <div className="flex-1 space-y-4">
-              <div>
-                <h1 className="text-xl font-bold text-gray-800">{farmer.name}</h1>
-                <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <MapPin className="h-3.5 w-3.5 text-rose-400" strokeWidth={2.5} />
-                    {farmer.village}, {farmer.block}, {farmer.district}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <Building2 className="h-3.5 w-3.5 text-blue-400" strokeWidth={2.5} />
-                    {farmer.fpoName}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div className="space-y-1">
-                  <span className="block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Phone</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-gray-700">
-                    <Phone className="h-3 w-3 text-emerald-400" strokeWidth={2.5} />
-                    {farmer.phone}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <span className="block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Email</span>
-                  <span className="flex items-center gap-1 truncate text-xs font-semibold text-gray-700">
-                    <Mail className="h-3 w-3 flex-shrink-0 text-blue-400" strokeWidth={2.5} />
-                    {farmer.email}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <span className="block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Aadhaar</span>
-                  <span className="text-xs font-semibold text-gray-700">XXXX-XXXX-{farmer.aadhaarLast4}</span>
-                </div>
-                <div className="space-y-1">
-                  <span className="block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Registered</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-gray-700">
-                    <Calendar className="h-3 w-3 text-amber-400" strokeWidth={2.5} />
-                    {farmer.registeredDate}
-                  </span>
-                </div>
-              </div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">ID Card</div>
+            <div className="mt-1 flex items-center gap-1.5 text-[14px] font-bold text-[var(--mt-ink)]">
+              <BadgeCheck className="h-3.5 w-3.5 text-[var(--mt-leaf)]" strokeWidth={2.6} />
+              Verified
             </div>
           </div>
         </div>
-      </motion.div>
 
-      <StatStrip items={[
-        { label: "Total Farms", value: farms.length, icon: MapPin },
-        { label: "Total Area", value: totalArea.toFixed(1), unit: "ac", icon: Hexagon },
-        { label: "Avg. Vegetation", value: avgNdvi.toFixed(2), unit: "NDVI", icon: Leaf },
-        { label: "Latest Scene", value: summary?.latest_observation_date || "Pending", icon: Calendar },
-      ]} />
+        <div className="grid grid-cols-2 gap-2.5 md:flex md:w-auto">
+          {callablePhoneHref ? (
+            <a
+              href={callablePhoneHref}
+              className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--mt-leaf)] px-4 text-[13.5px] font-bold text-white"
+            >
+              <Phone className="h-4 w-4" strokeWidth={2.4} />
+              Call Me
+            </a>
+          ) : (
+            <span className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--mt-paper-warm)] px-4 text-[13.5px] font-bold text-[var(--mt-ink-faint)]">
+              <Phone className="h-4 w-4" strokeWidth={2.4} />
+              No number
+            </span>
+          )}
+          <Link
+            to="/settings"
+            className="flex h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[var(--mt-leaf)]/25 bg-white px-4 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]"
+          >
+            <Pencil className="h-4 w-4" strokeWidth={2.4} />
+            Edit Profile
+          </Link>
+        </div>
+      </motion.section>
 
-      <motion.div
+      <StatStrip
+        desktopColumnsClass="lg:grid-cols-4"
+        items={[
+          { label: "Your Farms", value: farms.length, icon: MapPin },
+          { label: "Total Land", value: totalArea.toFixed(1), unit: "ac", icon: Hexagon },
+          { label: "Plant Health", value: healthLabel, icon: Leaf },
+          { label: "Last Check", value: lastCheck, icon: Calendar },
+        ]}
+      />
+
+      {/* <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm"
+        className="overflow-hidden rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <span className="text-sm font-bold text-gray-800">Farm Land Map</span>
-          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
-            {farms.length} parcels - Click marker to open
+        <div className="flex items-center justify-between px-5 py-4">
+          <span className="flex items-center gap-2 text-[16px] font-extrabold text-[var(--mt-ink)]">
+            <MapIcon className="h-[18px] w-[18px]" strokeWidth={2.1} />
+            Farm Land Map
+          </span>
+          <span className="text-[12.5px] font-semibold text-[var(--mt-ink-soft)]">
+            {farms.length === 1 ? "1 farm" : `${farms.length} farms`} &middot; Tap a pin to open
           </span>
         </div>
         <FarmerLandMap farms={farms} />
-      </motion.div>
+      </motion.div> */}
 
-      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <span className="text-sm font-bold text-gray-800">Farm Pointers</span>
-          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{farms.length} farms</span>
+      <div className="overflow-hidden rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white">
+        <div className="flex items-center justify-between px-5 py-4">
+          <span className="flex items-center gap-2 text-[16px] font-extrabold text-[var(--mt-ink)]">
+            <MapPin className="h-[18px] w-[18px]" strokeWidth={2.1} />
+            Farm Pointers
+          </span>
+          <span className="text-[12.5px] font-semibold text-[var(--mt-ink-soft)]">
+            {farms.length === 1 ? "1 farm" : `${farms.length} farms`}
+          </span>
         </div>
         <div className="p-3">
           <FarmPointerMap
@@ -411,87 +452,90 @@ export default function FarmerProfile() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-800">Registered Land Parcels</h2>
-            <Link to="/farm-register">
-              <Button size="sm" variant="outline" className="h-7 rounded-2xl text-[10px] font-semibold uppercase tracking-wider">
-                <Plus className="mr-1 h-3 w-3" strokeWidth={2.5} />
-                Register Farm
-              </Button>
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {farms.map((farmItem, index) => (
+      <div className="flex items-center justify-between pt-2">
+        <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-[var(--mt-ink)]">
+          <MapPin className="h-[18px] w-[18px]" strokeWidth={2.1} />
+          Your Farms
+          <span className="rounded-full bg-[var(--mt-leaf-tint)] px-2.5 py-0.5 text-[12px] font-extrabold text-[var(--mt-leaf-deep)]">
+            {farms.length}
+          </span>
+        </h2>
+        <Link
+          to="/farm-register"
+          className="flex h-11 items-center gap-1.5 rounded-full bg-[var(--mt-leaf)] px-4 text-[13.5px] font-bold text-white"
+        >
+          <Plus className="h-4 w-4" strokeWidth={2.6} />
+          Add Farm
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
+        {farms.map((farmItem, index) => (
+          <motion.div
+            key={farmItem.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.08 }}
+          >
+            <FarmCard farm={farmItem} />
+          </motion.div>
+        ))}
+      </div>
+      {!loading && !error && farms.length === 0 && (
+        <div className="rounded-[var(--mt-radius-md)] border border-dashed border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
+          No farms are linked to you yet. Tap &ldquo;Add Farm&rdquo; to register your first one.
+        </div>
+      )}
+
+      <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-5">
+        <span className="mb-4 block text-[13px] font-extrabold text-[var(--mt-ink)]">Average Farm Health</span>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="flex items-center gap-1.5 font-bold text-[var(--mt-ink-soft)]">
+                <Leaf className="h-4 w-4 text-[var(--mt-leaf)]" strokeWidth={2.4} />
+                Green cover
+              </span>
+              <span className="font-extrabold text-[var(--mt-leaf-deep)]">{avgNdvi.toFixed(2)}</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-[var(--mt-paper-warm)]">
               <motion.div
-                key={farmItem.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <FarmCard farm={farmItem} />
-              </motion.div>
-            ))}
-          </div>
-          {!loading && !error && farms.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
-              No farms are linked to this farmer yet.
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <span className="mb-4 block text-xs font-bold uppercase tracking-widest text-gray-500">Average Farm Health</span>
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 font-medium text-gray-600">
-                    <Leaf className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2.5} />
-                    Vegetation Index
-                  </span>
-                  <span className="font-bold text-emerald-600">{avgNdvi.toFixed(2)}</span>
-                </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.max(0, Math.min(100, avgNdvi * 100))}%` }}
-                    transition={{ duration: 1, delay: 0.3 }}
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 font-medium text-gray-600">
-                    <Droplets className="h-3.5 w-3.5 text-blue-500" strokeWidth={2.5} />
-                    Moisture Index
-                  </span>
-                  <span className="font-bold text-blue-600">{avgMoisture.toFixed(2)}</span>
-                </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.max(0, Math.min(100, avgMoisture * 100))}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-600"
-                  />
-                </div>
-              </div>
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(0, Math.min(100, avgNdvi * 100))}%` }}
+                transition={{ duration: 1, delay: 0.3 }}
+                className="h-full rounded-full bg-[var(--mt-leaf)]"
+              />
             </div>
           </div>
-
-          <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <span className="text-sm font-bold text-gray-800">Alerts</span>
-              <span className="pulse-live h-2 w-2 rounded-full bg-rose-400" />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="flex items-center gap-1.5 font-bold text-[var(--mt-ink-soft)]">
+                <Droplets className="h-4 w-4 text-[var(--mt-sky-text)]" strokeWidth={2.4} />
+                Soil water
+              </span>
+              <span className="font-extrabold text-[var(--mt-sky-text)]">{avgMoisture.toFixed(2)}</span>
             </div>
-            <div className="p-2">
-              <NotificationStack limit={3} />
+            <div className="h-2.5 overflow-hidden rounded-full bg-[var(--mt-paper-warm)]">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(0, Math.min(100, avgMoisture * 100))}%` }}
+                transition={{ duration: 1, delay: 0.5 }}
+                className="h-full rounded-full bg-[var(--mt-sky)]"
+              />
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 pt-2">
+        <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-[var(--mt-ink)]">
+          <Bell className="h-[18px] w-[18px]" strokeWidth={2.1} />
+          Updates For You
+        </h2>
+        <span className="pulse-live h-2 w-2 rounded-full bg-[var(--mt-clay)]" />
+      </div>
+      <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-1.5">
+        <NotificationStack limit={3} />
       </div>
     </div>
   );
