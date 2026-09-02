@@ -93,7 +93,7 @@ export default function LandGridMap({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+      {/* <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
         <div className="flex items-center gap-2 text-xs text-emerald-950">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-900 text-white">
             <Satellite className="h-4 w-4" />
@@ -113,7 +113,7 @@ export default function LandGridMap({
             ))}
           </div>
         )}
-      </div>
+      </div> */}
       <div className="overflow-hidden rounded-3xl border border-gray-200 shadow-xl">
         <MapContainer
           center={bounds[0]}
