@@ -281,6 +281,14 @@ h6 {
   );
 }
 
+/* Leaflet maps: clamp the map's internal z-index (panes ~400, controls ~800)
+   into its own stacking context so tiles / markers / zoom buttons can never
+   paint over the fixed navbar or bottom tab bar (both z-50). */
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+}
+
 /* Hide scrollbar but allow scroll */
 .scrollbar-hide {
   -ms-overflow-style: none;

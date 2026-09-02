@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { interpretLandMetric } from "./metricInterpretation";
+import {
+  buildFieldInterpretation,
+  FIELD_INTERPRETATION_CONFIG,
+  interpretLandMetric,
+} from "./metricInterpretation";
+
+const reading = (key, value) => ({ metric: { key }, value, result: interpretLandMetric(key, value) });
 
 describe("interpretLandMetric", () => {
   it.each([
@@ -41,5 +47,26 @@ describe("interpretLandMetric", () => {
     ["nbr", -0.1, "Severely Damaged Crop"],
   ])("describes %s value %s as %s", (metric, value, expected) => {
     expect(interpretLandMetric(metric, value).interpretation).toBe(expected);
+  });
+});
+
+describe("buildFieldInterpretation", () => {
+  it("returns the all-good line when every reading is healthy", () => {
+    const text = buildFieldInterpretation([reading("ndvi", 0.7), reading("ndmi", 0.5)]);
+    expect(text).toBe(FIELD_INTERPRETATION_CONFIG.allGood);
+  });
+
+  it("surfaces the worst readings for the selected cell", () => {
+    const text = buildFieldInterpretation([
+      reading("ndvi", 0.1), // critical
+      reading("ndmi", 0.3), // good
+    ]);
+    expect(text).toContain(interpretLandMetric("ndvi", 0.1).paragraph);
+    expect(text).not.toBe(FIELD_INTERPRETATION_CONFIG.allGood);
+  });
+
+  it("adds the cloud note when the scene was cloudy", () => {
+    const text = buildFieldInterpretation([reading("ndvi", 0.7)], { cloudPercentage: 60 });
+    expect(text).toContain(FIELD_INTERPRETATION_CONFIG.cloudNote);
   });
 });
