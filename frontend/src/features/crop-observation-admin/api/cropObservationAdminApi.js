@@ -76,3 +76,12 @@ export const listObservations = (params = {}) => {
   return req(`/observations${query ? `?${query}` : ""}`);
 };
 export const getObservationDetail = (id) => req(`/observations/${id}`);
+
+// TTS
+export const getTtsStatus = () => req("/tts/status");
+export const listTtsVoices = (language) => req(`/tts/voices?language=${encodeURIComponent(language)}`);
+export const listTtsProfiles = () => req("/tts/profiles");
+export const upsertTtsProfile = (locale, payload) =>
+  req(`/tts/profiles/${locale}`, { method: "PUT", body: payload });
+export const generateStageInstructionAudio = (stageId, locale, payload = {}) =>
+  req(`/stages/${stageId}/instruction-audio/${locale}/generate`, { method: "POST", body: payload });

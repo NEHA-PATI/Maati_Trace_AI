@@ -8,11 +8,14 @@ import {
   cloneConfiguration,
   createDraftConfiguration,
   createStage,
+  getTtsStatus,
+  listTtsProfiles,
   getCrop,
   listConfigurations,
   listPracticeTemplates,
   listStages,
   publishConfiguration,
+  upsertTtsProfile,
   validateConfiguration,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
 import StageEditor from "@/features/crop-observation-admin/components/StageEditor";
@@ -32,6 +35,12 @@ export default function CropConfigurationEditorPage() {
   const [validation, setValidation] = useState(null);
   const [previewMobile, setPreviewMobile] = useState(true);
   const [newStageCode, setNewStageCode] = useState("");
+  const [ttsStatus, setTtsStatus] = useState(null);
+  const [ttsProfiles, setTtsProfiles] = useState([]);
+  const [voiceDrafts, setVoiceDrafts] = useState({
+    "en-IN": { voice_id: "", voice_name: "" },
+    "or-IN": { voice_id: "", voice_name: "" },
+  });
 
   const selectedConfig = configs.find((c) => c.config_version_id === selectedConfigId);
   const isDraft = selectedConfig?.status === "DRAFT";
@@ -53,9 +62,22 @@ export default function CropConfigurationEditorPage() {
         listConfigurations(cropCode),
         listPracticeTemplates(),
       ]);
+      const [ttsStatusData, ttsProfileData] = await Promise.all([getTtsStatus(), listTtsProfiles()]);
       setCrop(cropData);
       setConfigs(configList);
       setPracticeTemplates(templates);
+      setTtsStatus(ttsStatusData);
+      setTtsProfiles(ttsProfileData);
+      setVoiceDrafts({
+        "en-IN": {
+          voice_id: ttsProfileData.find((item) => item.locale === "en-IN")?.voice_id || "",
+          voice_name: ttsProfileData.find((item) => item.locale === "en-IN")?.voice_name || "",
+        },
+        "or-IN": {
+          voice_id: ttsProfileData.find((item) => item.locale === "or-IN")?.voice_id || "",
+          voice_name: ttsProfileData.find((item) => item.locale === "or-IN")?.voice_name || "",
+        },
+      });
       const preferred = configList.find((c) => c.status === "DRAFT") || configList[0];
       if (preferred) {
         setSelectedConfigId(preferred.config_version_id);
@@ -151,6 +173,19 @@ export default function CropConfigurationEditorPage() {
     }
   }
 
+  async function handleSaveVoice(locale) {
+    setBusy(true);
+    setError("");
+    try {
+      await upsertTtsProfile(locale, voiceDrafts[locale]);
+      setTtsProfiles(await listTtsProfiles());
+    } catch (err) {
+      setError(err?.message || "Could not save TTS profile.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="px-4 py-8 text-sm text-slate-400">Loading…</div>;
 
   return (
@@ -200,6 +235,52 @@ export default function CropConfigurationEditorPage() {
             Clone as draft
           </Button>
         ) : null}
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Cartesia instruction audio</p>
+            <p className="text-xs text-slate-500">
+              Status: {ttsStatus?.enabled ? "enabled" : "disabled"} · API key {ttsStatus?.api_key_configured ? "configured" : "missing"}
+            </p>
+          </div>
+          <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+            {ttsStatus?.model_id || "No model"}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {["en-IN", "or-IN"].map((locale) => (
+            <div key={locale} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{locale}</p>
+              <Input
+                className="mt-2"
+                placeholder="Voice ID"
+                value={voiceDrafts[locale]?.voice_id || ""}
+                onChange={(event) =>
+                  setVoiceDrafts((prev) => ({
+                    ...prev,
+                    [locale]: { ...(prev[locale] || {}), voice_id: event.target.value },
+                  }))
+                }
+              />
+              <Input
+                className="mt-2"
+                placeholder="Voice name"
+                value={voiceDrafts[locale]?.voice_name || ""}
+                onChange={(event) =>
+                  setVoiceDrafts((prev) => ({
+                    ...prev,
+                    [locale]: { ...(prev[locale] || {}), voice_name: event.target.value },
+                  }))
+                }
+              />
+              <Button size="sm" variant="outline" className="mt-2" onClick={() => handleSaveVoice(locale)} disabled={busy}>
+                Save voice
+              </Button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div

@@ -110,14 +110,10 @@ def save_practice_observation(
     # it (defaulting to GOOD) if the farmer hasn't logged a status yet today.
     daily = repo.get_daily_observation_by_key(crop_cycle_id, stage_code, today_ist())
     if daily is None:
-        daily = repo.upsert_daily_status(
-            crop_cycle_id=crop_cycle_id,
-            config_version_id=cycle["config_version_id"],
-            stage_code=stage_code,
-            observed_on=today_ist(),
-            crop_status="GOOD",
-            client_entry_id=payload.client_entry_id,
-            captured_at_client=None,
+        raise CropObservationError(
+            "STAGE_STATUS_REQUIRED",
+            "Save today's crop status before adding a practice update.",
+            409,
         )
 
     validated_answers = validation_service.validate_practice_answers(

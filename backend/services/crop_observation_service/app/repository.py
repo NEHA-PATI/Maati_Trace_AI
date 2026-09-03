@@ -189,6 +189,17 @@ def get_stage_by_code(config_version_id: UUID, stage_code: str) -> dict[str, Any
     )
 
 
+def get_stage(stage_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT stage_id, config_version_id, stage_code, display_order, is_initial, is_enabled
+        FROM crop_observation.crop_stages
+        WHERE stage_id = :stage_id;
+        """,
+        {"stage_id": stage_id},
+    )
+
+
 def get_stage_translations(stage_id: UUID) -> list[dict[str, Any]]:
     return _run(
         """
@@ -218,6 +229,7 @@ def list_stage_practices(stage_id: UUID) -> list[dict[str, Any]]:
             sp.stage_practice_id,
             sp.practice_template_id,
             sp.display_order,
+            sp.media_config,
             pt.practice_code
         FROM crop_observation.stage_practices sp
         JOIN crop_observation.practice_templates pt
@@ -546,7 +558,7 @@ def get_crop_cycle(crop_cycle_id: UUID) -> dict[str, Any] | None:
 def get_stage_practice_by_code(stage_id: UUID, practice_code: str) -> dict[str, Any] | None:
     return _run_one(
         """
-        SELECT sp.stage_practice_id, sp.practice_template_id, pt.practice_code
+        SELECT sp.stage_practice_id, sp.practice_template_id, sp.media_config, pt.practice_code
         FROM crop_observation.stage_practices sp
         JOIN crop_observation.practice_templates pt
             ON pt.practice_template_id = sp.practice_template_id
@@ -555,6 +567,17 @@ def get_stage_practice_by_code(stage_id: UUID, practice_code: str) -> dict[str, 
           AND sp.is_enabled = true;
         """,
         {"stage_id": stage_id, "practice_code": practice_code},
+    )
+
+
+def get_stage_practice(stage_practice_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT stage_practice_id, stage_id, practice_template_id, media_config, availability_scope, display_order
+        FROM crop_observation.stage_practices
+        WHERE stage_practice_id = :stage_practice_id;
+        """,
+        {"stage_practice_id": stage_practice_id},
     )
 
 
@@ -760,6 +783,48 @@ def count_owner_media(owner_type: str, owner_id: UUID, media_role: str) -> int:
     return int(rows[0]["media_count"]) if rows else 0
 
 
+def count_owner_media_by_purpose(owner_type: str, owner_id: UUID, media_role: str, media_purpose: str) -> int:
+    rows = _run(
+        """
+        SELECT COUNT(*) AS media_count
+        FROM crop_observation.observation_media om
+        JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
+        WHERE om.owner_type = :owner_type
+          AND om.owner_id = :owner_id
+          AND om.media_role = :media_role
+          AND om.media_purpose = :media_purpose
+          AND ma.upload_status != 'DELETED';
+        """,
+        {
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "media_role": media_role,
+            "media_purpose": media_purpose,
+        },
+    )
+    return int(rows[0]["media_count"]) if rows else 0
+
+
+def next_owner_media_slot(owner_type: str, owner_id: UUID, media_role: str, media_purpose: str) -> int:
+    rows = _run(
+        """
+        SELECT COALESCE(MAX(slot_number), 0) + 1 AS next_slot
+        FROM crop_observation.observation_media
+        WHERE owner_type = :owner_type
+          AND owner_id = :owner_id
+          AND media_role = :media_role
+          AND media_purpose = :media_purpose;
+        """,
+        {
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "media_role": media_role,
+            "media_purpose": media_purpose,
+        },
+    )
+    return int(rows[0]["next_slot"]) if rows else 1
+
+
 def create_media_asset(
     *,
     owner_user_id: UUID,
@@ -832,20 +897,24 @@ def create_observation_media(
     owner_id: UUID,
     media_asset_id: UUID,
     media_role: str,
+    media_purpose: str,
+    slot_number: int | None,
 ) -> dict[str, Any]:
     return _run_write(
         """
         INSERT INTO crop_observation.observation_media (
-            owner_type, owner_id, media_asset_id, media_role
+            owner_type, owner_id, media_asset_id, media_role, media_purpose, slot_number
         )
-        VALUES (:owner_type, :owner_id, :media_asset_id, :media_role)
-        RETURNING observation_media_id, owner_type, owner_id, media_asset_id, media_role;
+        VALUES (:owner_type, :owner_id, :media_asset_id, :media_role, :media_purpose, :slot_number)
+        RETURNING observation_media_id, owner_type, owner_id, media_asset_id, media_role, media_purpose, slot_number;
         """,
         {
             "owner_type": owner_type,
             "owner_id": owner_id,
             "media_asset_id": media_asset_id,
             "media_role": media_role,
+            "media_purpose": media_purpose,
+            "slot_number": slot_number,
         },
     )
 
@@ -855,7 +924,7 @@ def list_media_for_owner(owner_type: str, owner_id: UUID) -> list[dict[str, Any]
         """
         SELECT
             om.media_role, om.owner_id, ma.media_asset_id, ma.media_type, ma.mime_type,
-            ma.upload_status, ma.duration_seconds
+            ma.upload_status, ma.duration_seconds, om.media_purpose, om.slot_number
         FROM crop_observation.observation_media om
         JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
         WHERE om.owner_type = :owner_type
@@ -876,7 +945,7 @@ def list_media_for_owners(owner_type: str, owner_ids: list[UUID]) -> list[dict[s
         """
         SELECT
             om.media_role, om.owner_id, ma.media_asset_id, ma.media_type, ma.mime_type,
-            ma.upload_status, ma.duration_seconds
+            ma.upload_status, ma.duration_seconds, om.media_purpose, om.slot_number
         FROM crop_observation.observation_media om
         JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
         WHERE om.owner_type = :owner_type
@@ -929,6 +998,63 @@ def get_system_media_asset(asset_id: UUID) -> dict[str, Any] | None:
     )
 
 
+def create_system_media_asset(
+    *,
+    asset_type: str,
+    crop_id: UUID | None,
+    stage_id: UUID | None,
+    bucket_name: str,
+    object_key: str,
+    mime_type: str,
+    byte_size: int,
+    locale: str | None,
+    duration_seconds: float | None,
+    storage_backend: str,
+    original_filename: str | None,
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.system_media_assets (
+            asset_type, crop_id, stage_id, bucket_name, object_key, mime_type,
+            byte_size, locale, duration_seconds, storage_backend, original_filename
+        )
+        VALUES (
+            :asset_type, :crop_id, :stage_id, :bucket_name, :object_key, :mime_type,
+            :byte_size, :locale, :duration_seconds, :storage_backend, :original_filename
+        )
+        RETURNING asset_id, asset_type, crop_id, stage_id, object_key, mime_type, byte_size, locale, duration_seconds;
+        """,
+        {
+            "asset_type": asset_type,
+            "crop_id": crop_id,
+            "stage_id": stage_id,
+            "bucket_name": bucket_name,
+            "object_key": object_key,
+            "mime_type": mime_type,
+            "byte_size": byte_size,
+            "locale": locale,
+            "duration_seconds": duration_seconds,
+            "storage_backend": storage_backend,
+            "original_filename": original_filename,
+        },
+    )
+
+
+def deactivate_stage_instruction_audio(stage_id: UUID, locale: str) -> None:
+    _run_write(
+        """
+        UPDATE crop_observation.system_media_assets
+        SET is_active = false
+        WHERE stage_id = :stage_id
+          AND locale = :locale
+          AND asset_type = 'STAGE_INSTRUCTION_AUDIO'
+          AND is_active = true
+        RETURNING asset_id;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+
+
 def get_crop_card_image(crop_id: UUID) -> dict[str, Any] | None:
     return _run_one(
         """
@@ -968,6 +1094,142 @@ def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any
         LIMIT 1;
         """,
         {"stage_id": stage_id, "locale": locale},
+    )
+
+
+def get_tts_profile(locale: str) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            tts_profile_id, profile_code, locale, provider, model_id, voice_id,
+            voice_name, output_format, generation_config, is_active
+        FROM crop_observation.tts_profiles
+        WHERE locale = :locale AND is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """,
+        {"locale": locale},
+    )
+
+
+def list_tts_profiles() -> list[dict[str, Any]]:
+    return _run(
+        """
+        SELECT
+            tts_profile_id, profile_code, locale, provider, model_id, voice_id,
+            voice_name, output_format, generation_config, is_active
+        FROM crop_observation.tts_profiles
+        ORDER BY locale, profile_code;
+        """,
+        {},
+    )
+
+
+def upsert_tts_profile(
+    *,
+    profile_code: str,
+    locale: str,
+    provider: str,
+    model_id: str,
+    voice_id: str,
+    voice_name: str | None,
+    output_format: dict[str, Any],
+    generation_config: dict[str, Any],
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.tts_profiles (
+            profile_code, locale, provider, model_id, voice_id, voice_name, output_format, generation_config
+        )
+        VALUES (
+            :profile_code, :locale, :provider, :model_id, :voice_id, :voice_name,
+            CAST(:output_format AS jsonb), CAST(:generation_config AS jsonb)
+        )
+        ON CONFLICT (profile_code)
+        DO UPDATE SET
+            locale = EXCLUDED.locale,
+            provider = EXCLUDED.provider,
+            model_id = EXCLUDED.model_id,
+            voice_id = EXCLUDED.voice_id,
+            voice_name = EXCLUDED.voice_name,
+            output_format = EXCLUDED.output_format,
+            generation_config = EXCLUDED.generation_config,
+            updated_at = now()
+        RETURNING
+            tts_profile_id, profile_code, locale, provider, model_id, voice_id,
+            voice_name, output_format, generation_config, is_active;
+        """,
+        {
+            "profile_code": profile_code,
+            "locale": locale,
+            "provider": provider,
+            "model_id": model_id,
+            "voice_id": voice_id,
+            "voice_name": voice_name,
+            "output_format": json.dumps(output_format),
+            "generation_config": json.dumps(generation_config),
+        },
+    )
+
+
+def get_tts_generation_by_cache_key(cache_key: str) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            tts_generation_id, target_type, target_id, locale, transcript,
+            profile_id, cache_key, status, system_media_asset_id, error_message
+        FROM crop_observation.tts_generations
+        WHERE cache_key = :cache_key;
+        """,
+        {"cache_key": cache_key},
+    )
+
+
+def upsert_tts_generation(
+    *,
+    target_type: str,
+    target_id: UUID,
+    locale: str,
+    transcript: str,
+    profile_id: UUID,
+    cache_key: str,
+    status: str,
+    system_media_asset_id: UUID | None,
+    error_message: str | None,
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.tts_generations (
+            target_type, target_id, locale, transcript, profile_id, cache_key, status,
+            system_media_asset_id, error_message
+        )
+        VALUES (
+            :target_type, :target_id, :locale, :transcript, :profile_id, :cache_key, :status,
+            :system_media_asset_id, :error_message
+        )
+        ON CONFLICT (cache_key)
+        DO UPDATE SET
+            transcript = EXCLUDED.transcript,
+            profile_id = EXCLUDED.profile_id,
+            status = EXCLUDED.status,
+            system_media_asset_id = EXCLUDED.system_media_asset_id,
+            error_message = EXCLUDED.error_message,
+            updated_at = now()
+        RETURNING
+            tts_generation_id, target_type, target_id, locale, transcript,
+            profile_id, cache_key, status, system_media_asset_id, error_message;
+        """,
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "locale": locale,
+            "transcript": transcript,
+            "profile_id": profile_id,
+            "cache_key": cache_key,
+            "status": status,
+            "system_media_asset_id": system_media_asset_id,
+            "error_message": error_message,
+        },
     )
 
 

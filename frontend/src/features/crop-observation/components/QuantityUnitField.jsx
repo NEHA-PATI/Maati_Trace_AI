@@ -4,10 +4,10 @@ const COMMON_UNITS = ["kg", "g", "L", "ml", "bags"];
 
 export default function QuantityUnitField({ value, onChange }) {
   const amount = typeof value?.value === "number" ? value.value : "";
-  const unit = value?.unit || "";
+  const unit = value?.unit || COMMON_UNITS[0];
 
   function setAmount(next) {
-    onChange({ value: next, unit: unit || COMMON_UNITS[0] });
+    onChange({ value: next, unit });
   }
 
   function step(delta) {
@@ -16,49 +16,56 @@ export default function QuantityUnitField({ value, onChange }) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex items-center overflow-hidden rounded-xl border-2 border-slate-200">
+    <div>
+      <div className="flex items-center justify-between rounded-2xl bg-[#F1F5EA] p-2">
         <button
           type="button"
           onClick={() => step(-1)}
-          className="grid h-12 w-12 place-items-center text-slate-700 hover:bg-slate-50"
+          className="grid h-12 w-12 place-items-center rounded-xl bg-white text-[#4B6B3A] shadow-sm active:scale-[0.98]"
           aria-label="Decrease"
         >
           <Minus className="h-5 w-5" />
         </button>
-        <input
-          type="number"
-          inputMode="decimal"
-          min="0"
-          value={amount}
-          onChange={(event) => {
-            const parsed = event.target.value === "" ? "" : Number(event.target.value);
-            setAmount(parsed === "" ? "" : parsed);
-          }}
-          className="h-12 w-16 border-x border-slate-200 text-center text-lg font-bold text-slate-900 outline-none"
-        />
+        <div className="flex min-w-0 flex-1 items-baseline justify-center gap-2 px-3">
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            value={amount}
+            onChange={(event) => {
+              const parsed = event.target.value === "" ? "" : Number(event.target.value);
+              setAmount(parsed === "" ? "" : parsed);
+            }}
+            className="h-12 w-24 bg-transparent text-center text-2xl font-black text-[#1D2117] outline-none"
+          />
+          <span className="text-sm font-bold text-[#5B6055]">{unit}</span>
+        </div>
         <button
           type="button"
           onClick={() => step(1)}
-          className="grid h-12 w-12 place-items-center text-slate-700 hover:bg-slate-50"
+          className="grid h-12 w-12 place-items-center rounded-xl bg-white text-[#4B6B3A] shadow-sm active:scale-[0.98]"
           aria-label="Increase"
         >
           <Plus className="h-5 w-5" />
         </button>
       </div>
 
-      <select
-        value={unit}
-        onChange={(event) => onChange({ value: amount === "" ? 0 : amount, unit: event.target.value })}
-        className="h-12 flex-1 rounded-xl border-2 border-slate-300 px-3 text-base font-semibold text-slate-900"
-      >
-        {!unit ? <option value="">Unit</option> : null}
-        {COMMON_UNITS.map((u) => (
-          <option key={u} value={u}>
-            {u}
-          </option>
+      <div className="mt-2 grid grid-cols-5 gap-2">
+        {COMMON_UNITS.map((nextUnit) => (
+          <button
+            key={nextUnit}
+            type="button"
+            onClick={() => onChange({ value: amount === "" ? 0 : amount, unit: nextUnit })}
+            className={`min-h-11 rounded-xl border text-sm font-bold transition active:scale-[0.98] ${
+              unit === nextUnit
+                ? "border-[#4B6B3A] bg-[#E1F1D6] text-[#33492A]"
+                : "border-[#E9E7DC] bg-white text-[#5B6055]"
+            }`}
+          >
+            {nextUnit}
+          </button>
         ))}
-      </select>
+      </div>
     </div>
   );
 }

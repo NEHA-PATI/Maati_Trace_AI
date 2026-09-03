@@ -271,10 +271,10 @@ def clone_configuration(
                 stage_practices = conn.execute(
                     text(
                         """
-                        SELECT stage_practice_id, practice_template_id, availability_scope,
-                               display_order, is_enabled
-                        FROM crop_observation.stage_practices
-                        WHERE stage_id = :sid;
+                    SELECT stage_practice_id, practice_template_id, availability_scope,
+                               display_order, is_enabled, media_config
+                    FROM crop_observation.stage_practices
+                    WHERE stage_id = :sid;
                         """
                     ),
                     {"sid": stage["stage_id"]},
@@ -286,8 +286,15 @@ def clone_configuration(
                             """
                             INSERT INTO crop_observation.stage_practices
                                 (stage_id, practice_template_id, availability_scope,
-                                 display_order, is_enabled)
-                            VALUES (:stage_id, :practice_template_id, :scope, :order, :enabled)
+                                 display_order, is_enabled, media_config)
+                            VALUES (
+                                :stage_id,
+                                :practice_template_id,
+                                :scope,
+                                :order,
+                                :enabled,
+                                CAST(:media_config AS jsonb)
+                            )
                             RETURNING stage_practice_id;
                             """
                         ),
@@ -297,6 +304,7 @@ def clone_configuration(
                             "scope": sp["availability_scope"],
                             "order": sp["display_order"],
                             "enabled": sp["is_enabled"],
+                            "media_config": json.dumps(sp["media_config"] or {}),
                         },
                     ).mappings().first()
 
@@ -567,7 +575,7 @@ def list_stage_practices_for_stage(stage_id: UUID) -> list[dict[str, Any]]:
     return _run(
         """
         SELECT sp.stage_practice_id, sp.stage_id, sp.practice_template_id, pt.practice_code,
-               sp.availability_scope, sp.display_order, sp.is_enabled
+               sp.availability_scope, sp.display_order, sp.is_enabled, sp.media_config
         FROM crop_observation.stage_practices sp
         JOIN crop_observation.practice_templates pt ON pt.practice_template_id = sp.practice_template_id
         WHERE sp.stage_id = :stage_id
@@ -581,7 +589,7 @@ def get_stage_practice(stage_practice_id: UUID) -> dict[str, Any] | None:
     return _run_one(
         """
         SELECT sp.stage_practice_id, sp.stage_id, sp.practice_template_id, pt.practice_code,
-               sp.availability_scope, sp.display_order, sp.is_enabled
+               sp.availability_scope, sp.display_order, sp.is_enabled, sp.media_config
         FROM crop_observation.stage_practices sp
         JOIN crop_observation.practice_templates pt ON pt.practice_template_id = sp.practice_template_id
         WHERE sp.stage_practice_id = :id;
@@ -591,13 +599,13 @@ def get_stage_practice(stage_practice_id: UUID) -> dict[str, Any] | None:
 
 
 def create_stage_practice(
-    *, stage_id: UUID, practice_template_id: UUID, availability_scope: str, display_order: int
+    *, stage_id: UUID, practice_template_id: UUID, availability_scope: str, display_order: int, media_config: dict[str, Any]
 ) -> dict[str, Any]:
     row = _run_write(
         """
         INSERT INTO crop_observation.stage_practices
-            (stage_id, practice_template_id, availability_scope, display_order)
-        VALUES (:stage_id, :practice_template_id, :scope, :order)
+            (stage_id, practice_template_id, availability_scope, display_order, media_config)
+        VALUES (:stage_id, :practice_template_id, :scope, :order, CAST(:media_config AS jsonb))
         RETURNING stage_practice_id;
         """,
         {
@@ -605,6 +613,7 @@ def create_stage_practice(
             "practice_template_id": practice_template_id,
             "scope": availability_scope,
             "order": display_order,
+            "media_config": json.dumps(media_config or {}),
         },
     )
     return get_stage_practice(row["stage_practice_id"])
@@ -612,10 +621,18 @@ def create_stage_practice(
 
 def update_stage_practice(stage_practice_id: UUID, fields: dict[str, Any]) -> dict[str, Any] | None:
     if fields:
-        assignments = ", ".join(f"{key} = :{key}" for key in fields)
+        assignments_parts = []
+        params = {"id": stage_practice_id}
+        for key, value in fields.items():
+            if key == "media_config":
+                assignments_parts.append("media_config = CAST(:media_config AS jsonb)")
+                params["media_config"] = json.dumps(value)
+            else:
+                assignments_parts.append(f"{key} = :{key}")
+                params[key] = value
         _exec_write(
-            f"UPDATE crop_observation.stage_practices SET {assignments} WHERE stage_practice_id = :id;",
-            {**fields, "id": stage_practice_id},
+            f"UPDATE crop_observation.stage_practices SET {', '.join(assignments_parts)} WHERE stage_practice_id = :id;",
+            params,
         )
     return get_stage_practice(stage_practice_id)
 

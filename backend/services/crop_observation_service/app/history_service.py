@@ -18,17 +18,37 @@ from services.crop_observation_service.app.schemas import (
 
 
 def _summary_from_media(media: list[dict[str, Any]]) -> HistoryMediaSummary:
-    photos = [m for m in media if m["media_role"] == "PHOTO" and m["upload_status"] == "READY"]
+    def _photos(purpose: str) -> dict[str, Any]:
+        items = [
+            m
+            for m in media
+            if m["media_role"] == "PHOTO"
+            and m["media_purpose"] == purpose
+            and m["upload_status"] == "READY"
+        ]
+        return {
+            "count": len(items),
+            "media_ids": [m["media_asset_id"] for m in items],
+        }
+
     voice = next(
-        (m for m in media if m["media_role"] == "VOICE_NOTE" and m["upload_status"] == "READY"),
+        (
+            m
+            for m in media
+            if m["media_role"] == "VOICE_NOTE"
+            and m["upload_status"] == "READY"
+        ),
         None,
     )
     return HistoryMediaSummary(
-        photos=len(photos),
-        voice=voice is not None,
-        photo_media_ids=[m["media_asset_id"] for m in photos],
-        voice_media_id=voice["media_asset_id"] if voice else None,
-        voice_duration_seconds=voice["duration_seconds"] if voice else None,
+        crop_condition=_photos("CROP_CONDITION"),
+        issue_evidence=_photos("ISSUE_EVIDENCE"),
+        practice_evidence=_photos("PRACTICE_EVIDENCE"),
+        voice_note={
+            "count": 1 if voice else 0,
+            "media_id": voice["media_asset_id"] if voice else None,
+            "duration_seconds": voice["duration_seconds"] if voice else None,
+        },
     )
 
 

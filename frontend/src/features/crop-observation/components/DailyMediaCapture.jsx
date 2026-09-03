@@ -34,6 +34,7 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
           ownerType: "DAILY_STAGE",
           ownerId: dailyObservationId,
           mediaType: "IMAGE",
+          mediaPurpose: "CROP_CONDITION",
           mimeType: file.type,
           file,
         });
@@ -61,8 +62,8 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
   }
 
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="mt-4 rounded-2xl border border-[#E9E7DC] bg-white p-4 shadow-sm">
+      <div className="space-y-4">
         <PhotoPicker value={photos} onChange={setPhotos} locale={locale} />
         <VoiceRecorder
           value={voiceFile}
@@ -81,7 +82,7 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-60"
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#4B6B3A] text-sm font-bold text-white active:scale-[0.99] disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {saving ? primary(STRINGS.uploadingMedia, locale) : primary(STRINGS.save, locale)}

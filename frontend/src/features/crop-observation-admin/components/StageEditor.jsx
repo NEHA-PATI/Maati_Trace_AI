@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   createStagePractice,
   deleteStage,
+  generateStageInstructionAudio,
   listStagePractices,
   upsertStageTranslation,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
@@ -15,6 +16,8 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
   const [expanded, setExpanded] = useState(false);
   const [practices, setPractices] = useState([]);
   const [newPracticeCode, setNewPracticeCode] = useState(practiceTemplates[0]?.practice_code || "");
+  const [audioBusy, setAudioBusy] = useState("");
+  const [audioStatus, setAudioStatus] = useState("");
 
   useEffect(() => {
     if (expanded) {
@@ -38,6 +41,19 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
   async function handleDeleteStage() {
     await deleteStage(stage.stage_id);
     onDeleted(stage.stage_id);
+  }
+
+  async function handleGenerateAudio(locale) {
+    setAudioBusy(locale);
+    setAudioStatus("");
+    try {
+      await generateStageInstructionAudio(stage.stage_id, locale, { force: false });
+      setAudioStatus(`Generated ${locale}`);
+    } catch (error) {
+      setAudioStatus(error?.message || "Could not generate audio.");
+    } finally {
+      setAudioBusy("");
+    }
   }
 
   return (
@@ -69,6 +85,19 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
               })
             }
           />
+
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Instruction audio</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={audioBusy === "en-IN"} onClick={() => handleGenerateAudio("en-IN")}>
+                {audioBusy === "en-IN" ? "Generating..." : "Generate English"}
+              </Button>
+              <Button size="sm" variant="outline" disabled={audioBusy === "or-IN"} onClick={() => handleGenerateAudio("or-IN")}>
+                {audioBusy === "or-IN" ? "Generating..." : "Generate Odia"}
+              </Button>
+            </div>
+            {audioStatus ? <p className="mt-2 text-xs text-slate-600">{audioStatus}</p> : null}
+          </div>
 
           <div>
             <p className="mb-2 text-xs font-semibold text-slate-500">Practices</p>

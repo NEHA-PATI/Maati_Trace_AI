@@ -131,11 +131,20 @@ export function completeMediaUpload(mediaAssetId) {
  * save-observation-first-then-upload-media (see PracticeSheet.jsx) —
  * ownerId must already exist before this is called.
  */
-export async function uploadMedia({ ownerType, ownerId, mediaType, mimeType, file, durationSeconds }) {
+export async function uploadMedia({
+  ownerType,
+  ownerId,
+  mediaType,
+  mediaPurpose = "GENERAL",
+  mimeType,
+  file,
+  durationSeconds,
+}) {
   const { media_asset_id: mediaAssetId, upload_url: uploadUrl, method, headers } = await requestMediaUpload({
     owner_type: ownerType,
     owner_id: ownerId,
     media_type: mediaType,
+    media_purpose: mediaPurpose,
     mime_type: mimeType,
     byte_size: file.size,
     duration_seconds: durationSeconds ?? null,

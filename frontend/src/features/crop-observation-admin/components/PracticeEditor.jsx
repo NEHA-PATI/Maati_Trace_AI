@@ -8,6 +8,7 @@ import {
   deleteField,
   deleteStagePractice,
   listFields,
+  updateStagePractice,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
 import FieldEditor from "./FieldEditor";
 
@@ -33,6 +34,10 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
   const [newFieldCode, setNewFieldCode] = useState("");
   const [newFieldType, setNewFieldType] = useState(FIELD_TYPES[0]);
   const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [mediaConfigText, setMediaConfigText] = useState(
+    JSON.stringify(practice.media_config || {}, null, 2),
+  );
+  const [mediaConfigStatus, setMediaConfigStatus] = useState("");
 
   useEffect(() => {
     if (expanded) {
@@ -63,6 +68,17 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
     onDeleted(practice.stage_practice_id);
   }
 
+  async function handleSaveMediaConfig() {
+    setMediaConfigStatus("");
+    try {
+      const parsed = mediaConfigText.trim() ? JSON.parse(mediaConfigText) : {};
+      await updateStagePractice(practice.stage_practice_id, { media_config: parsed });
+      setMediaConfigStatus("Saved");
+    } catch (error) {
+      setMediaConfigStatus(error?.message || "Invalid JSON");
+    }
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50">
       <div className="flex items-center gap-2 px-3 py-2">
@@ -79,6 +95,23 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
 
       {expanded ? (
         <div className="space-y-2 border-t border-slate-200 px-3 py-3">
+          <div className="rounded-lg border border-emerald-100 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold text-slate-500">Media policy</p>
+            <textarea
+              value={mediaConfigText}
+              onChange={(event) => setMediaConfigText(event.target.value)}
+              className="min-h-[132px] w-full rounded-lg border border-slate-200 p-2 font-mono text-xs"
+              readOnly={readOnly}
+            />
+            {!readOnly ? (
+              <div className="mt-2 flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleSaveMediaConfig}>
+                  Save media policy
+                </Button>
+                {mediaConfigStatus ? <span className="text-xs text-slate-500">{mediaConfigStatus}</span> : null}
+              </div>
+            ) : null}
+          </div>
           {fields.map((field) => (
             <FieldEditor key={field.field_definition_id} field={field} onDelete={handleDeleteField} readOnly={readOnly} />
           ))}

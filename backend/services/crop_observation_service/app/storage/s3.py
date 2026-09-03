@@ -70,6 +70,24 @@ def create_download_url(*, object_key: str) -> str:
         ) from exc
 
 
+def put_bytes(*, object_key: str, data: bytes, mime_type: str) -> int:
+    try:
+        _client().put_object(
+            Bucket=settings.crop_observation_s3_bucket,
+            Key=object_key,
+            Body=data,
+            ContentType=mime_type,
+        )
+        return len(data)
+    except (BotoCoreError, ClientError) as exc:
+        raise CropObservationError(
+            "MEDIA_STORAGE_UNAVAILABLE",
+            "Media storage is temporarily unavailable.",
+            503,
+            internal_message=str(exc),
+        ) from exc
+
+
 def head_object(*, object_key: str) -> dict[str, object] | None:
     try:
         return _client().head_object(Bucket=settings.crop_observation_s3_bucket, Key=object_key)

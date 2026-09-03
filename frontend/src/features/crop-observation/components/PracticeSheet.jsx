@@ -12,6 +12,7 @@ import PreviousEntryRow from "@/features/crop-observation/components/PreviousEnt
 import VoiceRecorder from "@/features/crop-observation/components/VoiceRecorder";
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
 import DynamicField from "./DynamicField";
+import { iconForField } from "./fieldIcons";
 
 function newClientEntryId() {
   return crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random()}`;
@@ -27,16 +28,24 @@ export default function PracticeSheet({
   onSaved,
 }) {
   const [answers, setAnswers] = useState(initialAnswers || {});
-  const [photos, setPhotos] = useState([]);
+  const [issuePhotos, setIssuePhotos] = useState([]);
+  const [practicePhotos, setPracticePhotos] = useState([]);
   const [voiceFile, setVoiceFile] = useState(null);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const [saving, setSaving] = useState(false);
   const [uploadStage, setUploadStage] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
-
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState("");
+
+  const mediaConfig = practice.media_config || {};
+  const issueEnabled = mediaConfig.issue_evidence?.enabled;
+  const issueMax = mediaConfig.issue_evidence?.max_images || 2;
+  const practiceEnabled = mediaConfig.practice_evidence?.enabled ?? true;
+  const practiceMax = mediaConfig.practice_evidence?.max_images || 2;
+  const voiceEnabled = mediaConfig.voice_note?.enabled ?? true;
+  const voiceMaxSeconds = mediaConfig.voice_note?.max_seconds || 60;
 
   useEffect(() => {
     let cancelled = false;
@@ -67,19 +76,36 @@ export default function PracticeSheet({
         answers,
       });
 
-      // Media only ever uploads AFTER the observation row exists — see
-      // spec "do not upload media before the observation exists".
       const ownerId = saved.practice_observation_id;
-      for (const file of photos) {
+      for (const file of issuePhotos) {
         setUploadStage(primary(STRINGS.uploadingMedia, locale));
-        await uploadMedia({ ownerType: "PRACTICE", ownerId, mediaType: "IMAGE", mimeType: file.type, file });
+        await uploadMedia({
+          ownerType: "PRACTICE",
+          ownerId,
+          mediaType: "IMAGE",
+          mediaPurpose: "ISSUE_EVIDENCE",
+          mimeType: file.type,
+          file,
+        });
       }
-      if (voiceFile) {
+      for (const file of practicePhotos) {
+        setUploadStage(primary(STRINGS.uploadingMedia, locale));
+        await uploadMedia({
+          ownerType: "PRACTICE",
+          ownerId,
+          mediaType: "IMAGE",
+          mediaPurpose: "PRACTICE_EVIDENCE",
+          mimeType: file.type,
+          file,
+        });
+      }
+      if (voiceFile && voiceEnabled) {
         setUploadStage(primary(STRINGS.uploadingMedia, locale));
         await uploadMedia({
           ownerType: "PRACTICE",
           ownerId,
           mediaType: "AUDIO",
+          mediaPurpose: "GENERAL",
           mimeType: voiceFile.type,
           file: voiceFile,
           durationSeconds: voiceSeconds,
@@ -91,7 +117,11 @@ export default function PracticeSheet({
       if (Array.isArray(err?.fields) && err.fields.length) {
         setFieldErrors(Object.fromEntries(err.fields.map((f) => [f.field, f.message])));
       }
-      setFormError(err?.message || "Could not save. Please try again.");
+      setFormError(
+        err?.code === "STAGE_STATUS_REQUIRED"
+          ? "Save today's crop status first."
+          : err?.message || "Could not save. Please try again.",
+      );
     } finally {
       setSaving(false);
       setUploadStage("");
@@ -99,45 +129,36 @@ export default function PracticeSheet({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 animate-in fade-in"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 animate-in fade-in" onClick={onClose}>
       <div
-        className="flex max-h-[92vh] flex-col rounded-t-3xl bg-white pb-[env(safe-area-inset-bottom)] animate-in slide-in-from-bottom-4 duration-200"
+        className="flex max-h-[88vh] flex-col rounded-t-[22px] bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-slate-200" />
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="text-lg font-bold text-slate-950">{practice.name}</h2>
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-[#E9E7DC]" />
+        <div className="flex items-center justify-between border-b border-[#E9E7DC] px-4 py-3">
+          <h2 className="min-w-0 flex-1 truncate text-[17px] font-bold text-[#1D2117]">{practice.name}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-9 w-9 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+            className="grid h-10 w-10 place-items-center rounded-[10px] border border-[#E9E7DC] bg-[#F7F8F3] text-[#5B6055]"
             aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {formError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {formError}
             </div>
           ) : null}
 
-          {/* Previous entries — compact rows directly above the fresh form, per
-              the "many entries over time" history model (one row per date). */}
           {history === null ? (
-            !historyError ? (
-              <div className="space-y-2">
-                <div className="h-16 animate-pulse rounded-xl bg-slate-100" />
-              </div>
-            ) : null
+            !historyError ? <div className="h-16 animate-pulse rounded-xl bg-[#F7F8F3]" /> : null
           ) : history.length > 0 ? (
             <section>
-              <div className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-600">
+              <div className="mb-2 text-sm font-bold text-[#5B6055]">
                 {primary(STRINGS.previousEntries, locale)}
               </div>
               <div className="space-y-2">
@@ -145,47 +166,73 @@ export default function PracticeSheet({
                   <PreviousEntryRow key={entry.practice_observation_id} entry={entry} locale={locale} />
                 ))}
               </div>
-              <div className="my-4 border-t border-dashed border-slate-200" />
-              <div className="mb-2 text-sm font-bold uppercase tracking-wide text-emerald-700">
-                {primary(STRINGS.newUpdate, locale)}
-              </div>
+              <div className="my-4 border-t border-dashed border-[#E9E7DC]" />
+              <div className="mb-2 text-sm font-bold text-[#4B6B3A]">{primary(STRINGS.newUpdate, locale)}</div>
             </section>
           ) : null}
 
-          {practice.fields.map((field) => (
-            <div key={field.field_code}>
-              <label className="mb-2 block text-base font-bold text-slate-900">
-                {field.label}
-                {field.is_required ? <span className="text-rose-600"> *</span> : null}
-              </label>
-              <DynamicField
-                field={field}
-                value={answers[field.field_code]}
-                onChange={(value) => setFieldValue(field.field_code, value)}
-                locale={locale}
-              />
-              {fieldErrors[field.field_code] ? (
-                <p className="mt-1 text-xs text-rose-600">{fieldErrors[field.field_code]}</p>
-              ) : null}
-            </div>
-          ))}
+          {practice.fields.map((field) => {
+            const FieldIcon = iconForField(field);
+            return (
+              <div key={field.field_code} className="space-y-2">
+                <label className="flex items-center gap-2 text-[15px] font-bold text-[#1D2117]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#E1F1D6] text-[#33492A]">
+                    <FieldIcon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    {field.label}
+                    {field.is_required ? <span className="text-rose-600"> *</span> : null}
+                  </span>
+                </label>
+                <DynamicField
+                  field={field}
+                  value={answers[field.field_code]}
+                  onChange={(value) => setFieldValue(field.field_code, value)}
+                  locale={locale}
+                />
+                {fieldErrors[field.field_code] ? (
+                  <p className="text-xs text-rose-600">{fieldErrors[field.field_code]}</p>
+                ) : null}
+              </div>
+            );
+          })}
 
-          <div className="grid grid-cols-2 gap-4">
-            <PhotoPicker value={photos} onChange={setPhotos} locale={locale} />
-            <VoiceRecorder
-              value={voiceFile}
-              onChange={(file, secs) => {
-                setVoiceFile(file);
-                setVoiceSeconds(secs || 0);
-              }}
-              locale={locale}
-            />
+          <div className="space-y-4">
+            {issueEnabled ? (
+              <PhotoPicker
+                value={issuePhotos}
+                onChange={setIssuePhotos}
+                locale={locale}
+                title="Problem photos"
+                maxImages={issueMax}
+              />
+            ) : null}
+            {practiceEnabled ? (
+              <PhotoPicker
+                value={practicePhotos}
+                onChange={setPracticePhotos}
+                locale={locale}
+                title="Action photos"
+                maxImages={practiceMax}
+              />
+            ) : null}
+            {voiceEnabled ? (
+              <VoiceRecorder
+                value={voiceFile}
+                onChange={(file, secs) => {
+                  setVoiceFile(file);
+                  setVoiceSeconds(secs || 0);
+                }}
+                locale={locale}
+                maxSeconds={voiceMaxSeconds}
+              />
+            ) : null}
           </div>
         </div>
 
-        <div className="sticky bottom-0 border-t border-slate-100 bg-white px-4 py-3">
-          {uploadStage ? <p className="mb-2 text-center text-xs text-slate-500">{uploadStage}</p> : null}
-          <Button className="h-12 w-full rounded-xl text-base font-bold" onClick={handleSave} disabled={saving}>
+        <div className="sticky bottom-0 border-t border-[#E9E7DC] bg-white px-4 py-3">
+          {uploadStage ? <p className="mb-2 text-center text-xs text-[#5B6055]">{uploadStage}</p> : null}
+          <Button className="h-[52px] w-full rounded-[14px] bg-[#4B6B3A] text-base font-bold hover:bg-[#33492A]" onClick={handleSave} disabled={saving}>
             {saving ? primary(STRINGS.saving, locale) : primary(STRINGS.save, locale)}
           </Button>
         </div>
