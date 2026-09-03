@@ -27,7 +27,7 @@ export default function DynamicField({ field, value, onChange, locale }) {
           value={value || ""}
           onChange={(event) => onChange(event.target.value)}
           maxLength={500}
-          className="h-12 w-full rounded-xl border-2 border-slate-200 px-3 text-sm"
+          className="h-12 w-full rounded-xl border-2 border-slate-300 px-3 text-base font-medium text-slate-900"
         />
       );
 

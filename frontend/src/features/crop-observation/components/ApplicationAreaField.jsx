@@ -25,7 +25,7 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
           )}
         >
           <Sprout className="h-6 w-6 shrink-0 text-emerald-700" />
-          <Bilingual pair={STRINGS.wholeFarm} locale={locale} className="font-semibold text-slate-900" />
+          <Bilingual pair={STRINGS.wholeFarm} locale={locale} className="text-base font-bold text-slate-900" />
         </button>
 
         <button
@@ -38,13 +38,13 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
           )}
         >
           <MapPin className="h-6 w-6 shrink-0 text-rose-600" />
-          <Bilingual pair={STRINGS.selectedArea} locale={locale} className="font-semibold text-slate-900" />
+          <Bilingual pair={STRINGS.selectedArea} locale={locale} className="text-base font-bold text-slate-900" />
         </button>
       </div>
 
       {scope === "SELECTED_AREA" ? (
         <div className="rounded-xl bg-slate-50 p-3">
-          <p className="mb-2 text-sm text-slate-600">{primary(STRINGS.howMuchFarm, locale)}</p>
+          <p className="mb-2 text-sm font-semibold text-slate-800">{primary(STRINGS.howMuchFarm, locale)}</p>
           <div className="grid grid-cols-3 gap-2">
             {EXTENTS.map((code) => (
               <button
@@ -53,10 +53,10 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
                 aria-pressed={relativeExtent === code}
                 onClick={() => onChange({ scope: "SELECTED_AREA", relative_extent: code })}
                 className={cn(
-                  "min-h-[52px] rounded-xl border-2 px-2 text-xs font-medium leading-tight transition",
+                  "min-h-[52px] rounded-xl border-2 px-2 text-sm font-semibold leading-tight transition",
                   relativeExtent === code
-                    ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-900"
+                    : "border-slate-300 bg-white text-slate-800 hover:border-slate-400",
                 )}
               >
                 {primary(RELATIVE_EXTENT_STRINGS[code], locale)}
@@ -66,7 +66,7 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
         </div>
       ) : null}
 
-      {field?.help_text ? <p className="text-xs text-slate-500">{field.help_text}</p> : null}
+      {field?.help_text ? <p className="text-sm text-slate-700">{field.help_text}</p> : null}
     </div>
   );
 }

@@ -54,6 +54,7 @@ def list_crops(*, locale: str) -> CropListResponse:
                 lifecycle_type=item["lifecycle_type"],
                 name=item["name"],
                 secondary_name=item["secondary_name"],
+                image_url=item["image_url"],
             )
             for item in items
         ]
@@ -188,53 +189,67 @@ def start_crop_cycle(
 # ---------------------------------------------------------------------------
 
 
-def _build_practice(stage_practice: dict[str, Any], *, locale: str) -> ScreenPracticeOut:
-    practice_translations = repo.get_practice_translations(stage_practice["practice_template_id"])
-    name, _ = repo.pick_names(practice_translations, locale)
+def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPracticeOut]:
+    """Renders every practice on a stage from ONE batched fetch
+    (repo.get_stage_practices_full) instead of the old per-practice,
+    per-field, per-option round trips — see that function's docstring for
+    why this mattered."""
+    data = repo.get_stage_practices_full(stage_id)
 
-    fields = []
-    for field in repo.list_practice_fields(stage_practice["stage_practice_id"]):
-        field_translations = repo.get_field_translations(field["field_definition_id"])
-        labels = [{"locale": t["locale"], "display_name": t["label"]} for t in field_translations]
-        label, _ = repo.pick_names(labels, locale)
-        help_text = next(
-            (t["help_text"] for t in field_translations if t["locale"] == locale and t["help_text"]),
-            None,
-        )
+    result = []
+    for stage_practice in data["practices"]:
+        practice_translations = [
+            {"locale": t["locale"], "display_name": t["display_name"]}
+            for t in stage_practice["translations"]
+        ]
+        name, _ = repo.pick_names(practice_translations, locale)
 
-        options = []
-        for option in repo.list_field_options(field["field_definition_id"]):
-            option_translations = repo.get_option_translations(option["field_option_id"])
-            option_labels = [
-                {"locale": t["locale"], "display_name": t["label"]} for t in option_translations
-            ]
-            option_label, _ = repo.pick_names(option_labels, locale)
-            options.append(
-                {
-                    "option_code": option["option_code"],
-                    "label": option_label or option["option_code"],
-                    "icon_key": option["icon_key"],
-                }
+        fields = []
+        for field in data["fields_by_practice"].get(stage_practice["stage_practice_id"], []):
+            field_translations = field["translations"]
+            labels = [{"locale": t["locale"], "display_name": t["label"]} for t in field_translations]
+            label, _ = repo.pick_names(labels, locale)
+            help_text = next(
+                (t["help_text"] for t in field_translations if t["locale"] == locale and t["help_text"]),
+                None,
             )
 
-        fields.append(
-            ScreenPracticeFieldOut(
-                field_code=field["field_code"],
-                field_type=field["field_type"],
-                label=label or field["field_code"],
-                help_text=help_text,
-                is_required=field["is_required"],
-                display_order=field["display_order"],
-                options=options,
+            options = []
+            for option in data["options_by_field"].get(field["field_definition_id"], []):
+                option_labels = [
+                    {"locale": t["locale"], "display_name": t["label"]}
+                    for t in option.get("translations", [])
+                ]
+                option_label, _ = repo.pick_names(option_labels, locale)
+                options.append(
+                    {
+                        "option_code": option["option_code"],
+                        "label": option_label or option["option_code"],
+                        "icon_key": option["icon_key"],
+                    }
+                )
+
+            fields.append(
+                ScreenPracticeFieldOut(
+                    field_code=field["field_code"],
+                    field_type=field["field_type"],
+                    label=label or field["field_code"],
+                    help_text=help_text,
+                    is_required=field["is_required"],
+                    display_order=field["display_order"],
+                    options=options,
+                )
+            )
+
+        result.append(
+            ScreenPracticeOut(
+                practice_code=stage_practice["practice_code"],
+                name=name or stage_practice["practice_code"],
+                display_order=stage_practice["display_order"],
+                fields=fields,
             )
         )
-
-    return ScreenPracticeOut(
-        practice_code=stage_practice["practice_code"],
-        name=name or stage_practice["practice_code"],
-        display_order=stage_practice["display_order"],
-        fields=fields,
-    )
+    return result
 
 
 def get_stage_screen(
@@ -258,11 +273,37 @@ def get_stage_screen(
     if crop is None:
         raise CropObservationError("CROP_NOT_FOUND", "This crop is not available yet.", 404)
     crop_name, crop_secondary = repo.get_crop_names(crop["crop_id"], locale=locale)
+    crop_card_image = repo.get_crop_card_image(crop["crop_id"])
+    crop_image_url = (
+        f"/v1/crop-observations/system-media/{crop_card_image['asset_id']}/content"
+        if crop_card_image
+        else None
+    )
 
     stage = repo.get_stage_by_code(cycle["config_version_id"], stage_code)
     if stage is None:
         raise CropObservationError("CROP_STAGE_NOT_FOUND", "This crop stage was not found.", 404)
     stage_name, stage_secondary = repo.get_stage_names(stage["stage_id"], locale=locale)
+    stage_description = next(
+        (
+            row["short_description"]
+            for row in repo.get_stage_translations(stage["stage_id"])
+            if row["locale"] == locale and row["short_description"]
+        ),
+        None,
+    )
+
+    stage_image = repo.get_stage_image(stage["stage_id"])
+    stage_image_url = (
+        f"/v1/crop-observations/system-media/{stage_image['asset_id']}/content" if stage_image else None
+    )
+    instruction_audio = repo.get_stage_instruction_audio(stage["stage_id"], locale=locale)
+    instruction_audio_url = (
+        f"/v1/crop-observations/system-media/{instruction_audio['asset_id']}/content"
+        if instruction_audio
+        else None
+    )
+    instruction_audio_duration = instruction_audio["duration_seconds"] if instruction_audio else None
 
     all_stages = repo.list_stages(cycle["config_version_id"])
     stage_tabs = [
@@ -275,10 +316,7 @@ def get_stage_screen(
         for s in all_stages
     ]
 
-    practices = [
-        _build_practice(sp, locale=locale)
-        for sp in repo.list_stage_practices(stage["stage_id"])
-    ]
+    practices = _build_practices_for_stage(stage["stage_id"], locale=locale)
 
     today = today_ist()
     today_daily = repo.get_daily_observation_by_key(cycle["crop_cycle_id"], stage_code, today)
@@ -286,6 +324,7 @@ def get_stage_screen(
     if today_daily is not None:
         today_practices = repo.list_practice_observations_for_daily(today_daily["daily_observation_id"])
         today_observation = {
+            "daily_observation_id": today_daily["daily_observation_id"],
             "crop_status": today_daily["crop_status"],
             "practices": [
                 {"practice_code": p["practice_code"], "answers": p["answers"]}
@@ -294,15 +333,24 @@ def get_stage_screen(
         }
 
     return ScreenResponse(
-        crop=ScreenCropOut(crop_code=crop["crop_code"], name=crop_name or crop["crop_code"], secondary_name=crop_secondary),
+        crop=ScreenCropOut(
+            crop_code=crop["crop_code"],
+            name=crop_name or crop["crop_code"],
+            secondary_name=crop_secondary,
+            image_url=crop_image_url,
+        ),
         farm=ScreenFarmOut(farm_id=_to_uuid(farm["farm_id"]), farm_name=farm.get("farm_name")),
         cycle=ScreenCycleOut(crop_cycle_id=cycle["crop_cycle_id"], current_stage_code=cycle["current_stage_code"]),
         stage=ScreenStageOut(
             stage_code=stage["stage_code"],
             name=stage_name or stage["stage_code"],
             secondary_name=stage_secondary,
-            image_url=None,
-            instruction_audio_url=None,
+            short_description=stage_description,
+            image_url=stage_image_url,
+            instruction_audio_url=instruction_audio_url,
+            instruction_audio_duration_seconds=(
+                float(instruction_audio_duration) if instruction_audio_duration is not None else None
+            ),
         ),
         stage_tabs=stage_tabs,
         today=ScreenTodayOut(date=today, observation=today_observation),

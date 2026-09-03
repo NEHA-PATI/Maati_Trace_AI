@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { ChevronRight } from "lucide-react";
 
+import { systemMediaUrl } from "@/features/crop-observation/api/cropObservationApi";
 import Bilingual from "@/features/crop-observation/components/Bilingual";
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ function CropCard({ crop, attached, onSelect, onPrefetch, disabled, locale }) {
     >
       <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-50 text-2xl">
         {crop.image_url ? (
-          <img src={crop.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <img src={systemMediaUrl(crop.image_url)} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
           "🌾"
         )}
@@ -29,8 +30,6 @@ function CropCard({ crop, attached, onSelect, onPrefetch, disabled, locale }) {
         as="div"
         className="min-w-0 flex-1 text-base font-bold text-slate-950"
         primaryText={crop.name}
-        secondaryText={crop.secondary_name}
-        secondaryClassName="text-sm"
       />
       {attached ? (
         <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">

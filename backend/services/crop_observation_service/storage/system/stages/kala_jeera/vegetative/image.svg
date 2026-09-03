@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#ecfdf5"/>
+  <circle cx="60" cy="50" r="26" fill="#fde047"/>
+  <rect x="0" y="230" width="400" height="70" fill="#92400e"/>
+  <rect x="0" y="222" width="400" height="12" fill="#78350f"/>
+  <g stroke="#15803d" stroke-width="7" stroke-linecap="round" fill="none">
+    <path d="M110 230 V120"/>
+    <path d="M110 150 q-30 -14 -44 -46"/>
+    <path d="M110 150 q30 -14 44 -46"/>
+    <path d="M110 180 q-34 -8 -50 -30"/>
+    <path d="M110 180 q34 -8 50 -30"/>
+    <path d="M110 205 q-30 -4 -46 -18"/>
+    <path d="M110 205 q30 -4 46 -18"/>
+
+    <path d="M220 230 V100"/>
+    <path d="M220 130 q-34 -16 -50 -50"/>
+    <path d="M220 130 q34 -16 50 -50"/>
+    <path d="M220 162 q-38 -10 -56 -34"/>
+    <path d="M220 162 q38 -10 56 -34"/>
+    <path d="M220 194 q-32 -4 -50 -20"/>
+    <path d="M220 194 q32 -4 50 -20"/>
+
+    <path d="M320 230 V128"/>
+    <path d="M320 156 q-28 -14 -42 -44"/>
+    <path d="M320 156 q28 -14 42 -44"/>
+    <path d="M320 186 q-30 -6 -46 -26"/>
+    <path d="M320 186 q30 -6 46 -26"/>
+  </g>
+</svg>

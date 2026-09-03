@@ -1,0 +1,20 @@
+{
+  "assets": [
+    { "asset_type": "CROP_CARD_IMAGE", "crop_code": "kala_jeera", "file": "system/crops/kala_jeera/card.svg" },
+
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "seedling", "file": "system/stages/kala_jeera/seedling/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "vegetative", "file": "system/stages/kala_jeera/vegetative/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "panicle_initiation", "file": "system/stages/kala_jeera/panicle_initiation/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "flowering", "file": "system/stages/kala_jeera/flowering/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "grain_filling", "file": "system/stages/kala_jeera/grain_filling/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "ripening", "file": "system/stages/kala_jeera/ripening/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "harvesting", "file": "system/stages/kala_jeera/harvesting/image.svg" },
+    { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "post_harvest", "file": "system/stages/kala_jeera/post_harvest/image.svg" }
+  ],
+  "_note": "STAGE_INSTRUCTION_AUDIO entries (en-IN/or-IN mp3 or webm, one per stage) are intentionally omitted here — they need a real recorded voice, not a generated placeholder. Record them with a phone or Windows Sound Recorder, drop the files under system/stages/kala_jeera/<stage>/, add en-IN/or-IN entries below with a locale + duration_seconds, and re-run sync_system_media.py:\n  { \"asset_type\": \"STAGE_INSTRUCTION_AUDIO\", \"crop_code\": \"kala_jeera\", \"stage_code\": \"seedling\", \"locale\": \"en-IN\", \"file\": \"system/stages/kala_jeera/seedling/en-IN.mp3\", \"duration_seconds\": 30 }"
+}
+
+
+
+
+
