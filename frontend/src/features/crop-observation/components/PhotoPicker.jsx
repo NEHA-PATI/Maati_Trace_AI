@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import imageCompression from "browser-image-compression";
-import { Camera, Loader2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
+import { MediaCameraIcon } from "./fieldIcons";
 
 const MAX_IMAGES = 2;
 
@@ -12,7 +13,7 @@ const MAX_IMAGES = 2;
  * MAX_IMAGE_BYTES (8 MB) — so a full-resolution shot is shrunk to a
  * web-friendly size before it ever leaves the phone.
  */
-export default function PhotoPicker({ value = [], onChange, locale }) {
+export default function PhotoPicker({ value = [], onChange, locale, title, maxImages = MAX_IMAGES }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +23,7 @@ export default function PhotoPicker({ value = [], onChange, locale }) {
     event.target.value = "";
     if (!files.length) return;
 
-    const room = MAX_IMAGES - value.length;
+    const room = maxImages - value.length;
     setBusy(true);
     setError("");
     try {
@@ -50,33 +51,42 @@ export default function PhotoPicker({ value = [], onChange, locale }) {
 
   return (
     <div>
-      <div className="text-base font-bold text-slate-900">{primary(STRINGS.addPhoto, locale)}</div>
-      <div className="mt-2 flex gap-3">
-        {value.map((file, index) => (
-          <div key={`${file.name}-${index}`} className="relative h-20 w-20 overflow-hidden rounded-xl border border-slate-200">
-            <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover" />
+      <div className="text-sm font-bold text-[#1D2117]">{title || primary(STRINGS.addPhoto, locale)}</div>
+      <div className="mt-2 flex gap-2.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {Array.from({ length: maxImages }).map((_, index) => {
+          const file = value[index];
+          if (file) {
+            return (
+              <div
+                key={`${file.name}-${index}`}
+                className="relative h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[14px] border border-[#E9E7DC]"
+              >
+                <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removeAt(index)}
+                  className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
+                  aria-label={primary(STRINGS.delete, locale)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          }
+          return (
             <button
+              key={`empty-${index}`}
               type="button"
-              onClick={() => removeAt(index)}
-              className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
-              aria-label={primary(STRINGS.delete, locale)}
+              onClick={() => inputRef.current?.click()}
+              disabled={busy}
+              className="flex h-[84px] w-[84px] shrink-0 flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-[#E9E7DC] bg-[#F7F8F3] text-[11px] font-bold text-[#5B6055] active:scale-[0.98] disabled:opacity-60"
+              aria-label={primary(STRINGS.addPhoto, locale)}
             >
-              <X className="h-3 w-3" />
+              {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <MediaCameraIcon className="h-6 w-6" />}
+              <span>{primary(STRINGS.addPhoto, locale)}</span>
             </button>
-          </div>
-        ))}
-
-        {value.length < MAX_IMAGES ? (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-            className="grid h-20 w-20 place-items-center rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-600 active:scale-95 disabled:opacity-60"
-            aria-label={primary(STRINGS.addPhoto, locale)}
-          >
-            {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Camera className="h-6 w-6" />}
-          </button>
-        ) : null}
+          );
+        })}
       </div>
       {error ? <p className="mt-1.5 text-xs text-rose-600">{error}</p> : null}
       <input

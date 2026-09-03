@@ -17,6 +17,7 @@ from services.crop_observation_service.app.schemas import (
     CropSummary,
     FarmCropCreateRequest,
     FarmCropResponse,
+    RecentHistoryItem,
     ScreenCropOut,
     ScreenCropStatusOptionOut,
     ScreenCycleOut,
@@ -246,10 +247,43 @@ def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPra
                 practice_code=stage_practice["practice_code"],
                 name=name or stage_practice["practice_code"],
                 display_order=stage_practice["display_order"],
+                media_config=stage_practice.get("media_config") or {},
                 fields=fields,
             )
         )
     return result
+
+
+def _media_summary(media_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def _photos(purpose: str) -> dict[str, Any]:
+        rows = [
+            row
+            for row in media_rows
+            if row["media_role"] == "PHOTO"
+            and row["media_purpose"] == purpose
+            and row["upload_status"] == "READY"
+        ]
+        return {"count": len(rows), "media_ids": [row["media_asset_id"] for row in rows]}
+
+    voice = next(
+        (
+            row
+            for row in media_rows
+            if row["media_role"] == "VOICE_NOTE"
+            and row["upload_status"] == "READY"
+        ),
+        None,
+    )
+    return {
+        "crop_condition": _photos("CROP_CONDITION"),
+        "issue_evidence": _photos("ISSUE_EVIDENCE"),
+        "practice_evidence": _photos("PRACTICE_EVIDENCE"),
+        "voice_note": {
+            "count": 1 if voice else 0,
+            "media_id": voice["media_asset_id"] if voice else None,
+            "duration_seconds": voice["duration_seconds"] if voice else None,
+        },
+    }
 
 
 def get_stage_screen(
@@ -332,6 +366,18 @@ def get_stage_screen(
             ],
         }
 
+    recent_rows = repo.list_recent_daily_observations(cycle["crop_cycle_id"], before=None, limit=4)
+    recent_media_rows = repo.list_media_for_owners(
+        "DAILY_STAGE",
+        [row["daily_observation_id"] for row in recent_rows],
+    )
+    recent_media_by_owner: dict[UUID, list[dict[str, Any]]] = {}
+    for media_row in recent_media_rows:
+        recent_media_by_owner.setdefault(media_row["owner_id"], []).append(media_row)
+    recent_media = {
+        owner_id: _media_summary(rows) for owner_id, rows in recent_media_by_owner.items()
+    }
+
     return ScreenResponse(
         crop=ScreenCropOut(
             crop_code=crop["crop_code"],
@@ -356,5 +402,15 @@ def get_stage_screen(
         today=ScreenTodayOut(date=today, observation=today_observation),
         crop_status_options=[ScreenCropStatusOptionOut(code=code) for code in CROP_STATUS_OPTIONS],
         practices=practices,
-        recent_history=[],
+        recent_history=[
+            RecentHistoryItem(
+                daily_observation_id=row["daily_observation_id"],
+                date=row["observed_on"],
+                crop_status=row["crop_status"],
+                stage_code=row["stage_code"],
+                media_summary=recent_media.get(row["daily_observation_id"], _media_summary([])),
+            )
+            for row in recent_rows
+            if row["observed_on"] != today
+        ],
     )

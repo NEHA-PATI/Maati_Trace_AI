@@ -5,6 +5,7 @@ from uuid import UUID
 
 from services.crop_observation_service.app import admin_repository as admin_repo
 from services.crop_observation_service.app import repository as repo
+from services.crop_observation_service.app import tts_service
 from services.crop_observation_service.app.admin_repository import VALID_FIELD_TYPES
 from services.crop_observation_service.app.admin_schemas import (
     AdminConfigVersionOut,
@@ -32,6 +33,10 @@ from services.crop_observation_service.app.admin_schemas import (
     OptionTranslationUpsertRequest,
     PracticeTranslationUpsertRequest,
     StageTranslationUpsertRequest,
+    TtsProfileUpsertRequest,
+    TtsProfileOut,
+    TtsStatusOut,
+    TtsVoiceOut,
     ValidationIssue,
     ValidationResponse,
 )
@@ -327,6 +332,7 @@ def create_stage_practice(
         practice_template_id=template["practice_template_id"],
         availability_scope=payload.availability_scope,
         display_order=payload.display_order,
+        media_config=payload.media_config,
     )
     return AdminStagePracticeOut(**row)
 
@@ -524,3 +530,31 @@ def get_observation_detail(context: RequestContext, daily_observation_id: UUID) 
         **row,
         practices=[{"practice_code": p["practice_code"], "answers": p["answers"]} for p in practices],
     )
+
+
+def get_tts_status(context: RequestContext) -> TtsStatusOut:
+    return tts_service.get_status(context)
+
+
+def list_tts_profiles(context: RequestContext) -> list[TtsProfileOut]:
+    return tts_service.list_profiles(context)
+
+
+def upsert_tts_profile(context: RequestContext, locale: str, payload: TtsProfileUpsertRequest) -> TtsProfileOut:
+    return tts_service.upsert_profile(
+        context,
+        locale=locale,
+        voice_id=payload.voice_id,
+        voice_name=payload.voice_name,
+        model_id=payload.model_id,
+        speed=payload.speed,
+        volume=payload.volume,
+    )
+
+
+def list_tts_voices(context: RequestContext, language: str) -> list[TtsVoiceOut]:
+    return tts_service.list_voices(context, language=language)
+
+
+def generate_stage_instruction_audio(context: RequestContext, stage_id: UUID, locale: str, force: bool):
+    return tts_service.generate_instruction_audio(context, stage_id=stage_id, locale=locale, force=force)

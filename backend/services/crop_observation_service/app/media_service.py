@@ -68,6 +68,56 @@ def _validate_media_limits(*, payload: MediaUploadRequest) -> None:
             raise CropObservationError("MEDIA_TOO_LONG", "Audio exceeds the duration limit.", 422)
 
 
+def _resolve_media_policy(owner_type: str, owner_ctx: dict, payload: MediaUploadRequest) -> tuple[str, int, int | None]:
+    from shared.config.settings import settings
+
+    media_role = _MEDIA_ROLE_BY_TYPE[payload.media_type]
+    if owner_type == "DAILY_STAGE":
+        if media_role == "PHOTO":
+            if payload.media_purpose not in {"GENERAL", "CROP_CONDITION"}:
+                raise CropObservationError("INVALID_MEDIA_PURPOSE", "Stage photos must describe crop condition.", 422)
+            purpose = "CROP_CONDITION"
+            limit = settings.max_images_per_owner
+            max_seconds = None
+        else:
+            if payload.media_purpose != "GENERAL":
+                raise CropObservationError("INVALID_MEDIA_PURPOSE", "Voice notes use the GENERAL purpose.", 422)
+            purpose = "GENERAL"
+            limit = settings.max_audio_per_owner
+            max_seconds = settings.max_audio_duration_seconds
+        return purpose, limit, max_seconds
+
+    practice = repo.get_practice_observation(payload.owner_id)
+    if practice is None:
+        raise CropObservationError("OBSERVATION_NOT_FOUND", "Observation was not found.", 404)
+    stage_practice = repo.get_stage_practice(practice["stage_practice_id"])
+    media_config = (stage_practice or {}).get("media_config") or {}
+    voice_note = media_config.get("voice_note") or {}
+    issue = media_config.get("issue_evidence") or {}
+    practice_evidence = media_config.get("practice_evidence") or {}
+
+    if media_role == "PHOTO":
+        if payload.media_purpose == "GENERAL":
+            payload.media_purpose = "PRACTICE_EVIDENCE"
+        if payload.media_purpose == "ISSUE_EVIDENCE":
+            if not issue.get("enabled", False):
+                raise CropObservationError("MEDIA_PURPOSE_DISABLED", "Issue evidence is not enabled for this practice.", 422)
+            return "ISSUE_EVIDENCE", int(issue.get("max_images", settings.max_images_per_owner)), None
+        if payload.media_purpose == "PRACTICE_EVIDENCE":
+            if not practice_evidence.get("enabled", True):
+                raise CropObservationError("MEDIA_PURPOSE_DISABLED", "Practice evidence is not enabled for this practice.", 422)
+            return "PRACTICE_EVIDENCE", int(practice_evidence.get("max_images", settings.max_images_per_owner)), None
+        raise CropObservationError("INVALID_MEDIA_PURPOSE", "This image purpose is not valid for practice evidence.", 422)
+
+    if payload.media_purpose != "GENERAL":
+        raise CropObservationError("INVALID_MEDIA_PURPOSE", "Voice notes use the GENERAL purpose.", 422)
+    if not voice_note.get("enabled", True):
+        raise CropObservationError("MEDIA_PURPOSE_DISABLED", "Voice notes are not enabled for this practice.", 422)
+    return "GENERAL", int(voice_note.get("max_count", settings.max_audio_per_owner)), int(
+        voice_note.get("max_seconds", settings.max_audio_duration_seconds)
+    )
+
+
 def request_media_upload(
     context: RequestContext,
     payload: MediaUploadRequest,
@@ -86,14 +136,27 @@ def request_media_upload(
     observation_service.resolve_cycle_and_authorize(context, cycle["crop_cycle_id"])
 
     media_role = _MEDIA_ROLE_BY_TYPE[payload.media_type]
-    limit = settings.max_images_per_owner if media_role == "PHOTO" else settings.max_audio_per_owner
-    existing_count = repo.count_owner_media(payload.owner_type, payload.owner_id, media_role)
+    media_purpose, limit, max_seconds = _resolve_media_policy(payload.owner_type, owner_ctx, payload)
+    if max_seconds is not None and payload.duration_seconds and payload.duration_seconds > max_seconds:
+        raise CropObservationError("MEDIA_TOO_LONG", "Audio exceeds the duration limit for this entry.", 422)
+
+    existing_count = repo.count_owner_media_by_purpose(
+        payload.owner_type,
+        payload.owner_id,
+        media_role,
+        media_purpose,
+    )
     if existing_count >= limit:
         raise CropObservationError(
             "MEDIA_LIMIT_REACHED",
             f"Maximum {limit} {media_role.lower()} attachment(s) reached for this entry.",
             409,
         )
+    slot_number = (
+        repo.next_owner_media_slot(payload.owner_type, payload.owner_id, media_role, media_purpose)
+        if media_role == "PHOTO"
+        else None
+    )
 
     extension = _EXTENSION_BY_MIME.get(payload.mime_type, "bin")
     media_uuid = uuid4()
@@ -125,6 +188,8 @@ def request_media_upload(
         owner_id=payload.owner_id,
         media_asset_id=asset["media_asset_id"],
         media_role=media_role,
+        media_purpose=media_purpose,
+        slot_number=slot_number,
     )
 
     presign = active_backend().create_upload_url(object_key=object_key, mime_type=payload.mime_type)

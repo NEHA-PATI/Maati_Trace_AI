@@ -2,6 +2,14 @@ import { useCallback, useState } from "react";
 
 const STORAGE_KEY = "maatitrace_crop_locale";
 
+export function hasStoredCropLocale() {
+  try {
+    return Boolean(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
 function readStoredLocale() {
   try {
     return localStorage.getItem(STORAGE_KEY) || "or-IN";

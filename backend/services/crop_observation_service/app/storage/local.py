@@ -65,6 +65,10 @@ def write_bytes(*, object_key: str, data: bytes) -> int:
     return target.stat().st_size
 
 
+def put_bytes(*, object_key: str, data: bytes, mime_type: str) -> int:
+    return write_bytes(object_key=object_key, data=data)
+
+
 def head_object(*, object_key: str) -> dict[str, object] | None:
     path = resolve(object_key)
     if not path.exists():

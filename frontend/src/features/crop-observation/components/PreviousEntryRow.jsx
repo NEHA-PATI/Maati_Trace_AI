@@ -16,11 +16,14 @@ function formatDate(value, locale) {
   }
 }
 
-/**
- * One compact "previous entry" row — date + up to 3 summary values + media
- * badges. Tapping it expands photos/voice IN PLACE, fetched only then (never
- * preloaded — see spec "do not preload every old audio recording").
- */
+function getPhotoIds(media) {
+  return [
+    ...(media?.crop_condition?.media_ids || []),
+    ...(media?.issue_evidence?.media_ids || []),
+    ...(media?.practice_evidence?.media_ids || []),
+  ];
+}
+
 export default function PreviousEntryRow({ entry, locale }) {
   const [open, setOpen] = useState(false);
   const [photoUrls, setPhotoUrls] = useState(null);
@@ -41,11 +44,15 @@ export default function PreviousEntryRow({ entry, locale }) {
     const next = !open;
     setOpen(next);
     if (!next || photoUrls !== null || loadingMedia) return;
-    const { photo_media_ids: photoIds = [], voice_media_id: voiceId } = entry.media || {};
+
+    const media = entry.media || {};
+    const photoIds = getPhotoIds(media);
+    const voiceId = media.voice_note?.media_id;
     if (!photoIds.length && !voiceId) {
       setPhotoUrls([]);
       return;
     }
+
     setLoadingMedia(true);
     try {
       const photos = await Promise.all(
@@ -71,33 +78,34 @@ export default function PreviousEntryRow({ entry, locale }) {
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) audio.pause();
-    else {
-      audio.currentTime = 0;
-      audio.play();
+    if (playing) {
+      audio.pause();
+      return;
     }
+    audio.currentTime = 0;
+    audio.play();
   }
 
   const media = entry.media || {};
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white">
-      <button type="button" onClick={handleToggle} className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+    <div className="rounded-2xl border border-emerald-100 bg-white shadow-sm">
+      <button type="button" onClick={handleToggle} className="flex w-full items-center gap-3 px-3 py-3 text-left">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
-              {formatDate(entry.observed_on, locale)}
-            </span>
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
+            {formatDate(entry.observed_on, locale)}
           </div>
-          <div className="mt-0.5 truncate text-base font-semibold text-slate-900">
+          <div className="mt-1 truncate text-base font-semibold text-slate-900">
             {entry.summary_values?.length ? entry.summary_values.join(" • ") : "—"}
           </div>
-          {media.photos > 0 || media.voice ? (
-            <div className="mt-1 flex items-center gap-3 text-sm font-medium text-slate-700">
-              {media.photos > 0 ? <span>📷 {media.photos}</span> : null}
-              {media.voice ? (
+          {(media.crop_condition?.count || media.issue_evidence?.count || media.practice_evidence?.count || media.voice_note?.count) ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+              {media.crop_condition?.count ? <span>Crop {media.crop_condition.count}</span> : null}
+              {media.issue_evidence?.count ? <span>Issue {media.issue_evidence.count}</span> : null}
+              {media.practice_evidence?.count ? <span>Action {media.practice_evidence.count}</span> : null}
+              {media.voice_note?.count ? (
                 <span className="inline-flex items-center gap-1">
-                  <Mic className="h-3.5 w-3.5" /> {Math.round(media.voice_duration_seconds || 0)}s
+                  <Mic className="h-3.5 w-3.5" /> {Math.round(media.voice_note.duration_seconds || 0)}s
                 </span>
               ) : null}
             </div>
@@ -107,15 +115,15 @@ export default function PreviousEntryRow({ entry, locale }) {
       </button>
 
       {open ? (
-        <div className="border-t border-slate-100 px-3 py-3">
+        <div className="border-t border-emerald-50 px-3 py-3">
           {loadingMedia ? (
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> {primary(STRINGS.saving, locale)}
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              {(photoUrls || []).map((url, i) => (
-                <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+              {(photoUrls || []).map((url, index) => (
+                <img key={index} src={url} alt="" className="h-16 w-16 rounded-xl object-cover" />
               ))}
               {voiceUrl ? (
                 <button

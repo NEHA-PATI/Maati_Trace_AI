@@ -103,18 +103,21 @@ class AdminStagePracticeOut(BaseModel):
     availability_scope: str
     display_order: int
     is_enabled: bool
+    media_config: dict = Field(default_factory=dict)
 
 
 class AdminStagePracticeCreateRequest(BaseModel):
     practice_code: str = Field(..., max_length=80)
     availability_scope: str = Field(default="STAGE_SPECIFIC", pattern="^(STAGE_SPECIFIC|ALWAYS_AVAILABLE)$")
     display_order: int = 0
+    media_config: dict = Field(default_factory=dict)
 
 
 class AdminStagePracticeUpdateRequest(BaseModel):
     availability_scope: str | None = Field(default=None, pattern="^(STAGE_SPECIFIC|ALWAYS_AVAILABLE)$")
     display_order: int | None = None
     is_enabled: bool | None = None
+    media_config: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -254,3 +257,55 @@ class ObservationListItemOut(BaseModel):
 class ObservationDetailOut(ObservationListItemOut):
     updated_at: datetime
     practices: list[dict] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# TTS / instruction audio
+# ---------------------------------------------------------------------------
+
+
+class TtsStatusOut(BaseModel):
+    enabled: bool
+    provider: str
+    model_id: str
+    api_key_configured: bool
+
+
+class TtsVoiceOut(BaseModel):
+    voice_id: str
+    name: str
+    language: str | None = None
+    preview_url: str | None = None
+
+
+class TtsProfileOut(BaseModel):
+    tts_profile_id: UUID
+    profile_code: str
+    locale: str
+    provider: str
+    model_id: str
+    voice_id: str
+    voice_name: str | None
+    output_format: dict = Field(default_factory=dict)
+    generation_config: dict = Field(default_factory=dict)
+    is_active: bool
+
+
+class TtsProfileUpsertRequest(BaseModel):
+    voice_id: str = Field(..., min_length=1, max_length=150)
+    voice_name: str | None = Field(default=None, max_length=200)
+    model_id: str | None = Field(default=None, max_length=100)
+    speed: float | None = None
+    volume: float | None = None
+
+
+class InstructionAudioGenerateRequest(BaseModel):
+    force: bool = False
+
+
+class InstructionAudioGenerateResponse(BaseModel):
+    stage_id: UUID
+    locale: str
+    status: str
+    asset_id: UUID | None = None
+    content_url: str | None = None

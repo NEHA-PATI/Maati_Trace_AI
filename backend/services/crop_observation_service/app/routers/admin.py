@@ -30,10 +30,16 @@ from services.crop_observation_service.app.admin_schemas import (
     ObservationDetailOut,
     ObservationListItemOut,
     ObservationSummaryOut,
+    InstructionAudioGenerateRequest,
+    InstructionAudioGenerateResponse,
     OptionTranslationUpsertRequest,
     PracticeTranslationUpsertRequest,
     ReorderRequest,
     StageTranslationUpsertRequest,
+    TtsProfileOut,
+    TtsProfileUpsertRequest,
+    TtsStatusOut,
+    TtsVoiceOut,
     ValidationResponse,
 )
 from services.crop_observation_service.app.dependencies import RequestContext, get_request_context
@@ -321,3 +327,43 @@ def get_observation_detail_endpoint(
     daily_observation_id: UUID, context: RequestContext = Depends(get_request_context)
 ):
     return admin_service.get_observation_detail(context, daily_observation_id)
+
+
+@router.get("/tts/status", response_model=TtsStatusOut)
+def tts_status_endpoint(context: RequestContext = Depends(get_request_context)):
+    return admin_service.get_tts_status(context)
+
+
+@router.get("/tts/voices", response_model=list[TtsVoiceOut])
+def tts_voices_endpoint(
+    language: str = Query(..., min_length=2, max_length=10),
+    context: RequestContext = Depends(get_request_context),
+):
+    return admin_service.list_tts_voices(context, language)
+
+
+@router.get("/tts/profiles", response_model=list[TtsProfileOut])
+def tts_profiles_endpoint(context: RequestContext = Depends(get_request_context)):
+    return admin_service.list_tts_profiles(context)
+
+
+@router.put("/tts/profiles/{locale}", response_model=TtsProfileOut)
+def upsert_tts_profile_endpoint(
+    locale: str,
+    payload: TtsProfileUpsertRequest,
+    context: RequestContext = Depends(get_request_context),
+):
+    return admin_service.upsert_tts_profile(context, locale, payload)
+
+
+@router.post(
+    "/stages/{stage_id}/instruction-audio/{locale}/generate",
+    response_model=InstructionAudioGenerateResponse,
+)
+def generate_stage_instruction_audio_endpoint(
+    stage_id: UUID,
+    locale: str,
+    payload: InstructionAudioGenerateRequest,
+    context: RequestContext = Depends(get_request_context),
+):
+    return admin_service.generate_stage_instruction_audio(context, stage_id, locale, payload.force)
