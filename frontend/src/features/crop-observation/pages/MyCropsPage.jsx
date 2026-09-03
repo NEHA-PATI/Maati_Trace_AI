@@ -23,7 +23,7 @@ export default function MyCropsPage() {
   const { farms, loading: farmsLoading, error: farmsError } = useMyFarms();
   const [farmId, setFarmId] = useState("");
   const [crops, setCrops] = useState([]);
-  const [attachedCodes, setAttachedCodes] = useState(new Set());
+  const [farmCropByCode, setFarmCropByCode] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyCropCode, setBusyCropCode] = useState("");
@@ -43,7 +43,7 @@ export default function MyCropsPage() {
         const [cropList, farmCrops] = await Promise.all([getCrops(locale), getFarmCrops(farmId)]);
         if (cancelled) return;
         setCrops(cropList.items || []);
-        setAttachedCodes(new Set((farmCrops || []).map((fc) => fc.crop_code)));
+        setFarmCropByCode(new Map((farmCrops || []).map((fc) => [fc.crop_code, fc])));
       } catch (err) {
         if (!cancelled) setError(err?.message || "Could not load crops.");
       } finally {
@@ -61,7 +61,17 @@ export default function MyCropsPage() {
       setBusyCropCode(crop.crop_code);
       setError("");
       try {
-        const farmCrop = await attachCropToFarm(farmId, { crop_code: crop.crop_code });
+        // A crop the farmer already has on this farm skips straight to
+        // start-cycle (itself a no-op if a cycle is already active) —
+        // re-attaching every time this button was clicked meant every open
+        // of an already-set-up crop paid for a whole extra authorize round
+        // trip (attach -> authorize, start-cycle -> authorize again) for no
+        // reason, which is most of why "My Crop" felt slow on every click.
+        const existing = farmCropByCode.get(crop.crop_code);
+        const farmCrop = existing || (await attachCropToFarm(farmId, { crop_code: crop.crop_code }));
+        if (!existing) {
+          setFarmCropByCode((prev) => new Map(prev).set(crop.crop_code, farmCrop));
+        }
         const cycle = await startCropCycle(farmCrop.farm_crop_id, {});
         prefetchStageScreen(cycle.crop_cycle_id, cycle.current_stage_code, locale);
         navigate(`/my-crops/${farmId}/${cycle.crop_cycle_id}/${cycle.current_stage_code}`);
@@ -75,13 +85,12 @@ export default function MyCropsPage() {
         setBusyCropCode("");
       }
     },
-    [farmId, locale, navigate],
+    [farmId, farmCropByCode, locale, navigate],
   );
 
   return (
     <MobileScreen
       title={primary(STRINGS.myCrop, locale)}
-      subtitle={locale === "or-IN" ? "My Crop" : "ମୋ ଫସଲ"}
       right={<LanguageToggle locale={locale} setLocale={setLocale} />}
     >
       {farms.length > 1 ? (
@@ -100,14 +109,14 @@ export default function MyCropsPage() {
 
       <Bilingual
         as="p"
-        className="mb-4 text-sm font-semibold text-slate-700"
+        className="mb-4 text-base font-bold text-slate-900"
         pair={STRINGS.chooseCrop}
         locale={locale}
       />
 
       {farmsError ? <p className="text-sm text-rose-600">{farmsError}</p> : null}
       {!farmsLoading && !farmsError && farms.length === 0 ? (
-        <p className="text-sm text-slate-500">{primary(STRINGS.noFarm, locale)}</p>
+        <p className="text-base font-medium text-slate-700">{primary(STRINGS.noFarm, locale)}</p>
       ) : null}
       {error ? (
         <p className="mb-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
@@ -122,7 +131,7 @@ export default function MyCropsPage() {
               key={crop.crop_code}
               crop={crop}
               locale={locale}
-              attached={attachedCodes.has(crop.crop_code)}
+              attached={farmCropByCode.has(crop.crop_code)}
               disabled={busyCropCode === crop.crop_code}
               onSelect={handleSelectCrop}
             />

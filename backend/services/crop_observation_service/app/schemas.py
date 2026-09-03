@@ -87,6 +87,7 @@ class ScreenCropOut(BaseModel):
     crop_code: str
     name: str
     secondary_name: str | None = None
+    image_url: str | None = None
 
 
 class ScreenFarmOut(BaseModel):
@@ -103,8 +104,10 @@ class ScreenStageOut(BaseModel):
     stage_code: str
     name: str
     secondary_name: str | None = None
+    short_description: str | None = None
     image_url: str | None = None
     instruction_audio_url: str | None = None
+    instruction_audio_duration_seconds: float | None = None
 
 
 class ScreenStageTabOut(BaseModel):
@@ -137,7 +140,16 @@ class ScreenPracticeOut(BaseModel):
     practice_code: str
     name: str
     display_order: int
+    media_config: dict[str, Any] = Field(default_factory=dict)
     fields: list[ScreenPracticeFieldOut] = Field(default_factory=list)
+
+
+class RecentHistoryItem(BaseModel):
+    daily_observation_id: UUID
+    date: date
+    crop_status: str
+    stage_code: str
+    media_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScreenResponse(BaseModel):
@@ -149,7 +161,7 @@ class ScreenResponse(BaseModel):
     today: ScreenTodayOut
     crop_status_options: list[ScreenCropStatusOptionOut]
     practices: list[ScreenPracticeOut]
-    recent_history: list[dict] = Field(default_factory=list)
+    recent_history: list[RecentHistoryItem] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +217,7 @@ class MediaUploadRequest(BaseModel):
     owner_type: str = Field(..., pattern="^(DAILY_STAGE|PRACTICE)$")
     owner_id: UUID
     media_type: str = Field(..., pattern="^(IMAGE|AUDIO)$")
+    media_purpose: str = Field(default="GENERAL", pattern="^(GENERAL|CROP_CONDITION|ISSUE_EVIDENCE|PRACTICE_EVIDENCE)$")
     mime_type: str = Field(..., max_length=150)
     byte_size: int = Field(..., gt=0)
     duration_seconds: float | None = None
@@ -225,6 +238,7 @@ class MediaAssetResponse(BaseModel):
     byte_size: int
     duration_seconds: float | None
     upload_status: str
+    content_url: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -233,8 +247,10 @@ class MediaAssetResponse(BaseModel):
 
 
 class HistoryMediaSummary(BaseModel):
-    photos: int
-    voice: bool
+    crop_condition: dict[str, Any] = Field(default_factory=dict)
+    issue_evidence: dict[str, Any] = Field(default_factory=dict)
+    practice_evidence: dict[str, Any] = Field(default_factory=dict)
+    voice_note: dict[str, Any] = Field(default_factory=dict)
 
 
 class HistoryItem(BaseModel):
@@ -249,3 +265,21 @@ class HistoryItem(BaseModel):
 class HistoryResponse(BaseModel):
     items: list[HistoryItem]
     next_cursor: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Per-practice history (shown as compact rows above the "new update" form —
+# see PracticeSheet.jsx)
+# ---------------------------------------------------------------------------
+
+
+class PracticeHistoryItem(BaseModel):
+    practice_observation_id: UUID
+    observed_on: date
+    answers: dict[str, Any]
+    summary_values: list[str] = Field(default_factory=list)
+    media: HistoryMediaSummary
+
+
+class PracticeHistoryResponse(BaseModel):
+    items: list[PracticeHistoryItem]

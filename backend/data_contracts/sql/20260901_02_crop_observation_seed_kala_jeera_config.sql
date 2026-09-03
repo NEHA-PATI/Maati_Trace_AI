@@ -97,7 +97,7 @@ JOIN (VALUES
     ('seed_management', 'en-IN', 'Seed Management'),
     ('seed_management', 'or-IN', 'ବିହନ ପରିଚାଳନା'),
     ('nursery_management', 'en-IN', 'Nursery Management'),
-    ('nursery_management', 'or-IN', 'ନର୍ସަରୀ ପରିଚାଳନା'),
+    ('nursery_management', 'or-IN', 'ନର୍ସରୀ ପରିଚାଳନା'),
     ('orchard_management', 'en-IN', 'Orchard Management'),
     ('orchard_management', 'or-IN', 'ବଗିଚା ପରିଚାଳନା'),
     ('crop_damage', 'en-IN', 'Crop Damage'),

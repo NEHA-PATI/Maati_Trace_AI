@@ -8,8 +8,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from shared.db.postgres import engine
 from services.crop_observation_service.app.errors import CropObservationRepositoryError
+from shared.db.postgres import engine
 
 DEFAULT_LOCALE = "en-IN"
 
@@ -84,15 +84,30 @@ def list_active_crops(*, locale: str) -> list[dict[str, Any]]:
     for row in translations:
         by_crop.setdefault(row["crop_id"], []).append(row)
 
+    images = _run(
+        """
+        SELECT DISTINCT ON (crop_id) crop_id, asset_id
+        FROM crop_observation.system_media_assets
+        WHERE crop_id = ANY(:crop_ids) AND asset_type = 'CROP_CARD_IMAGE' AND is_active = true
+        ORDER BY crop_id, created_at DESC;
+        """,
+        {"crop_ids": [row["crop_id"] for row in crops]},
+    )
+    image_by_crop = {row["crop_id"]: row["asset_id"] for row in images}
+
     items = []
     for crop in crops:
         primary, secondary = pick_names(by_crop.get(crop["crop_id"], []), locale)
+        asset_id = image_by_crop.get(crop["crop_id"])
         items.append(
             {
                 "crop_code": crop["crop_code"],
                 "lifecycle_type": crop["lifecycle_type"],
                 "name": primary or crop["crop_code"],
                 "secondary_name": secondary,
+                "image_url": (
+                    f"/v1/crop-observations/system-media/{asset_id}/content" if asset_id else None
+                ),
             }
         )
     return items
@@ -212,6 +227,108 @@ def list_stage_practices(stage_id: UUID) -> list[dict[str, Any]]:
         """,
         {"stage_id": stage_id},
     )
+
+
+def get_stage_practices_full(stage_id: UUID) -> dict[str, Any]:
+    """Everything the screen API needs to render every practice on a stage —
+    practice names, fields, field labels/help text, options and option
+    labels — in a fixed six queries no matter how many practices/fields/
+    options the stage has, instead of the field-by-field, option-by-option
+    N+1 that used to back _build_practice() (one query per translation row:
+    a stage with 6 practices could mean 60+ round trips on every screen
+    load, which is what made every "My Crop" click feel slow once practices
+    other than Nutrient Management got real fields).
+
+    Returns {"practices": [...], "fields_by_practice": {...},
+    "options_by_field": {...}} — see service._build_practices_for_stage.
+    """
+    practices = [dict(p) for p in list_stage_practices(stage_id)]
+    if not practices:
+        return {"practices": [], "fields_by_practice": {}, "options_by_field": {}}
+
+    stage_practice_ids = [p["stage_practice_id"] for p in practices]
+    practice_template_ids = list({p["practice_template_id"] for p in practices})
+
+    practice_translations = _run(
+        """
+        SELECT practice_template_id, locale, display_name
+        FROM crop_observation.practice_translations
+        WHERE practice_template_id = ANY(:ids);
+        """,
+        {"ids": practice_template_ids},
+    )
+    translations_by_practice: dict[Any, list[dict[str, Any]]] = {}
+    for row in practice_translations:
+        translations_by_practice.setdefault(row["practice_template_id"], []).append(row)
+    for practice in practices:
+        practice["translations"] = translations_by_practice.get(practice["practice_template_id"], [])
+
+    fields = _run(
+        """
+        SELECT
+            stage_practice_id, field_definition_id, field_code, field_type,
+            semantic_type, display_order, is_required
+        FROM crop_observation.practice_field_definitions
+        WHERE stage_practice_id = ANY(:ids) AND is_enabled = true
+        ORDER BY display_order;
+        """,
+        {"ids": stage_practice_ids},
+    )
+    fields_by_practice: dict[Any, list[dict[str, Any]]] = {}
+    for field in fields:
+        fields_by_practice.setdefault(field["stage_practice_id"], []).append(dict(field))
+
+    if not fields:
+        return {"practices": practices, "fields_by_practice": {}, "options_by_field": {}}
+
+    field_ids = [f["field_definition_id"] for f in fields]
+
+    field_translations = _run(
+        """
+        SELECT field_definition_id, locale, label, help_text
+        FROM crop_observation.practice_field_translations
+        WHERE field_definition_id = ANY(:ids);
+        """,
+        {"ids": field_ids},
+    )
+    field_translations_by_field: dict[Any, list[dict[str, Any]]] = {}
+    for row in field_translations:
+        field_translations_by_field.setdefault(row["field_definition_id"], []).append(row)
+    for practice_fields in fields_by_practice.values():
+        for field in practice_fields:
+            field["translations"] = field_translations_by_field.get(field["field_definition_id"], [])
+
+    options = _run(
+        """
+        SELECT field_definition_id, field_option_id, option_code, display_order, icon_key
+        FROM crop_observation.practice_field_options
+        WHERE field_definition_id = ANY(:ids) AND is_active = true
+        ORDER BY display_order;
+        """,
+        {"ids": field_ids},
+    )
+    options_by_field: dict[Any, list[dict[str, Any]]] = {}
+    for option in options:
+        options_by_field.setdefault(option["field_definition_id"], []).append(dict(option))
+
+    if options:
+        option_ids = [o["field_option_id"] for o in options]
+        option_translations = _run(
+            """
+            SELECT field_option_id, locale, label
+            FROM crop_observation.practice_field_option_translations
+            WHERE field_option_id = ANY(:ids);
+            """,
+            {"ids": option_ids},
+        )
+        option_translations_by_option: dict[Any, list[dict[str, Any]]] = {}
+        for row in option_translations:
+            option_translations_by_option.setdefault(row["field_option_id"], []).append(row)
+        for field_options in options_by_field.values():
+            for option in field_options:
+                option["translations"] = option_translations_by_option.get(option["field_option_id"], [])
+
+    return {"practices": practices, "fields_by_practice": fields_by_practice, "options_by_field": options_by_field}
 
 
 def get_practice_translations(practice_template_id: UUID) -> list[dict[str, Any]]:
@@ -737,7 +854,7 @@ def list_media_for_owner(owner_type: str, owner_id: UUID) -> list[dict[str, Any]
     return _run(
         """
         SELECT
-            om.media_role, ma.media_asset_id, ma.media_type, ma.mime_type,
+            om.media_role, om.owner_id, ma.media_asset_id, ma.media_type, ma.mime_type,
             ma.upload_status, ma.duration_seconds
         FROM crop_observation.observation_media om
         JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
@@ -747,6 +864,148 @@ def list_media_for_owner(owner_type: str, owner_id: UUID) -> list[dict[str, Any]
         ORDER BY ma.created_at;
         """,
         {"owner_type": owner_type, "owner_id": owner_id},
+    )
+
+
+def list_media_for_owners(owner_type: str, owner_ids: list[UUID]) -> list[dict[str, Any]]:
+    """Batched version of list_media_for_owner — one round trip for every
+    row in a history page instead of one query per row (see history_service)."""
+    if not owner_ids:
+        return []
+    return _run(
+        """
+        SELECT
+            om.media_role, om.owner_id, ma.media_asset_id, ma.media_type, ma.mime_type,
+            ma.upload_status, ma.duration_seconds
+        FROM crop_observation.observation_media om
+        JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
+        WHERE om.owner_type = :owner_type
+          AND om.owner_id = ANY(:owner_ids)
+          AND ma.upload_status != 'DELETED'
+        ORDER BY ma.created_at;
+        """,
+        {"owner_type": owner_type, "owner_ids": owner_ids},
+    )
+
+
+def list_option_labels_for_stage_practice(stage_practice_id: UUID) -> list[dict[str, Any]]:
+    """field_code/option_code/locale/label for every option on every field of
+    one practice, in a single query — used to build the "translate raw codes
+    into the farmer's language for the history summary line" lookup without
+    the field-by-field, option-by-option N+1 that used to back it."""
+    return _run(
+        """
+        SELECT
+            fd.field_code,
+            fo.option_code,
+            fot.locale,
+            fot.label
+        FROM crop_observation.practice_field_definitions fd
+        JOIN crop_observation.practice_field_options fo
+            ON fo.field_definition_id = fd.field_definition_id AND fo.is_active = true
+        JOIN crop_observation.practice_field_option_translations fot
+            ON fot.field_option_id = fo.field_option_id
+        WHERE fd.stage_practice_id = :stage_practice_id AND fd.is_enabled = true;
+        """,
+        {"stage_practice_id": stage_practice_id},
+    )
+
+
+# ---------------------------------------------------------------------------
+# System media — admin-curated crop card images, stage images and
+# per-locale instruction audio. Populated by scripts/sync_system_media.py
+# from media_manifest.json; read-only here.
+# ---------------------------------------------------------------------------
+
+
+def get_system_media_asset(asset_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT asset_id, asset_type, object_key, mime_type, byte_size
+        FROM crop_observation.system_media_assets
+        WHERE asset_id = :asset_id AND is_active = true;
+        """,
+        {"asset_id": asset_id},
+    )
+
+
+def get_crop_card_image(crop_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT asset_id, mime_type
+        FROM crop_observation.system_media_assets
+        WHERE crop_id = :crop_id AND asset_type = 'CROP_CARD_IMAGE' AND is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """,
+        {"crop_id": crop_id},
+    )
+
+
+def get_stage_image(stage_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT asset_id, mime_type
+        FROM crop_observation.system_media_assets
+        WHERE stage_id = :stage_id AND asset_type = 'STAGE_IMAGE' AND is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """,
+        {"stage_id": stage_id},
+    )
+
+
+def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT asset_id, mime_type, duration_seconds
+        FROM crop_observation.system_media_assets
+        WHERE stage_id = :stage_id
+          AND asset_type = 'STAGE_INSTRUCTION_AUDIO'
+          AND locale = :locale
+          AND is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-practice history — compact "previous entries" rows shown above the
+# new-entry form for a single practice (see PracticeSheet.jsx).
+# ---------------------------------------------------------------------------
+
+
+def list_practice_history(
+    *,
+    crop_cycle_id: UUID,
+    stage_code: str,
+    practice_code: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    return _run(
+        """
+        SELECT
+            po.practice_observation_id,
+            po.answers,
+            po.created_at,
+            dso.observed_on
+        FROM crop_observation.practice_observations po
+        JOIN crop_observation.daily_stage_observations dso
+            ON dso.daily_observation_id = po.daily_observation_id
+        WHERE dso.crop_cycle_id = :crop_cycle_id
+          AND dso.stage_code = :stage_code
+          AND po.practice_code = :practice_code
+        ORDER BY dso.observed_on DESC, po.created_at DESC
+        LIMIT :limit;
+        """,
+        {
+            "crop_cycle_id": crop_cycle_id,
+            "stage_code": stage_code,
+            "practice_code": practice_code,
+            "limit": limit,
+        },
     )
 
 

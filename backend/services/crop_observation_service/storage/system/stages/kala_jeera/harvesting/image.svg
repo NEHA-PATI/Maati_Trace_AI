@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="230" fill="#fef3c7"/>
+  <circle cx="330" cy="46" r="26" fill="#fbbf24"/>
+  <rect x="0" y="230" width="400" height="70" fill="#92400e"/>
+  <rect x="0" y="222" width="400" height="12" fill="#78350f"/>
+  <!-- standing stalks -->
+  <g stroke="#b45309" stroke-width="6" stroke-linecap="round">
+    <path d="M60 222 Q66 190 52 168"/>
+    <path d="M100 222 Q106 190 92 168"/>
+  </g>
+  <g fill="#92400e">
+    <ellipse cx="50" cy="164" rx="9" ry="14"/>
+    <ellipse cx="90" cy="164" rx="9" ry="14"/>
+  </g>
+  <!-- cut bundle lying down -->
+  <g>
+    <ellipse cx="220" cy="205" rx="70" ry="16" fill="#ca8a04"/>
+    <ellipse cx="220" cy="197" rx="70" ry="14" fill="#eab308"/>
+    <path d="M170 190 l30 -12" stroke="#a16207" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- sickle -->
+  <g stroke="#57534e" stroke-width="6" fill="none" stroke-linecap="round">
+    <path d="M300 160 a30 30 0 1 1 -20 -40"/>
+  </g>
+  <rect x="275" y="118" width="28" height="8" rx="3" fill="#7c2d12" transform="rotate(35 289 122)"/>
+</svg>

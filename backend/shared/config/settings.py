@@ -57,9 +57,12 @@ class Settings(BaseSettings):
     athena_database: str = ""
     athena_workgroup: str = ""
 
-    # Crop observation media (photos / voice notes uploaded directly to S3
-    # via presigned URLs). Optional — the service only needs these when a
-    # media upload is actually requested.
+    # Crop observation media. V1 defaults to LOCAL filesystem storage (see
+    # services/crop_observation_service/app/storage/local.py) so the diary is
+    # fully usable without any AWS setup — the object_key layout is already
+    # S3-shaped, so flipping media_storage_backend to "S3" later needs no
+    # database or frontend changes, only crop_observation_s3_bucket filled in.
+    media_storage_backend: str = "LOCAL"
     crop_observation_s3_bucket: str = ""
     s3_presigned_upload_ttl_seconds: int = 300
     s3_presigned_download_ttl_seconds: int = 300
@@ -67,9 +70,33 @@ class Settings(BaseSettings):
     max_image_bytes: int = 8 * 1024 * 1024
     allowed_image_mime_types: str = "image/jpeg,image/png,image/webp"
     max_audio_per_owner: int = 1
-    max_audio_bytes: int = 5 * 1024 * 1024
+    max_audio_bytes: int = 6 * 1024 * 1024
     max_audio_duration_seconds: int = 60
-    allowed_audio_mime_types: str = "audio/webm,audio/ogg,audio/mp4,audio/mpeg"
+    max_instruction_audio_duration_seconds: int = 40
+    allowed_audio_mime_types: str = (
+        "audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav,audio/x-wav"
+    )
+    cartesia_tts_enabled: bool = False
+    cartesia_api_key: str = ""
+    cartesia_api_base: str = "https://api.cartesia.ai"
+    cartesia_api_version: str = "2026-08-14"
+    cartesia_tts_model: str = "sonic-3.6-2026-08-27"
+    cartesia_odia_voice_id: str = ""
+    cartesia_english_voice_id: str = ""
+    cartesia_tts_output_container: str = "mp3"
+    cartesia_tts_speed: float = 0.95
+    cartesia_tts_volume: float = 1.0
+    cartesia_connect_timeout_seconds: int = 5
+    cartesia_read_timeout_seconds: int = 30
+
+    # Local media root, relative to the crop_observation_service package
+    # unless given as an absolute path. system/ holds admin-curated crop and
+    # stage media (images, instruction audio); farmer/ holds farmer uploads.
+    local_media_root: str = "storage"
+    local_system_media_dir: str = "system"
+    local_farmer_media_dir: str = "farmer"
+    default_locale: str = "or-IN"
+    allowed_locales: str = "en-IN,or-IN"
 
     # Service URLs
     api_gateway_service_url: str = "http://localhost:8000"
@@ -148,6 +175,10 @@ class Settings(BaseSettings):
     @property
     def allowed_audio_mime_types_list(self) -> list[str]:
         return [v.strip() for v in self.allowed_audio_mime_types.split(",") if v.strip()]
+
+    @property
+    def allowed_locales_list(self) -> list[str]:
+        return [v.strip() for v in self.allowed_locales.split(",") if v.strip()]
 
 
 settings = Settings()

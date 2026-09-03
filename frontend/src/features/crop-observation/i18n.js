@@ -2,9 +2,9 @@
  * Central bilingual string table for the crop diary.
  *
  * Every farmer-facing string lives here as an { en, or } pair so screens never
- * inline `locale === "or-IN" ? ... : ...` ternaries. English is ALWAYS available
- * as the secondary line — see <Bilingual> — so the UI stays usable for staff,
- * agronomists and mixed-literacy households regardless of the chosen language.
+ * inline `locale === "or-IN" ? ... : ...` ternaries. Only the ACTIVE
+ * language is ever rendered on screen — see <Bilingual> and <LanguageToggle>
+ * — English and Odia never appear together on the same screen.
  */
 
 export const LOCALES = {
@@ -40,6 +40,18 @@ export const STRINGS = {
   howMuchFarm: { en: "How much of the farm?", or: "ଜମିର କେତେ ଅଂଶ?" },
   applicationArea: { en: "Where did you apply it?", or: "ପ୍ରୟୋଗ କେଉଁଠି କରିଥିଲେ?" },
   unit: { en: "Unit", or: "ଏକକ" },
+
+  addPhoto: { en: "Add Photo", or: "ଫଟୋ ଯୋଡନ୍ତୁ" },
+  recordVoice: { en: "Record Voice", or: "ଭଏସ୍ ରେକର୍ଡ" },
+  stopRecording: { en: "Stop", or: "ବନ୍ଦ କରନ୍ତୁ" },
+  delete: { en: "Delete", or: "ହଟାନ୍ତୁ" },
+  replay: { en: "Replay", or: "ପୁଣି ଶୁଣନ୍ତୁ" },
+  listen: { en: "Listen", or: "ଶୁଣନ୍ତୁ" },
+  audioUnavailable: { en: "Audio unavailable", or: "ଅଡିଓ ଉପଲବ୍ଧ ନାହିଁ" },
+  previousEntries: { en: "Previous entries", or: "ପୂର୍ବ ତଥ୍ୟ" },
+  newUpdate: { en: "New Update", or: "ନୂଆ ତଥ୍ୟ" },
+  noPreviousEntries: { en: "No previous entries", or: "ପୂର୍ବ ତଥ୍ୟ ନାହିଁ" },
+  uploadingMedia: { en: "Saving photo/voice…", or: "ଫଟୋ/ଭଏସ୍ ସେଭ ହେଉଛି…" },
 };
 
 export const STATUS_STRINGS = {

@@ -25,6 +25,7 @@ from services.crop_observation_service.app.routers import (
     history,
     media,
     observations,
+    system_media,
 )
 from services.crop_observation_service.app.schemas import HealthResponse
 
@@ -157,5 +158,6 @@ app.include_router(crops.router)
 app.include_router(farm_crops.router)
 app.include_router(observations.router)
 app.include_router(media.router)
+app.include_router(system_media.router)
 app.include_router(history.router)
 app.include_router(admin.router)

@@ -74,7 +74,7 @@ export function useCropScreen(cropCycleId, stageCode, locale) {
           : prev,
       );
       try {
-        await saveDailyStatus(cropCycleId, stageCode, {
+        const saved = await saveDailyStatus(cropCycleId, stageCode, {
           client_entry_id: newClientEntryId,
           crop_status: code,
           captured_at_client: new Date().toISOString(),
@@ -83,6 +83,23 @@ export function useCropScreen(cropCycleId, stageCode, locale) {
         cacheInvalidate(`history:${cropCycleId}`);
         if (mounted.current) {
           setStatusSave("saved");
+          // Merge the id in immediately so photo/voice capture for today's
+          // entry can enable itself without waiting on the full reload.
+          setScreen((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  today: {
+                    ...prev.today,
+                    observation: {
+                      ...(prev.today.observation || {}),
+                      daily_observation_id: saved.daily_observation_id,
+                      crop_status: saved.crop_status,
+                    },
+                  },
+                }
+              : prev,
+          );
           load({ revalidateOnly: true });
         }
       } catch (err) {

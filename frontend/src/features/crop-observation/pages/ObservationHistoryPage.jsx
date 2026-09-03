@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getHistory } from "@/features/crop-observation/api/cropObservationApi";
 import HistoryTimeline from "@/features/crop-observation/components/HistoryTimeline";
+import LanguageToggle from "@/features/crop-observation/components/LanguageToggle";
 import MobileScreen from "@/features/crop-observation/components/MobileScreen";
 import { HistorySkeleton } from "@/features/crop-observation/components/Skeletons";
 import { useLocale } from "@/features/crop-observation/hooks/useLocale";
@@ -12,7 +13,7 @@ import { STRINGS, primary } from "@/features/crop-observation/i18n";
 export default function ObservationHistoryPage() {
   const { cropCycleId } = useParams();
   const navigate = useNavigate();
-  const [locale] = useLocale();
+  const [locale, setLocale] = useLocale();
 
   const [items, setItems] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
@@ -56,7 +57,7 @@ export default function ObservationHistoryPage() {
     <MobileScreen
       onBack={() => navigate(-1)}
       title={primary(STRINGS.history, locale)}
-      subtitle={locale === "or-IN" ? "Previous Updates" : "ପୂର୍ବ ତଥ୍ୟ"}
+      right={<LanguageToggle locale={locale} setLocale={setLocale} />}
     >
       {error ? (
         <p className="mb-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>

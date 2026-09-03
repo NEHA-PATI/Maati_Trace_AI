@@ -18,12 +18,12 @@ const NAV_ITEMS = [
 function MaatiLogo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mt-leaf)]">
-        <img src="/MaatiAI.png" alt="MaatiTrace logo" className="h-6 w-6 object-contain" />
-      </div>
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10">
+        <img src="/MaatiAI.png" alt="MaatiTrace logo" className="h-7 w-7 object-contain" />
+      </span>
       <div className="leading-tight">
-        <div className="text-[17px] font-extrabold text-[var(--mt-ink)]">MatiTrace</div>
-        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">Field Intelligence</div>
+        <div className="text-[17px] font-extrabold text-[var(--mt-ink)]">MaatiTrace</div>
+        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">Land Intelligence</div>
       </div>
     </div>
   );
@@ -52,7 +52,7 @@ export default function AppTopbar() {
   return (
     <header className="mt-surface fixed inset-x-0 top-0 z-50 border-b border-[var(--mt-line)] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-3 px-4">
-        <Link to="/" aria-label="MatiTrace home">
+        <Link to="/" aria-label="MaatiTrace home">
           <MaatiLogo />
         </Link>
 
