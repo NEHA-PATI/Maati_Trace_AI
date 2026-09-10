@@ -22,6 +22,11 @@ FARM_SELECT = """
     block_name,
     block_code,
     village_name,
+    crop_code,
+    crop_name,
+    crop_variety,
+    crop_stage,
+    planting_date,
     polygon_geojson,
     h3_resolution,
     h3_cell_count,
@@ -40,6 +45,33 @@ def _normalize_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def get_active_crop_registration_option(crop_code: str) -> dict[str, Any] | None:
+    query = text(
+        """
+        SELECT p.crop_code, p.crop_name, p.profile_version, p.crop_type
+        FROM crop_feature_profiles p
+        WHERE p.crop_code = :crop_code
+          AND p.status = 'published'
+          AND p.is_active = TRUE
+          AND EXISTS (
+              SELECT 1
+              FROM crop_formula_registry f
+              WHERE f.crop_code = p.crop_code
+                AND f.crop_profile_version = p.profile_version
+                AND f.status = 'published'
+                AND f.is_active = TRUE
+          )
+        LIMIT 1;
+        """
+    )
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(query, {"crop_code": _normalize_text(crop_code)}).mappings().first()
+        return dict(row) if row else None
+    except SQLAlchemyError as exc:
+        raise FarmRegistryRepositoryError(f"Failed to validate farm crop: {exc}") from exc
+
+
 def create_farm(data: dict[str, Any]) -> dict[str, Any]:
     query = text(
         f"""
@@ -54,6 +86,11 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
             block_name,
             block_code,
             village_name,
+            crop_code,
+            crop_name,
+            crop_variety,
+            crop_stage,
+            planting_date,
             polygon_geojson,
             h3_resolution,
             h3_cells,
@@ -72,6 +109,11 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
             :block_name,
             :block_code,
             :village_name,
+            :crop_code,
+            :crop_name,
+            :crop_variety,
+            :crop_stage,
+            :planting_date,
             CAST(:polygon_geojson AS jsonb),
             :h3_resolution,
             CAST(:h3_cells AS bigint[]),
@@ -93,6 +135,11 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
         "block_name": _normalize_text(data.get("block_name")),
         "block_code": data.get("block_code"),
         "village_name": _normalize_text(data.get("village_name")),
+        "crop_code": _normalize_text(data.get("crop_code")),
+        "crop_name": _normalize_text(data.get("crop_name")),
+        "crop_variety": _normalize_text(data.get("crop_variety")),
+        "crop_stage": _normalize_text(data.get("crop_stage")),
+        "planting_date": data.get("planting_date"),
         "polygon_geojson": json.dumps(data["polygon_geojson"]),
         "h3_resolution": data["h3_resolution"],
         "h3_cells": list(data["h3_cells"]),

@@ -25,3 +25,9 @@ export const fullRefreshFarm = (farmId, payload) =>
     body: payload ? JSON.stringify(payload) : undefined,
   });
 
+export const backfillSentinel2History = (farmId, payload) =>
+  hotStreamClient.request(`/v1/hot-stream/farms/${farmId}/sentinel2/history-backfill`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+

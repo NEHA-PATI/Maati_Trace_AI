@@ -28,6 +28,7 @@ ROUTE_TARGETS = {
     "hot-stream": settings.hot_stream_orchestrator_service_url,
     "farm-analysis": settings.hot_stream_orchestrator_service_url,
     "analytics": settings.analytics_query_service_url,
+    "observability": settings.observability_service_url,
     "crop-observations": settings.crop_observation_service_url,
 }
 
@@ -42,6 +43,7 @@ HEALTH_ROUTE_TARGETS = {
     "lakehouse": settings.lakehouse_writer_service_url,
     "orchestrator": settings.hot_stream_orchestrator_service_url,
     "analytics": settings.analytics_query_service_url,
+    "observability": settings.observability_service_url,
     "crop-observations": settings.crop_observation_service_url,
 }
 

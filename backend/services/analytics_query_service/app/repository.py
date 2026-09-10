@@ -114,10 +114,9 @@ def _weighted_row_from_contributions(
         if feature.get("valid_pixel_count") is not None and feature.get("pixel_count"):
             valid_sum += (float(feature["valid_pixel_count"]) / max(1.0, float(feature["pixel_count"]))) * overlap * 100.0
             valid_weight_sum += overlap
-        if feature.get("mean_swir16") is not None or feature.get("mean_swir22") is not None:
-            temp = (float(feature.get("mean_swir16") or 0) + float(feature.get("mean_swir22") or 0)) / 2.0
-            temp_sum += temp * effective_weight
-            temp_weight_sum += effective_weight
+        # Sentinel-2 has no thermal band. Real surface temperature is sourced
+        # separately from Landsat C2 L2 by the crop feature engine, so the old
+        # SWIR-reflectance approximation is no longer computed here.
 
     def safe_avg(param: str) -> float | None:
         if weights_by_param[param] <= 0:
@@ -126,7 +125,7 @@ def _weighted_row_from_contributions(
 
     cloud = round(cloud_sum / cloud_weight_sum, 6) if cloud_weight_sum else None
     valid_pixels = round(valid_sum / valid_weight_sum, 6) if valid_weight_sum else None
-    temp = round(temp_sum / temp_weight_sum, 6) if temp_weight_sum else None
+    temp = None  # thermal comes from Landsat via the crop feature engine, not Sentinel-2
 
     return {
         "grid_cell_id": cell["grid_cell_id"],

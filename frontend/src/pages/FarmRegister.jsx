@@ -16,6 +16,7 @@ import FarmCard from "@/components/ui-custom/FarmCard";
 import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import { getMyFarmerProfile } from "@/lib/api/farmer";
 import { previewH3, registerFarm } from "@/lib/api/farm";
+import { getCropProfiles } from "@/lib/api/analytics";
 import {
   getBlocks,
   getDistricts,
@@ -50,6 +51,10 @@ const EMPTY_FORM = {
   farmer_id: "",
   farmer_name: "",
   farm_name: "",
+  crop_code: "",
+  crop_variety: "",
+  crop_stage: "",
+  planting_date: "",
   coordinatesText: "",
   runNow: true,
 };
@@ -218,6 +223,7 @@ export default function FarmRegister() {
   const [states, setStates] = useState([]);
   const [districts, setDistricts] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [cropProfiles, setCropProfiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
@@ -238,9 +244,13 @@ export default function FarmRegister() {
     async function loadLookups() {
       setPageLoading(true);
       try {
-        const statesPayload = await getStates().catch(() => []);
+        const [statesPayload, cropPayload] = await Promise.all([
+          getStates().catch(() => []),
+          getCropProfiles().catch(() => []),
+        ]);
         if (cancelled) return;
         setStates(normalizeStates(statesPayload));
+        setCropProfiles(Array.isArray(cropPayload) ? cropPayload : cropPayload?.items || []);
       } finally {
         if (!cancelled) setPageLoading(false);
       }
@@ -334,6 +344,7 @@ export default function FarmRegister() {
   const canNext = useMemo(() => {
     if (step === 0) return Boolean(formData.district_name && formData.block_code);
     if (step === 1) {
+      if (!formData.crop_code) return false;
       if (user?.role === "farmer") {
         return Boolean(
           linkedFarmer?.farmer_id
@@ -421,6 +432,10 @@ export default function FarmRegister() {
         farmer_id: farmerId,
         farm_name: formData.farm_name || `${formData.farmer_name || "Farm"} parcel`,
         survey_number: formData.survey_number || null,
+        crop_code: formData.crop_code,
+        crop_variety: formData.crop_variety || null,
+        crop_stage: formData.crop_stage || null,
+        planting_date: formData.planting_date || null,
         state_name: validated.state_name,
         district_name: validated.district_name,
         block_name: validated.block_name,
@@ -653,6 +668,34 @@ export default function FarmRegister() {
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label className={labelClass}>Farm Name</Label>
                         <Input placeholder="Farm name" value={formData.farm_name} onChange={(e) => update("farm_name", e.target.value)} className={inputClass} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label className={labelClass}>Crop grown on this farm <span className="text-rose-500">*</span></Label>
+                        <Select value={formData.crop_code} onValueChange={(value) => update("crop_code", value)}>
+                          <SelectTrigger className={inputClass}>
+                            <SelectValue placeholder={cropProfiles.length ? "Select configured crop" : "No active crop profiles"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {cropProfiles.map((crop) => (
+                              <SelectItem key={`${crop.crop_code}-${crop.profile_version}`} value={crop.crop_code}>
+                                {crop.crop_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] leading-4 text-slate-500">The crop selects this farm's active feature profile, temporal windows, formula versions, weights and thresholds. Admin-published crops appear here automatically.</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className={labelClass}>Variety <span className="text-slate-400">(optional)</span></Label>
+                        <Input placeholder="Local cultivar / variety" value={formData.crop_variety} onChange={(e) => update("crop_variety", e.target.value)} className={inputClass} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className={labelClass}>Growth stage <span className="text-slate-400">(optional)</span></Label>
+                        <Input placeholder="e.g. vegetative / flowering" value={formData.crop_stage} onChange={(e) => update("crop_stage", e.target.value)} className={inputClass} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label className={labelClass}>Planting date <span className="text-slate-400">(optional)</span></Label>
+                        <Input type="date" value={formData.planting_date} onChange={(e) => update("planting_date", e.target.value)} className={inputClass} />
                       </div>
                     </div>
                   )}

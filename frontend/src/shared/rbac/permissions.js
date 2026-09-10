@@ -79,6 +79,9 @@ const PATH_PERMISSION_MAP = Object.freeze({
   "/admin/fpo-access":
     "fpoAccessAdministration",
 
+  "/admin/system": "adminDashboard",
+  "/admin/feature-processing": "adminDashboard",
+
   "/fpo/me": "fpoDashboard",
   "/fpo/:fpoId": "fpoDashboard",
 

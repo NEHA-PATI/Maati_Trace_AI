@@ -9,6 +9,11 @@ import {
   METRIC_STATUSES,
   metricValueFromCell,
 } from "@/features/land-intelligence/metricInterpretation";
+import {
+  CALCULATED_METRIC_KEYS,
+  calculatedValueFromCell,
+  interpretCalculatedMetric,
+} from "@/features/land-intelligence/calculatedMetrics";
 
 function normalizeRing(geometry) {
   if (!geometry) return [];
@@ -35,6 +40,9 @@ function colorFor(value, parameter) {
   const num = Number(value);
   if (value === null || value === undefined || Number.isNaN(num)) return "rgba(148,163,184,0.35)";
 
+  if (CALCULATED_METRIC_KEYS.includes(parameter)) {
+    return interpretCalculatedMetric(parameter, value).color;
+  }
   if (LAND_METRIC_KEYS.includes(parameter)) {
     return interpretLandMetric(parameter, value).color;
   }
@@ -135,9 +143,11 @@ export default function LandGridMap({
           )}
           {gridLatLng.map((cell) => {
             const selected = String(selectedGridCellId) === String(cell.grid_cell_id);
-            const value = LAND_METRIC_KEYS.includes(selectedParameter)
-              ? metricValueFromCell(cell, selectedParameter)
-              : cell[selectedParameter];
+            const value = CALCULATED_METRIC_KEYS.includes(selectedParameter)
+              ? calculatedValueFromCell(cell, selectedParameter)
+              : LAND_METRIC_KEYS.includes(selectedParameter)
+                ? metricValueFromCell(cell, selectedParameter)
+                : cell[selectedParameter];
             return (
               <Polygon
                 key={cell.grid_cell_id}

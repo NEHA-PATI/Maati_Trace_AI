@@ -35,6 +35,10 @@ from services.analytics_query_service.app.h3_temporal_service import (
     build_latest_h3_mosaic,
 )
 
+from services.analytics_query_service.app.feature_engine.routes import (
+    router as feature_engine_router,
+)
+
 
 
 SERVICE_NAME = "analytics_query_service"
@@ -202,3 +206,7 @@ def h3_observation_history(
             str(exc),
             code="H3_TEMPORAL_QUERY_ERROR",
         ) from exc
+
+
+# Crop-specific deterministic feature/formula engine routes.
+app.include_router(feature_engine_router)

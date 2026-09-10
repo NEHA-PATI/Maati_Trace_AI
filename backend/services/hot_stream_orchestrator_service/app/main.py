@@ -14,6 +14,7 @@ from services.hot_stream_orchestrator_service.app.schemas import (
     FarmAnalysisMaterializeRequest,
     FarmAnalysisMaterializeResponse,
     HealthResponse,
+    Sentinel2HistoryBackfillRequest,
 )
 from services.hot_stream_orchestrator_service.app.service import (
     HotStreamOrchestratorError,
@@ -27,6 +28,9 @@ from services.hot_stream_orchestrator_service.app.environment_schemas import (
 from services.hot_stream_orchestrator_service.app.environment_service import (
     EnvironmentRefreshError,
     materialize_environment,
+)
+from services.hot_stream_orchestrator_service.app.history_backfill import (
+    backfill_sentinel2_history,
 )
 from services.analytics_query_service.app.repository import (
     get_farm_grid_cells,
@@ -254,4 +258,22 @@ def environment_refresh_endpoint(farm_id: UUID, payload: EnvironmentRefreshReque
         raise HTTPException(
             status_code=500,
             detail={"code": "ENVIRONMENT_REFRESH_ERROR", "message": str(exc)},
+        ) from exc
+
+
+@app.post("/v1/hot-stream/farms/{farm_id}/sentinel2/history-backfill")
+def sentinel2_history_backfill_endpoint(farm_id: UUID, payload: Sentinel2HistoryBackfillRequest):
+    try:
+        return backfill_sentinel2_history(farm_id, payload)
+    except HotStreamOrchestratorError as exc:
+        _raise_hot_stream_error(exc)
+    except OrchestratorClientError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "S2_HISTORY_BACKFILL_ERROR", "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "S2_HISTORY_BACKFILL_ERROR", "message": str(exc)},
         ) from exc

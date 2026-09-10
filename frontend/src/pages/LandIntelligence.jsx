@@ -23,15 +23,22 @@ import {
   getFarmH3Cells,
   getFarmSummary,
   getFarmTrends,
+  getLatestFarmCalculations,
+  getLatestGridCalculations,
   getLatestGridValues,
   getLatestSentinel2,
   getSentinel2History,
 } from "@/lib/api/analytics";
+import {
+  CALCULATED_METRICS,
+  interpretCalculatedMetric,
+} from "@/features/land-intelligence/calculatedMetrics";
 import { fullRefreshFarm } from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
 
 const PARAMETERS = [
+  ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
   ...LAND_METRICS,
   { key: "temperature", name: "Surface Temperature" },
   { key: "cloud", name: "Cloud Cover" },
@@ -150,8 +157,10 @@ export default function LandIntelligence() {
   const [, setTrends] = useState([]);
   const [gridCells, setGridCells] = useState([]);
   const [gridValues, setGridValues] = useState([]);
+  const [gridCalculations, setGridCalculations] = useState([]);
+  const [farmCalculations, setFarmCalculations] = useState([]);
   const [h3Cells, setH3Cells] = useState([]);
-  const [selectedParameter, setSelectedParameter] = useState("ndvi");
+  const [selectedParameter, setSelectedParameter] = useState("crop_condition");
   const [selectedCell, setSelectedCell] = useState(null);
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [showH3, setShowH3] = useState(false);
@@ -168,7 +177,7 @@ export default function LandIntelligence() {
   }
 
   async function loadLandIntelligence() {
-    const [farmPayload, summaryPayload, latestPayload, historyPayload, trendsPayload, gridCellsPayload, gridValuesPayload, h3Payload] = await Promise.all([
+    const [farmPayload, summaryPayload, latestPayload, historyPayload, trendsPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
       getFarmSummary(farmId).catch(() => null),
       getLatestSentinel2(farmId).catch(() => null),
@@ -177,6 +186,8 @@ export default function LandIntelligence() {
       getFarmGridCells(farmId).catch(() => []),
       getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
+      getLatestGridCalculations(farmId).catch(() => []),
+      getLatestFarmCalculations(farmId).catch(() => []),
     ]);
 
     console.log("FARM", farmPayload);
@@ -193,6 +204,8 @@ export default function LandIntelligence() {
     setTrends(normalizeList(trendsPayload));
     setGridCells(normalizeList(gridCellsPayload));
     setGridValues(normalizeList(gridValuesPayload));
+    setGridCalculations(normalizeList(gridCalculationsPayload));
+    setFarmCalculations(normalizeList(farmCalculationsPayload));
     setH3Cells(normalizeList(h3Payload));
   }
 
@@ -227,13 +240,22 @@ export default function LandIntelligence() {
     };
   }, [farmId, selectedCell?.grid_cell_id]);
 
+  const farmCalculationList = useMemo(
+    () => (Array.isArray(farmCalculations) ? farmCalculations : []),
+    [farmCalculations],
+  );
+
   const mergedGridCells = useMemo(() => {
+    const calcById = new Map(
+      (Array.isArray(gridCalculations) ? gridCalculations : []).map((value) => [String(value.grid_cell_id), value]),
+    );
     const byId = new Map(gridValues.map((value) => [String(value.grid_cell_id), value]));
     return gridCells.map((cell) => ({
       ...cell,
       ...(byId.get(String(cell.grid_cell_id)) || {}),
+      ...(calcById.get(String(cell.grid_cell_id)) || {}),
     }));
-  }, [gridCells, gridValues]);
+  }, [gridCells, gridValues, gridCalculations]);
 
   const displayCells = mergedGridCells.length ? mergedGridCells : gridValues;
   const displaySelected = selectedDetails?.grid_cell || selectedCell || null;
@@ -578,6 +600,53 @@ export default function LandIntelligence() {
             ))}
           </div>
         </Reveal>
+
+        {/* ── crop-specific calculated intelligence ────────────────────── */}
+        {farmCalculationList.length > 0 && (
+          <section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Crop-specific calculated intelligence</p>
+                <h2 className="mt-1 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
+                  {farm?.crop_name || farm?.crop_code || "Configured crop"} · deterministic V1
+                </h2>
+                <p className="mt-1 text-[11.5px] text-[var(--mt-ink-soft)]">
+                  Calculated from engineered H3 features and quality-aware crop formulas. Not ML predictions or laboratory diagnoses.
+                </p>
+              </div>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold text-emerald-700">
+                Latest {formatDate(farmCalculationList[0]?.result_date)}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {CALCULATED_METRICS.map((metric) => {
+                const item = farmCalculationList.find((row) => row.prediction_key === metric.key);
+                const result = interpretCalculatedMetric(metric.key, item?.score);
+                return (
+                  <button
+                    key={metric.key}
+                    type="button"
+                    onClick={() => setSelectedParameter(metric.key)}
+                    className={`rounded-2xl border p-3 text-left transition ${selectedParameter === metric.key ? "border-emerald-500 ring-1 ring-emerald-300" : "border-slate-100 hover:border-emerald-200"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[12px] font-semibold text-slate-900">{metric.name}</p>
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${result.className}`}>{result.label}</span>
+                    </div>
+                    <div className="mt-1 flex items-end gap-1">
+                      <span className="text-2xl font-extrabold text-slate-900">{item?.score == null ? "--" : Number(item.score).toFixed(0)}</span>
+                      <span className="pb-1 text-[10px] text-slate-400">/100</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                      {item?.confidence != null && <span>Conf {Math.round(Number(item.confidence) * 100)}%</span>}
+                      {item?.affected_area_percent != null && <span>Affected {Number(item.affected_area_percent).toFixed(1)}%</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ── map + selected cell ──────────────────────────────────────── */}
         <h2 className="flex items-center gap-2 pt-2 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
