@@ -330,13 +330,9 @@ export default function AdminDashboard() {
               <span className="text-sm font-semibold text-gray-800">Crop Observations</span>
             </div>
             <div className="divide-y divide-gray-50">
-              <Link to="/admin/crop-observations/config" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
-                <p className="text-sm font-semibold text-gray-800">Crop Configuration</p>
-                <p className="text-xs text-gray-500">Stages, practices, fields</p>
-              </Link>
-              <Link to="/admin/crop-observations" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
-                <p className="text-sm font-semibold text-gray-800">Farmer Observations</p>
-                <p className="text-xs text-gray-500">Monitor daily updates</p>
+              <Link to="/admin/crop-observation" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <p className="text-sm font-semibold text-gray-800">Crop Observation</p>
+                <p className="text-xs text-gray-500">Records, issues, configuration, media and system status</p>
               </Link>
             </div>
           </div>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import UUID
 
 from shared.config.settings import settings
 from services.crop_observation_service.app.errors import CropObservationError
@@ -28,8 +29,7 @@ def farmer_media_root() -> Path:
 
 
 def resolve(object_key: str) -> Path:
-    """Resolve an object_key (always farmer/... or system/...) to a path
-    under the local media root, refusing anything that would escape it."""
+    """Resolve an object key below LOCAL_MEDIA_ROOT and reject traversal."""
     root = _media_root()
     target = (root / object_key).resolve()
     try:
@@ -41,11 +41,32 @@ def resolve(object_key: str) -> Path:
     return target
 
 
-def create_upload_url(*, object_key: str, mime_type: str) -> dict[str, object]:
-    """LOCAL equivalent of the S3 presigned-PUT contract: the browser PUTs
-    the raw file straight to this same service instead of straight to S3."""
+def create_upload_url(
+    *,
+    object_key: str,
+    mime_type: str,
+    media_asset_id: UUID | None = None,
+    system_asset_id: UUID | None = None,
+) -> dict[str, object]:
+    """LOCAL equivalent of an S3 presigned PUT.
+
+    The URL contains the database asset id, not the random object filename.
+    That is important: the DB id and object filename are intentionally
+    independent UUIDs, and the service must authorize the DB row before it
+    writes any bytes.
+    """
+    if media_asset_id is not None:
+        upload_url = f"/v1/crop-observations/media/local-content/{media_asset_id}"
+    elif system_asset_id is not None:
+        upload_url = f"/v1/crop-observations/admin/system-media/local-content/{system_asset_id}"
+    else:
+        raise CropObservationError(
+            "LOCAL_UPLOAD_ID_MISSING",
+            "A local upload requires an asset id.",
+            500,
+        )
     return {
-        "upload_url": f"/v1/crop-observations/media/local-content/{object_key}",
+        "upload_url": upload_url,
         "method": "PUT",
         "headers": {"Content-Type": mime_type},
         "expires_in_seconds": settings.s3_presigned_upload_ttl_seconds,
@@ -73,7 +94,7 @@ def head_object(*, object_key: str) -> dict[str, object] | None:
     path = resolve(object_key)
     if not path.exists():
         return None
-    return {"ContentLength": path.stat().st_size}
+    return {"ContentLength": path.stat().st_size, "ContentType": None}
 
 
 def read_bytes(*, object_key: str) -> bytes:

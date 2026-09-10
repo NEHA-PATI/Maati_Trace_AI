@@ -11,6 +11,7 @@ import {
   upsertOptionTranslation,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
 import TranslationFields from "./TranslationFields";
+import SystemMediaField from "./SystemMediaField";
 
 const CHOICE_TYPES = new Set(["SINGLE_CHOICE", "MULTI_CHOICE", "PICTURE_CHOICE", "PRODUCT", "PEST", "DISEASE"]);
 
@@ -19,6 +20,8 @@ export default function FieldEditor({ field, onDelete, readOnly }) {
   const [options, setOptions] = useState([]);
   const [newOptionCode, setNewOptionCode] = useState("");
   const needsOptions = CHOICE_TYPES.has(field.field_type);
+  const initialEn = field.translations?.find((item) => item.locale === "en-IN") || {};
+  const initialOr = field.translations?.find((item) => item.locale === "or-IN") || {};
 
   useEffect(() => {
     if (expanded && needsOptions) {
@@ -65,6 +68,8 @@ export default function FieldEditor({ field, onDelete, readOnly }) {
       {expanded ? (
         <div className="space-y-3 border-t border-slate-100 px-3 py-3">
           <TranslationFields
+            initialEn={initialEn}
+            initialOr={initialOr}
             labelKey="label"
             extraFields={["help_text"]}
             onSave={(locale, values) =>
@@ -80,12 +85,25 @@ export default function FieldEditor({ field, onDelete, readOnly }) {
               <p className="mb-1 text-xs font-semibold text-slate-500">Options</p>
               <div className="space-y-1">
                 {options.map((option) => (
-                  <div key={option.field_option_id} className="flex items-center gap-2 rounded bg-slate-50 px-2 py-1.5">
-                    <span className="flex-1 text-sm">{option.option_code}</span>
-                    <TranslationOptionInline optionId={option.field_option_id} />
-                    <button type="button" onClick={() => handleDeleteOption(option.field_option_id)}>
-                      <Trash2 className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600" />
-                    </button>
+                  <div key={option.field_option_id} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{option.option_code}</span>
+                      <TranslationOptionInline optionId={option.field_option_id} translations={option.translations} readOnly={readOnly} />
+                      {!readOnly ? <button type="button" onClick={() => handleDeleteOption(option.field_option_id)}><Trash2 className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600" /></button> : null}
+                    </div>
+                    {(field.field_type === "PICTURE_CHOICE" || field.field_type === "PEST" || field.field_type === "DISEASE") ? (
+                      <div className="mt-2">
+                        <SystemMediaField
+                          targetType="FIELD_OPTION"
+                          targetId={option.field_option_id}
+                          assetRole="OPTION_IMAGE"
+                          label="Farmer choice image"
+                          accept="image/jpeg,image/png,image/webp"
+                          readOnly={readOnly}
+                          compact
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -108,9 +126,9 @@ export default function FieldEditor({ field, onDelete, readOnly }) {
   );
 }
 
-function TranslationOptionInline({ optionId }) {
-  const [en, setEn] = useState("");
-  const [or, setOr] = useState("");
+function TranslationOptionInline({ optionId, translations = [], readOnly }) {
+  const [en, setEn] = useState(() => translations.find((item) => item.locale === "en-IN")?.label || "");
+  const [or, setOr] = useState(() => translations.find((item) => item.locale === "or-IN")?.label || "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -127,9 +145,9 @@ function TranslationOptionInline({ optionId }) {
 
   return (
     <div className="flex items-center gap-1">
-      <Input placeholder="EN label" value={en} onChange={(e) => setEn(e.target.value)} className="h-7 w-24 text-xs" />
-      <Input placeholder="OR label" value={or} onChange={(e) => setOr(e.target.value)} className="h-7 w-24 text-xs" />
-      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={save} disabled={saving}>
+      <Input placeholder="EN label" value={en} onChange={(e) => setEn(e.target.value)} className="h-7 w-24 text-xs" disabled={readOnly} />
+      <Input placeholder="OR label" value={or} onChange={(e) => setOr(e.target.value)} className="h-7 w-24 text-xs" disabled={readOnly} />
+      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={save} disabled={saving || readOnly}>
         Save
       </Button>
     </div>

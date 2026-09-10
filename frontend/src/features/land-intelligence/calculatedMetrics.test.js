@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCalculatedFieldInterpretation,
   CALCULATED_METRIC_KEYS,
   calculatedValueFromCell,
   interpretCalculatedMetric,
@@ -47,5 +48,25 @@ describe("calculated crop-intelligence metrics", () => {
     expect(
       calculatedValueFromCell({ calculations: { water_stress: { score: 63 } } }, "water_stress"),
     ).toBe(63);
+  });
+
+  it("provides farmer-readable metric interpretation and signal meaning", () => {
+    const result = interpretCalculatedMetric("water_stress", 72);
+    expect(result.label).toBe("High");
+    expect(result.headline).toBeTruthy();
+    expect(result.paragraph).toBeTruthy();
+    expect(result.signalMeaning).toMatch(/water/i);
+  });
+
+  it("accepts published content overrides without changing score logic", () => {
+    const result = interpretCalculatedMetric("crop_condition", 90, [{
+      metric_key: "crop_condition",
+      signal_meaning: "Custom crop meaning.",
+      messages: { good: { headline: "Custom healthy wording" } },
+    }]);
+    expect(result.label).toBe("Good");
+    expect(result.headline).toBe("Custom healthy wording");
+    expect(result.signalMeaning).toBe("Custom crop meaning.");
+    expect(buildCalculatedFieldInterpretation([{ metric: { direction: "condition" }, result }], { cropName: "Mango" })).toContain("Mango");
   });
 });

@@ -36,7 +36,6 @@ export default function CropConfigurationEditorPage() {
   const [previewMobile, setPreviewMobile] = useState(true);
   const [newStageCode, setNewStageCode] = useState("");
   const [ttsStatus, setTtsStatus] = useState(null);
-  const [ttsProfiles, setTtsProfiles] = useState([]);
   const [voiceDrafts, setVoiceDrafts] = useState({
     "en-IN": { voice_id: "", voice_name: "" },
     "or-IN": { voice_id: "", voice_name: "" },
@@ -67,7 +66,6 @@ export default function CropConfigurationEditorPage() {
       setConfigs(configList);
       setPracticeTemplates(templates);
       setTtsStatus(ttsStatusData);
-      setTtsProfiles(ttsProfileData);
       setVoiceDrafts({
         "en-IN": {
           voice_id: ttsProfileData.find((item) => item.locale === "en-IN")?.voice_id || "",
@@ -178,7 +176,6 @@ export default function CropConfigurationEditorPage() {
     setError("");
     try {
       await upsertTtsProfile(locale, voiceDrafts[locale]);
-      setTtsProfiles(await listTtsProfiles());
     } catch (err) {
       setError(err?.message || "Could not save TTS profile.");
     } finally {
@@ -192,7 +189,7 @@ export default function CropConfigurationEditorPage() {
     <div className="mx-auto max-w-3xl px-4 py-8">
       <button
         type="button"
-        onClick={() => navigate("/admin/crop-observations/config")}
+        onClick={() => navigate("/admin/crop-observation?tab=configuration")}
         className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
       >
         <ChevronLeft className="h-4 w-4" /> Back to crops

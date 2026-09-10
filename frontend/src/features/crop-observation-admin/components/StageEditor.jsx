@@ -11,6 +11,7 @@ import {
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
 import PracticeEditor from "./PracticeEditor";
 import TranslationFields from "./TranslationFields";
+import SystemMediaField from "./SystemMediaField";
 
 export default function StageEditor({ stage, practiceTemplates, onDeleted, readOnly }) {
   const [expanded, setExpanded] = useState(false);
@@ -18,6 +19,8 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
   const [newPracticeCode, setNewPracticeCode] = useState(practiceTemplates[0]?.practice_code || "");
   const [audioBusy, setAudioBusy] = useState("");
   const [audioStatus, setAudioStatus] = useState("");
+  const initialEn = stage.translations?.find((item) => item.locale === "en-IN") || {};
+  const initialOr = stage.translations?.find((item) => item.locale === "or-IN") || {};
 
   useEffect(() => {
     if (expanded) {
@@ -76,8 +79,10 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
       {expanded ? (
         <div className="space-y-4 border-t border-slate-100 px-4 py-4">
           <TranslationFields
+            initialEn={initialEn}
+            initialOr={initialOr}
             labelKey="display_name"
-            extraFields={["instruction_text"]}
+            extraFields={["short_description", "instruction_text"]}
             onSave={(locale, values) =>
               upsertStageTranslation(stage.stage_id, locale, {
                 display_name: values.display_name || stage.stage_code,
@@ -86,17 +91,50 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
             }
           />
 
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Instruction audio</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" disabled={audioBusy === "en-IN"} onClick={() => handleGenerateAudio("en-IN")}>
-                {audioBusy === "en-IN" ? "Generating..." : "Generate English"}
-              </Button>
-              <Button size="sm" variant="outline" disabled={audioBusy === "or-IN"} onClick={() => handleGenerateAudio("or-IN")}>
-                {audioBusy === "or-IN" ? "Generating..." : "Generate Odia"}
-              </Button>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <SystemMediaField
+              targetType="STAGE"
+              targetId={stage.stage_id}
+              assetRole="STAGE_IMAGE"
+              label="Stage image"
+              accept="image/jpeg,image/png,image/webp"
+              readOnly={readOnly}
+            />
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Instruction audio</p>
+              <p className="mt-1 text-xs text-slate-500">Generate once with Cartesia or replace with your own recorded MP3.</p>
+              <div className="mt-3 grid gap-2">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <SystemMediaField
+                    targetType="STAGE"
+                    targetId={stage.stage_id}
+                    assetRole="INSTRUCTION_AUDIO"
+                    locale="en-IN"
+                    label="English instruction"
+                    accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4"
+                    readOnly={readOnly}
+                    compact
+                    key={`en-${audioStatus}`}
+                  />
+                  {!readOnly ? <Button size="sm" variant="outline" disabled={audioBusy === "en-IN"} onClick={() => handleGenerateAudio("en-IN")}>{audioBusy === "en-IN" ? "Generating…" : "Generate"}</Button> : null}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <SystemMediaField
+                    targetType="STAGE"
+                    targetId={stage.stage_id}
+                    assetRole="INSTRUCTION_AUDIO"
+                    locale="or-IN"
+                    label="Odia instruction"
+                    accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4"
+                    readOnly={readOnly}
+                    compact
+                    key={`or-${audioStatus}`}
+                  />
+                  {!readOnly ? <Button size="sm" variant="outline" disabled={audioBusy === "or-IN"} onClick={() => handleGenerateAudio("or-IN")}>{audioBusy === "or-IN" ? "Generating…" : "Generate"}</Button> : null}
+                </div>
+              </div>
+              {audioStatus ? <p className="mt-2 text-xs text-slate-600">{audioStatus}</p> : null}
             </div>
-            {audioStatus ? <p className="mt-2 text-xs text-slate-600">{audioStatus}</p> : null}
           </div>
 
           <div>

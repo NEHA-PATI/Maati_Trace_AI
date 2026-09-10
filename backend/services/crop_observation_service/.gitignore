@@ -1,0 +1,7 @@
+.env
+.env.local
+.env.s3
+__pycache__/
+*.pyc
+storage/farmer/*
+!storage/farmer/.gitkeep

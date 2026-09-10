@@ -155,6 +155,14 @@ class CloneCropRequest(StrictModel):
     formula_version_suffix: str = Field(default="v1", min_length=1, max_length=50)
 
 
+class MetricContentUpdateRequest(StrictModel):
+    display_name: str = Field(min_length=2, max_length=150)
+    signal_meaning: str = Field(min_length=2, max_length=2000)
+    ranges: dict[str, Any] = {}
+    messages: dict[str, Any] = {}
+    field_interpretation: dict[str, Any] = {}
+
+
 class ProcessingTriggerRequest(StrictModel):
     farm_id: str
     start_date: date

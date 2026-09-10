@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field
 
 
 DEFAULT_ENVIRONMENT_DATASETS = [
-    # Tier A additions. Sentinel-2 stays on existing full-refresh.
+    # Sentinel-2 is an environmental observation source. It is intentionally
+    # processed at the same level and in the same mandatory dataset stage as
+    # every other source.
+    "sentinel_2_l2a",
     "sentinel_1_rtc",
     "landsat_c2_l2",
     "gpm_imerg",

@@ -108,6 +108,16 @@ def polygon_to_h3_bigints(
     h3_shape = geojson_to_h3_shape(geojson)
     cells = sorted(h3.polygon_to_cells(h3_shape, res=final_resolution))
 
+    # H3's default containment mode only returns cells whose center is inside
+    # the polygon.  A valid small farm can therefore produce zero cells at
+    # resolution 12 even though it lies inside one H3 cell.  Keep the
+    # resolution-12 grid contract by anchoring such a boundary to the H3 cell
+    # containing a representative point of the farm.
+    if not cells:
+        point = geom.representative_point()
+        fallback = h3.latlng_to_cell(point.y, point.x, final_resolution)
+        cells = [fallback]
+
     if len(cells) > settings.max_farm_h3_cells:
         raise BoundaryIndexError(
             f"Polygon produced {len(cells)} H3 cells. Max allowed is {settings.max_farm_h3_cells}"

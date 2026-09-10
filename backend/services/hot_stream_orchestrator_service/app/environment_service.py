@@ -9,12 +9,17 @@ from services.hot_stream_orchestrator_service.app.environment_clients import (
     write_environment_to_lakehouse,
 )
 from services.hot_stream_orchestrator_service.app.environment_schemas import (
+    DEFAULT_ENVIRONMENT_DATASETS,
     EnvironmentRefreshRequest,
 )
 from services.hot_stream_orchestrator_service.app.environment_cache import (
     STATIC_TABLES,
     expected_static_rows,
     static_dataset_is_cached,
+)
+from services.hot_stream_orchestrator_service.app.clients import (
+    run_raster_preview_for_scene,
+    write_sentinel2_to_lakehouse,
 )
 from services.hot_stream_orchestrator_service.app.repository import (
     complete_pipeline_job,
@@ -31,16 +36,19 @@ from services.hot_stream_orchestrator_service.app.service import (
 
 
 class EnvironmentRefreshError(RuntimeError):
-    pass
+    code = "ENVIRONMENT_DATASETS_FAILED"
 
 
 def materialize_environment(
     farm_id: UUID,
     payload: EnvironmentRefreshRequest,
 ) -> dict[str, Any]:
-    if "sentinel_2_l2a" in payload.dataset_keys:
+    if not payload.dataset_keys:
+        raise EnvironmentRefreshError("At least one environmental dataset is required.")
+    unknown = sorted(set(payload.dataset_keys) - set(DEFAULT_ENVIRONMENT_DATASETS))
+    if unknown:
         raise EnvironmentRefreshError(
-            "sentinel_2_l2a is intentionally excluded from environment-refresh; use the existing full-refresh endpoint for Sentinel-2"
+            "Unregistered environmental dataset(s): " + ", ".join(unknown)
         )
 
     job = create_pipeline_job(
@@ -109,28 +117,54 @@ def materialize_environment(
                 # Scene/composite/subdaily sources can return several items. Static and
                 # virtual sources normally return one. The request controls max items.
                 for source_item in items[: payload.max_items_per_dataset]:
-                    processed = process_environment_dataset(
-                        dataset_key=dataset_key,
-                        farm_id=farm_id,
-                        bbox=bbox,
-                        farm_polygon_geojson=polygon,
-                        h3_resolution=h3_resolution,
-                        h3_cells_bigint=h3_cells,
-                        source_item=source_item,
-                        options=dataset_options,
-                    )
-                    written = write_environment_to_lakehouse(
-                        farm_id=farm_id,
-                        process_result=processed,
-                    )
+                    if dataset_key == "sentinel_2_l2a":
+                        # Sentinel-2 uses the protected raster contract because
+                        # its complete optical-index response has a stricter
+                        # schema than generic environmental processors. It is
+                        # still part of this same environmental dataset stage.
+                        processed = run_raster_preview_for_scene(
+                            farm_id=farm_id,
+                            bbox=bbox,
+                            scene=source_item,
+                            h3_resolution=h3_resolution,
+                            h3_cells_bigint=h3_cells,
+                            farm_polygon_geojson=polygon,
+                        )
+                        returned_h3 = {
+                            int(row["h3_index"])
+                            for row in (processed.get("features") or [])
+                            if row.get("h3_index") is not None
+                        }
+                        expected_h3 = {int(value) for value in h3_cells}
+                        if returned_h3 != expected_h3:
+                            raise EnvironmentRefreshError(
+                                "Sentinel-2 did not produce exactly one observation for every registered H3 cell."
+                            )
+                        written = write_sentinel2_to_lakehouse(farm_id, processed)
+                    else:
+                        processed = process_environment_dataset(
+                            dataset_key=dataset_key,
+                            farm_id=farm_id,
+                            bbox=bbox,
+                            farm_polygon_geojson=polygon,
+                            h3_resolution=h3_resolution,
+                            h3_cells_bigint=h3_cells,
+                            source_item=source_item,
+                            options=dataset_options,
+                        )
+                        written = write_environment_to_lakehouse(
+                            farm_id=farm_id,
+                            process_result=processed,
+                        )
                     current["source_items_processed"] += 1
                     current["postgres_rows_written"] += int(written.get("postgres_rows_written") or 0)
                     current["parquet_rows_written"] += int(written.get("parquet_rows_written") or 0)
 
                 current["status"] = "succeeded"
             except Exception as exc:
-                # Multi-source enrichment is intentionally fault isolated: one optional
-                # source must not invalidate all other source observations.
+                # Isolate a dataset failure. Every sibling dataset must still
+                # be attempted so the feature engine can use all observations
+                # that were successfully produced.
                 current["status"] = "failed"
                 current["message"] = str(exc)
             stage_results.append(current)
@@ -141,18 +175,21 @@ def materialize_environment(
                 metadata={"completed_datasets": stage_results},
             )
 
-        failures = [row for row in stage_results if row["status"] == "failed"]
-        successes = [row for row in stage_results if row["status"] == "succeeded"]
-        overall = "succeeded" if not failures else ("partial" if successes else "failed")
-        if overall == "failed":
-            fail_pipeline_job(
-                job_id,
-                error_code="ALL_ENVIRONMENT_DATASETS_FAILED",
-                error_message="All requested environment datasets failed",
-                metadata={"datasets": stage_results},
-            )
+        failures = [row for row in stage_results if row["status"] in {"failed", "unavailable"}]
+        successes = [row for row in stage_results if row["status"] in {"succeeded", "cached"}]
+        if not failures:
+            overall = "succeeded"
+        elif successes:
+            overall = "completed_with_warnings"
         else:
-            complete_pipeline_job(job_id, metadata={"overall_status": overall, "datasets": stage_results})
+            overall = "failed"
+
+        if overall == "failed":
+            raise EnvironmentRefreshError(
+                "Required environmental dataset processing failed: "
+                + ", ".join(row["dataset_key"] for row in failures)
+            )
+        complete_pipeline_job(job_id, metadata={"overall_status": overall, "datasets": stage_results})
         return {"farm_id": str(farm_id), "status": overall, "datasets": stage_results}
     except Exception as exc:
         try:

@@ -5,14 +5,6 @@ function extractItems(response) {
   return response?.items || response?.data || response?.grid_cells || response?.grid_values || response?.h3_cells || [];
 }
 
-function getFieldValue(response, keys = []) {
-  if (!response || Array.isArray(response)) return response;
-  for (const key of keys) {
-    if (response[key] !== undefined) return response[key];
-  }
-  return response;
-}
-
 export const getFarmSummary = (farmId) => analyticsClient.request(`/v1/analytics/farms/${farmId}/summary`);
 export const getLatestSentinel2 = (farmId) => analyticsClient.request(`/v1/analytics/farms/${farmId}/sentinel2/latest`);
 export const getSentinel2History = (farmId, limit = 10) => analyticsClient.request(`/v1/analytics/farms/${farmId}/sentinel2/history?limit=${limit}`);
@@ -42,6 +34,11 @@ export async function getFpoAnalyticsSummary(fpoId) {
 
 export async function getFarmGridCellDetails(farmId, gridCellId) {
   return analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells/${gridCellId}/details`);
+}
+
+export async function getMetricContent(cropCode = "") {
+  const query = cropCode ? `?crop_code=${encodeURIComponent(cropCode)}` : "";
+  return extractItems(await analyticsClient.request(`/v1/analytics/metric-content${query}`));
 }
 
 /* ---------------- Crop feature/formula engine ---------------- */
@@ -78,4 +75,3 @@ export async function materializeFarmCalculations(farmId, payload) {
 export async function materializeFarmIntelligence(farmId, payload) {
   return analyticsClient.request(`/v1/analytics/farms/${farmId}/intelligence/materialize`, { method: "POST", body: payload });
 }
-

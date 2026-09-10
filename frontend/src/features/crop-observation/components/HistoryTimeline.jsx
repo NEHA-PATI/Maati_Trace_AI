@@ -4,7 +4,7 @@ import { Camera, ChevronDown, Loader2, Mic, Play } from "lucide-react";
 import { fetchAuthedMediaBlob } from "@/features/crop-observation/api/cropObservationApi";
 import Bilingual from "@/features/crop-observation/components/Bilingual";
 import { iconForPractice } from "@/features/crop-observation/components/fieldIcons";
-import { STATUS_STRINGS, STRINGS, humanizeCode, primary } from "@/features/crop-observation/i18n";
+import { STATUS_STRINGS, STRINGS, practiceLabel, primary } from "@/features/crop-observation/i18n";
 import { cn } from "@/lib/utils";
 
 const STATUS_DOT = {
@@ -78,10 +78,10 @@ function DayMedia({ summary, locale }) {
   return (
     <div className="mt-3">
       <button type="button" onClick={toggle} className="flex flex-wrap items-center gap-3 text-sm font-semibold text-[#5B6055]">
-        {cropCount ? <span className="inline-flex items-center gap-1"><Camera className="h-3.5 w-3.5" /> Crop {cropCount}</span> : null}
-        {issueCount ? <span>Issue {issueCount}</span> : null}
-        {practiceCount ? <span>Action {practiceCount}</span> : null}
-        {voiceCount ? <span className="inline-flex items-center gap-1"><Mic className="h-3.5 w-3.5" /> Voice</span> : null}
+        {cropCount ? <span className="inline-flex items-center gap-1"><Camera className="h-3.5 w-3.5" /> {primary(STRINGS.crop, locale)} {cropCount}</span> : null}
+        {issueCount ? <span>{primary(STRINGS.issue, locale)} {issueCount}</span> : null}
+        {practiceCount ? <span>{primary(STRINGS.action, locale)} {practiceCount}</span> : null}
+        {voiceCount ? <span className="inline-flex items-center gap-1"><Mic className="h-3.5 w-3.5" /> {primary(STRINGS.voice, locale)}</span> : null}
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
       {open ? (
@@ -142,7 +142,7 @@ export default function HistoryTimeline({ items, locale }) {
                     className="inline-flex items-center gap-1 rounded-full bg-[#E1F1D6] px-2.5 py-1 text-xs font-bold text-[#33492A]"
                   >
                     <PracticeIcon className="h-3.5 w-3.5" />
-                    {humanizeCode(practice.practice_code)}
+                    {practiceLabel(practice.practice_code, locale)}
                   </span>
                 );
               })}

@@ -154,6 +154,11 @@ def validate_configuration(context: RequestContext, config_version_id: UUID) -> 
     errors: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []
 
+    crop_locales = set(admin_repo.count_locales_for_crop(config["crop_id"]))
+    for locale in REQUIRED_LOCALES:
+        if locale not in crop_locales:
+            errors.append(ValidationIssue(code="CROP_TRANSLATION_MISSING", locale=locale))
+
     stages = admin_repo.list_stages_for_config(config_version_id)
     if not stages:
         errors.append(ValidationIssue(code="NO_STAGES"))
@@ -161,52 +166,57 @@ def validate_configuration(context: RequestContext, config_version_id: UUID) -> 
         errors.append(ValidationIssue(code="NO_INITIAL_STAGE"))
 
     for stage in stages:
-        locales = set(admin_repo.count_locales_for_stage(stage["stage_id"]))
-        for required in REQUIRED_LOCALES:
-            if required not in locales:
-                errors.append(
-                    ValidationIssue(code="STAGE_TRANSLATION_MISSING", stage_code=stage["stage_code"])
-                )
-                break
+        translations = {row["locale"]: row for row in repo.get_stage_translations(stage["stage_id"])}
+        for locale in REQUIRED_LOCALES:
+            translation = translations.get(locale)
+            if translation is None:
+                errors.append(ValidationIssue(code="STAGE_TRANSLATION_MISSING", stage_code=stage["stage_code"], locale=locale))
+                continue
+            if not str(translation.get("instruction_text") or "").strip():
+                errors.append(ValidationIssue(code="STAGE_INSTRUCTION_TEXT_MISSING", stage_code=stage["stage_code"], locale=locale))
+
+        if repo.get_stage_image(stage["stage_id"]) is None:
+            errors.append(ValidationIssue(code="STAGE_IMAGE_MISSING", stage_code=stage["stage_code"]))
+
+        for locale in REQUIRED_LOCALES:
+            if repo.get_stage_instruction_audio(stage["stage_id"], locale=locale) is None:
+                errors.append(ValidationIssue(code="STAGE_INSTRUCTION_AUDIO_MISSING", stage_code=stage["stage_code"], locale=locale))
 
         stage_practices = admin_repo.list_stage_practices_for_stage(stage["stage_id"])
         for sp in stage_practices:
             fields = admin_repo.list_fields_for_stage_practice(sp["stage_practice_id"])
             required_field_count = sum(1 for f in fields if f["is_required"])
             if required_field_count > MAX_COMFORTABLE_REQUIRED_FIELDS:
-                warnings.append(
-                    ValidationIssue(
-                        code="FORM_TOO_LONG",
-                        stage_code=stage["stage_code"],
-                        practice_code=sp["practice_code"],
-                    )
-                )
+                warnings.append(ValidationIssue(code="FORM_TOO_LONG", stage_code=stage["stage_code"], practice_code=sp["practice_code"]))
+
+            media_config = sp.get("media_config") or {}
+            for section in ("issue_evidence", "practice_evidence"):
+                rule = media_config.get(section) or {}
+                if rule.get("enabled"):
+                    max_images = int(rule.get("max_images") or 0)
+                    if max_images < 1 or max_images > 2:
+                        errors.append(ValidationIssue(code="MEDIA_IMAGE_LIMIT_INVALID", stage_code=stage["stage_code"], practice_code=sp["practice_code"]))
+            voice = media_config.get("voice_note") or {}
+            if voice.get("enabled"):
+                max_seconds = int(voice.get("max_seconds") or 0)
+                if max_seconds < 5 or max_seconds > 60:
+                    errors.append(ValidationIssue(code="MEDIA_VOICE_LIMIT_INVALID", stage_code=stage["stage_code"], practice_code=sp["practice_code"]))
 
             for field in fields:
                 field_locales = set(admin_repo.count_locales_for_field(field["field_definition_id"]))
-                for required in REQUIRED_LOCALES:
-                    if required not in field_locales:
-                        errors.append(
-                            ValidationIssue(
-                                code="FIELD_TRANSLATION_MISSING",
-                                stage_code=stage["stage_code"],
-                                practice_code=sp["practice_code"],
-                                field_code=field["field_code"],
-                            )
-                        )
-                        break
+                for locale in REQUIRED_LOCALES:
+                    if locale not in field_locales:
+                        errors.append(ValidationIssue(code="FIELD_TRANSLATION_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], field_code=field["field_code"], locale=locale))
 
                 if field["field_type"] in CHOICE_FIELD_TYPES:
                     options = admin_repo.list_options_for_field(field["field_definition_id"])
                     if not options:
-                        warnings.append(
-                            ValidationIssue(
-                                code="FIELD_OPTIONS_MISSING",
-                                stage_code=stage["stage_code"],
-                                practice_code=sp["practice_code"],
-                                field_code=field["field_code"],
-                            )
-                        )
+                        errors.append(ValidationIssue(code="FIELD_OPTIONS_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], field_code=field["field_code"]))
+                    for option in options:
+                        option_locales = set(admin_repo.count_locales_for_option(option["field_option_id"]))
+                        for locale in REQUIRED_LOCALES:
+                            if locale not in option_locales:
+                                errors.append(ValidationIssue(code="OPTION_TRANSLATION_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], field_code=field["field_code"], locale=locale))
 
     return ValidationResponse(valid=len(errors) == 0, errors=errors, warnings=warnings)
 
@@ -289,7 +299,21 @@ def upsert_stage_translation(
     stage = admin_repo.get_stage(stage_id)
     if stage is None:
         raise CropObservationError("STAGE_NOT_FOUND", "This stage was not found.", 404)
-    admin_repo.upsert_stage_translation(stage_id, locale, payload.model_dump())
+    _require_draft(stage["config_version_id"])
+    before = next((row for row in repo.get_stage_translations(stage_id) if row["locale"] == locale), None)
+    values = payload.model_dump()
+    admin_repo.upsert_stage_translation(stage_id, locale, values)
+
+    # Instruction audio is derived content. If the approved text changes, the
+    # previous clip is no longer a valid binding for this draft stage. The
+    # immutable physical file remains reusable by other versions/stages.
+    if before is not None and (before.get("instruction_text") or "") != (values.get("instruction_text") or ""):
+        repo.deactivate_system_media_for_target(
+            target_type="STAGE",
+            target_id=stage_id,
+            asset_role="INSTRUCTION_AUDIO",
+            locale=locale,
+        )
     return {"status": "ok"}
 
 

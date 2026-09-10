@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from services.crop_observation_service.app import observation_service, repository as repo
@@ -11,7 +11,7 @@ from services.crop_observation_service.app.schemas import (
     MediaUploadRequest,
     MediaUploadResponse,
 )
-from services.crop_observation_service.app.storage import active_backend, is_local
+from services.crop_observation_service.app.storage import active_backend, backend_for, is_local
 
 _MEDIA_ROLE_BY_TYPE = {"IMAGE": "PHOTO", "AUDIO": "VOICE_NOTE"}
 _EXTENSION_BY_MIME = {
@@ -140,6 +140,11 @@ def request_media_upload(
     if max_seconds is not None and payload.duration_seconds and payload.duration_seconds > max_seconds:
         raise CropObservationError("MEDIA_TOO_LONG", "Audio exceeds the duration limit for this entry.", 422)
 
+    # A requested upload reserves a media slot only for the short upload
+    # window. Clean stale tickets first so closing/reloading the browser cannot
+    # permanently block a farmer from adding evidence later.
+    repo.cleanup_expired_media_requests(payload.owner_type, payload.owner_id)
+
     existing_count = repo.count_owner_media_by_purpose(
         payload.owner_type,
         payload.owner_id,
@@ -182,6 +187,10 @@ def request_media_upload(
         mime_type=payload.mime_type,
         byte_size=payload.byte_size,
         duration_seconds=payload.duration_seconds,
+        storage_backend=settings.media_storage_backend.upper(),
+        original_filename=None,
+        upload_expires_at=datetime.now(timezone.utc)
+        + timedelta(seconds=settings.s3_presigned_upload_ttl_seconds),
     )
     repo.create_observation_media(
         owner_type=payload.owner_type,
@@ -192,7 +201,11 @@ def request_media_upload(
         slot_number=slot_number,
     )
 
-    presign = active_backend().create_upload_url(object_key=object_key, mime_type=payload.mime_type)
+    presign = active_backend().create_upload_url(
+        object_key=object_key,
+        mime_type=payload.mime_type,
+        media_asset_id=asset["media_asset_id"],
+    )
     return MediaUploadResponse(
         media_asset_id=asset["media_asset_id"],
         upload_url=presign["upload_url"],
@@ -243,7 +256,8 @@ def complete_media_upload(context: RequestContext, media_asset_id: UUID) -> Medi
     if asset["owner_user_id"] != context.principal.user_id:
         raise CropObservationError("MEDIA_ACCESS_FORBIDDEN", "You cannot finalize this media.", 403)
 
-    head = active_backend().head_object(object_key=asset["object_key"])
+    storage = backend_for(asset.get("storage_backend"))
+    head = storage.head_object(object_key=asset["object_key"])
     if head is None:
         raise CropObservationError(
             "MEDIA_UPLOAD_NOT_FOUND",
@@ -259,6 +273,14 @@ def complete_media_upload(context: RequestContext, media_asset_id: UUID) -> Medi
             422,
         )
 
+    content_type = head.get("ContentType")
+    if content_type and str(content_type).split(";", 1)[0].strip().lower() != str(asset["mime_type"]).lower():
+        raise CropObservationError(
+            "MEDIA_TYPE_MISMATCH",
+            "The uploaded file type does not match what was declared.",
+            422,
+        )
+
     row = repo.mark_media_ready(media_asset_id)
     return MediaAssetResponse(
         media_asset_id=row["media_asset_id"],
@@ -271,21 +293,70 @@ def complete_media_upload(context: RequestContext, media_asset_id: UUID) -> Medi
     )
 
 
-def get_media_content(context: RequestContext, media_asset_id: UUID) -> tuple[bytes, str]:
-    """Stream a farmer's own media back — used for replaying a previous
-    voice note or opening a previous photo (fetched on demand, never
-    preloaded — see PreviousEntryRow.jsx)."""
-    from services.crop_observation_service.app.storage import local as local_storage
+def get_media_access(context: RequestContext, media_asset_id: UUID) -> dict:
+    """Return an authorized download target without forcing a cross-origin
+    redirect inside an authenticated fetch.
+
+    LOCAL returns the service content route. S3 returns a short-lived presigned
+    GET URL that the browser can fetch with credentials omitted.
+    """
+    from shared.config.settings import settings
 
     asset = repo.get_media_asset(media_asset_id)
     if asset is None:
         raise CropObservationError("MEDIA_NOT_FOUND", "Media asset was not found.", 404)
     if asset["owner_user_id"] != context.principal.user_id:
         raise CropObservationError("MEDIA_ACCESS_FORBIDDEN", "You cannot view this media.", 403)
-    if not is_local():
-        raise CropObservationError(
-            "MEDIA_CONTENT_NOT_LOCAL",
-            "This media is stored remotely — use its presigned URL instead.",
-            409,
-        )
-    return local_storage.read_bytes(object_key=asset["object_key"]), asset["mime_type"]
+    if asset["upload_status"] != "READY":
+        raise CropObservationError("MEDIA_NOT_READY", "This media is not ready yet.", 409)
+
+    if str(asset.get("storage_backend") or "LOCAL").upper() == "LOCAL":
+        return {
+            "url": f"/v1/crop-observations/media/{media_asset_id}/content",
+            "external": False,
+            "expires_in_seconds": None,
+        }
+
+    storage = backend_for(asset.get("storage_backend"))
+    return {
+        "url": storage.create_download_url(object_key=asset["object_key"]),
+        "external": True,
+        "expires_in_seconds": settings.s3_presigned_download_ttl_seconds,
+    }
+
+
+def get_media_content(context: RequestContext, media_asset_id: UUID) -> tuple[bytes | None, str, str | None]:
+    """Return either LOCAL bytes or a short-lived S3 download URL.
+
+    Access is always authorized before the redirect is created, so farmer
+    media remains private even though S3 serves the actual bytes in production.
+    """
+    from services.crop_observation_service.app.storage import local as local_storage
+    from services.crop_observation_service.app.storage import s3 as s3_storage
+
+    asset = repo.get_media_asset(media_asset_id)
+    if asset is None:
+        raise CropObservationError("MEDIA_NOT_FOUND", "Media asset was not found.", 404)
+    if asset["owner_user_id"] != context.principal.user_id:
+        raise CropObservationError("MEDIA_ACCESS_FORBIDDEN", "You cannot view this media.", 403)
+    if asset["upload_status"] != "READY":
+        raise CropObservationError("MEDIA_NOT_READY", "This media is not ready yet.", 409)
+
+    if str(asset.get("storage_backend") or "LOCAL").upper() == "LOCAL":
+        return local_storage.read_bytes(object_key=asset["object_key"]), asset["mime_type"], None
+
+    return None, asset["mime_type"], s3_storage.create_download_url(object_key=asset["object_key"])
+
+
+def delete_media(context: RequestContext, media_asset_id: UUID) -> None:
+    asset = repo.get_media_asset(media_asset_id)
+    if asset is None:
+        raise CropObservationError("MEDIA_NOT_FOUND", "Media was not found.", 404)
+    owner = repo.get_media_owner(media_asset_id)
+    if owner is None:
+        raise CropObservationError("MEDIA_NOT_FOUND", "Media was not found.", 404)
+    observation_service.resolve_cycle_and_authorize(context, owner["crop_cycle_id"])
+    deleted = repo.delete_media_asset(media_asset_id)
+    if deleted is None:
+        raise CropObservationError("MEDIA_NOT_FOUND", "Media was not found.", 404)
+    backend_for(deleted.get("storage_backend")).delete(object_key=deleted["object_key"])

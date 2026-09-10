@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCrop, listCrops } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
+import SystemMediaField from "@/features/crop-observation-admin/components/SystemMediaField";
 
 export default function CropConfigurationPage() {
   const [crops, setCrops] = useState([]);
@@ -59,25 +60,22 @@ export default function CropConfigurationPage() {
 
       <div className="mt-6 space-y-3">
         {crops.map((crop) => (
-          <Link
-            key={crop.crop_code}
-            to={`/admin/crop-observations/config/${crop.crop_code}`}
-            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-300"
-          >
+          <div key={crop.crop_code} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[180px_1fr_auto] md:items-center">
+            <SystemMediaField
+              targetType="CROP"
+              targetId={crop.crop_id}
+              assetRole="CROP_CARD_IMAGE"
+              label="Crop card image"
+              accept="image/jpeg,image/png,image/webp"
+              compact
+            />
             <div>
               <div className="font-bold text-slate-950">{crop.crop_code}</div>
-              <div className="text-xs text-slate-500">
-                {crop.lifecycle_type} · {crop.default_stage_strategy}
-              </div>
+              <div className="text-xs text-slate-500">{crop.lifecycle_type} · {crop.default_stage_strategy}</div>
+              <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${crop.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{crop.is_active ? "Active" : "Inactive"}</span>
             </div>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                crop.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {crop.is_active ? "Active" : "Inactive"}
-            </span>
-          </Link>
+            <Link to={`/admin/crop-observation/config/${crop.crop_code}`} className="rounded-lg bg-slate-900 px-4 py-2 text-center text-sm font-bold text-white hover:bg-slate-800">Configure crop</Link>
+          </div>
         ))}
       </div>
 

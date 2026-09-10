@@ -92,10 +92,13 @@ const PATH_PERMISSION_MAP = Object.freeze({
 
   "/land/:farmId": "landIntelligence",
 
+  "/my-crops/language": "cropDiary",
   "/my-crops": "cropDiary",
   "/my-crops/:farmId/:cropCycleId/:stageCode": "cropDiary",
   "/my-crops/:farmId/:cropCycleId/history": "cropDiary",
 
+  "/admin/crop-observation": "cropObservationAdmin",
+  "/admin/crop-observation/config/:cropCode": "cropObservationAdmin",
   "/admin/crop-observations": "cropObservationAdmin",
   "/admin/crop-observations/config": "cropObservationAdmin",
   "/admin/crop-observations/config/:cropCode": "cropObservationAdmin",

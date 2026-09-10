@@ -100,9 +100,9 @@ export default function PreviousEntryRow({ entry, locale }) {
           </div>
           {(media.crop_condition?.count || media.issue_evidence?.count || media.practice_evidence?.count || media.voice_note?.count) ? (
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
-              {media.crop_condition?.count ? <span>Crop {media.crop_condition.count}</span> : null}
-              {media.issue_evidence?.count ? <span>Issue {media.issue_evidence.count}</span> : null}
-              {media.practice_evidence?.count ? <span>Action {media.practice_evidence.count}</span> : null}
+              {media.crop_condition?.count ? <span>{primary(STRINGS.crop, locale)} {media.crop_condition.count}</span> : null}
+              {media.issue_evidence?.count ? <span>{primary(STRINGS.issue, locale)} {media.issue_evidence.count}</span> : null}
+              {media.practice_evidence?.count ? <span>{primary(STRINGS.action, locale)} {media.practice_evidence.count}</span> : null}
               {media.voice_note?.count ? (
                 <span className="inline-flex items-center gap-1">
                   <Mic className="h-3.5 w-3.5" /> {Math.round(media.voice_note.duration_seconds || 0)}s

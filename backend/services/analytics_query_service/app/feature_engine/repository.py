@@ -187,6 +187,129 @@ def get_component_catalog() -> list[dict[str, Any]]:
     )
 
 
+def list_public_metric_content(crop_code: str | None = None) -> list[dict[str, Any]]:
+    """Return published crop-specific copy, falling back to the global copy."""
+    params: dict[str, Any] = {"crop_code": crop_code or ""}
+    return _rows(
+        """
+        SELECT content_id, crop_code, metric_key, content_version, display_name,
+               signal_meaning, ranges, messages, field_interpretation,
+               status, is_active, published_at
+        FROM crop_intelligence_metric_content
+        WHERE status = 'published'
+          AND is_active = TRUE
+          AND crop_code IN ('*', :crop_code)
+        ORDER BY CASE WHEN crop_code = :crop_code THEN 0 ELSE 1 END, metric_key;
+        """,
+        params,
+    )
+
+
+def admin_list_metric_content(crop_code: str | None = None) -> list[dict[str, Any]]:
+    where = ""
+    params: dict[str, Any] = {}
+    if crop_code:
+        where = "WHERE crop_code = :crop_code"
+        params["crop_code"] = crop_code
+    return _rows(
+        f"""
+        SELECT * FROM crop_intelligence_metric_content
+        {where}
+        ORDER BY crop_code, metric_key, created_at DESC;
+        """,
+        params,
+    )
+
+
+def admin_update_metric_content(content_id: UUID | str, payload: dict[str, Any], actor_user_id: UUID | str) -> dict[str, Any]:
+    before = _row("SELECT * FROM crop_intelligence_metric_content WHERE content_id=:id", {"id": str(content_id)})
+    if before is None:
+        raise FeatureEngineRepositoryError("Metric content not found")
+    if before["status"] != "draft":
+        raise FeatureEngineRepositoryError("Published metric content is immutable. Clone a draft version before editing.")
+    query = text(
+        """
+        UPDATE crop_intelligence_metric_content
+        SET display_name=:display_name, signal_meaning=:signal_meaning,
+            ranges=CAST(:ranges AS jsonb), messages=CAST(:messages AS jsonb),
+            field_interpretation=CAST(:field_interpretation AS jsonb),
+            updated_by=:actor_user_id, updated_at=now()
+        WHERE content_id=:content_id
+        RETURNING *;
+        """
+    )
+    params = {**payload, "content_id": str(content_id), "actor_user_id": str(actor_user_id)}
+    for key in ("ranges", "messages", "field_interpretation"):
+        params[key] = _json(payload.get(key))
+    try:
+        with engine.begin() as conn:
+            row = dict(conn.execute(query, params).mappings().one())
+        audit_change(actor_user_id, "metric_content", content_id, "update", before, row)
+        return row
+    except SQLAlchemyError as exc:
+        raise FeatureEngineRepositoryError(f"Failed to update metric content: {exc}") from exc
+
+
+def admin_publish_metric_content(content_id: UUID | str, actor_user_id: UUID | str) -> dict[str, Any]:
+    before = _row("SELECT * FROM crop_intelligence_metric_content WHERE content_id=:id", {"id": str(content_id)})
+    if before is None:
+        raise FeatureEngineRepositoryError("Metric content not found")
+    if before["status"] != "draft":
+        raise FeatureEngineRepositoryError("Only draft metric content can be published")
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE crop_intelligence_metric_content SET is_active=FALSE WHERE crop_code=:crop_code AND metric_key=:metric_key"),
+                {"crop_code": before["crop_code"], "metric_key": before["metric_key"]},
+            )
+            row = dict(conn.execute(
+                text("""
+                    UPDATE crop_intelligence_metric_content
+                    SET status='published', is_active=TRUE, published_at=now(),
+                        updated_by=:actor_user_id, updated_at=now()
+                    WHERE content_id=:content_id
+                    RETURNING *;
+                """),
+                {"content_id": str(content_id), "actor_user_id": str(actor_user_id)},
+            ).mappings().one())
+        audit_change(actor_user_id, "metric_content", content_id, "publish", before, row)
+        return row
+    except SQLAlchemyError as exc:
+        raise FeatureEngineRepositoryError(f"Failed to publish metric content: {exc}") from exc
+
+
+def admin_clone_metric_content(content_id: UUID | str, new_version: str, actor_user_id: UUID | str) -> dict[str, Any]:
+    source = _row("SELECT * FROM crop_intelligence_metric_content WHERE content_id=:id", {"id": str(content_id)})
+    if source is None:
+        raise FeatureEngineRepositoryError("Metric content not found")
+    query = text(
+        """
+        INSERT INTO crop_intelligence_metric_content (
+            crop_code, metric_key, content_version, display_name, signal_meaning,
+            ranges, messages, field_interpretation, status, is_active, created_by, updated_by
+        ) VALUES (
+            :crop_code, :metric_key, :content_version, :display_name, :signal_meaning,
+            CAST(:ranges AS jsonb), CAST(:messages AS jsonb), CAST(:field_interpretation AS jsonb),
+            'draft', FALSE, :actor_user_id, :actor_user_id
+        ) RETURNING *;
+        """
+    )
+    params = {
+        "crop_code": source["crop_code"], "metric_key": source["metric_key"],
+        "content_version": new_version, "display_name": source["display_name"],
+        "signal_meaning": source["signal_meaning"], "ranges": _json(source["ranges"]),
+        "messages": _json(source["messages"]), "field_interpretation": _json(source["field_interpretation"]),
+        "actor_user_id": str(actor_user_id),
+    }
+    try:
+        with engine.begin() as conn:
+            row = dict(conn.execute(query, params).mappings().one())
+        audit_change(actor_user_id, "metric_content", row["content_id"], "clone", source, row)
+        return row
+    except SQLAlchemyError as exc:
+        raise FeatureEngineRepositoryError(f"Failed to clone metric content: {exc}") from exc
+
+
 def get_source_bundle(
     farm_id: UUID | str,
     *,

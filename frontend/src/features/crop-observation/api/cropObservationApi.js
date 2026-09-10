@@ -21,11 +21,23 @@ export function systemMediaUrl(path) {
  * (on tap, never preloaded — see PreviousEntryRow) and get back a blob URL.
  */
 export async function fetchAuthedMediaBlob(path) {
-  const url = `${serviceBaseUrl()}${servicePath(path)}`;
   const token = getAccessToken();
-  const response = await fetch(url, {
+  const accessPath = path.endsWith("/content")
+    ? path.replace(/\/content$/, "/access")
+    : path;
+  const accessResponse = await fetch(`${serviceBaseUrl()}${servicePath(accessPath)}`, {
     credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!accessResponse.ok) throw new Error("Could not authorize this media.");
+  const access = await accessResponse.json();
+  const external = Boolean(access.external) || /^https?:\/\//i.test(access.url);
+  const targetUrl = external
+    ? access.url
+    : `${serviceBaseUrl()}${servicePath(access.url)}`;
+  const response = await fetch(targetUrl, {
+    credentials: external ? "omit" : "include",
+    headers: !external && token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) throw new Error("Could not load this media.");
   return response.blob();
@@ -124,6 +136,15 @@ export function completeMediaUpload(mediaAssetId) {
   });
 }
 
+export function listOwnerMedia(ownerType, ownerId) {
+  const search = new URLSearchParams({ owner_type: ownerType, owner_id: ownerId });
+  return cropObservationClient.request(`${BASE}/media?${search.toString()}`);
+}
+
+export function deleteMedia(mediaAssetId) {
+  return cropObservationClient.request(`${BASE}/media/${mediaAssetId}`, { method: "DELETE" });
+}
+
 /**
  * Full three-step upload: request an upload slot, PUT the raw bytes to it
  * (works unchanged whether the backend hands back a local-content URL or a
@@ -150,12 +171,20 @@ export async function uploadMedia({
     duration_seconds: durationSeconds ?? null,
   });
 
-  const putUrl = `${serviceBaseUrl()}${servicePath(uploadUrl)}`;
+  const isAbsoluteUpload = /^https?:\/\//i.test(uploadUrl);
+  const putUrl = isAbsoluteUpload
+    ? uploadUrl
+    : `${serviceBaseUrl()}${servicePath(uploadUrl)}`;
   const token = getAccessToken();
   const putResponse = await fetch(putUrl, {
     method: method || "PUT",
-    credentials: "include",
-    headers: { ...(headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    // Never send MaatiTrace cookies/JWT to a presigned S3 URL. The signature
+    // in the URL is the temporary upload authorization.
+    credentials: isAbsoluteUpload ? "omit" : "include",
+    headers: {
+      ...(headers || {}),
+      ...(!isAbsoluteUpload && token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: file,
   });
   if (!putResponse.ok) throw new Error("Could not upload the file.");

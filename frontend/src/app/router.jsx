@@ -9,11 +9,13 @@ import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
 import {
+  CropLanguagePage,
   CropStagePage,
   MyCropsPage,
   ObservationHistoryPage,
 } from "@/features/crop-observation";
 import {
+  CropObservationAdminHubPage,
   CropConfigurationEditorPage,
   CropConfigurationPage,
   FarmerObservationMonitorPage,
@@ -55,6 +57,8 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute permission="cropObservationAdmin" />,
     children: [
+      { path: "/admin/crop-observation", element: <CropObservationAdminHubPage /> },
+      { path: "/admin/crop-observation/config/:cropCode", element: <CropConfigurationEditorPage /> },
       { path: "/admin/crop-observations", element: <FarmerObservationMonitorPage /> },
       { path: "/admin/crop-observations/config", element: <CropConfigurationPage /> },
       { path: "/admin/crop-observations/config/:cropCode", element: <CropConfigurationEditorPage /> },
@@ -73,6 +77,7 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute permission="cropDiary" />,
     children: [
+      { path: "/my-crops/language", element: <CropLanguagePage /> },
       { path: "/my-crops", element: <MyCropsPage /> },
       { path: "/my-crops/:farmId/:cropCycleId/history", element: <ObservationHistoryPage /> },
       { path: "/my-crops/:farmId/:cropCycleId/:stageCode", element: <CropStagePage /> },
