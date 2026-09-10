@@ -22,6 +22,7 @@ import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
 
 import AdminDashboard from "@/pages/AdminDashboard";
+import SystemManagementPage from "@/pages/SystemManagementPage";
 import BulkUpload from "@/pages/BulkUpload";
 import FarmRegister from "@/pages/FarmRegister";
 import FarmerProfile from "@/pages/FarmerProfile";
@@ -48,6 +49,8 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="adminDashboard" />, children: [
     { path: "/admin", element: <AdminDashboard /> },
     { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
+    { path: "/admin/system", element: <SystemManagementPage /> },
+    { path: "/admin/feature-processing", element: <SystemManagementPage /> },
   ] },
   {
     element: <ProtectedRoute permission="cropObservationAdmin" />,

@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     lakehouse_writer_service_url: str = "http://localhost:8009"
     hot_stream_orchestrator_service_url: str = "http://localhost:8010"
     analytics_query_service_url: str = "http://localhost:8011"
+    observability_service_url: str = "http://localhost:8014"
     crop_observation_service_url: str = "http://localhost:8015"
 
     # API gateway upstream connection pool

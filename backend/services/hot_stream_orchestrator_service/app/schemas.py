@@ -57,3 +57,13 @@ class FarmAnalysisMaterializeResponse(BaseModel):
 
     status: Literal["materialized"]
     details: dict[str, Any] = {}
+
+
+class Sentinel2HistoryBackfillRequest(BaseModel):
+    start_date: str = Field(..., description="YYYY-MM-DD")
+    end_date: str = Field(..., description="YYYY-MM-DD")
+    max_cloud_cover: float | None = Field(default=40, ge=0, le=100)
+    max_scenes: int = Field(default=31, ge=1, le=100)
+    provider: str = "planetary_computer"
+    collection_id: str = "sentinel-2-l2a"
+    force_refresh: bool = False

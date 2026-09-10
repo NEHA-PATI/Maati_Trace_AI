@@ -12,6 +12,7 @@ def valid_payload():
     return {
         "farmer_id": "11111111-1111-1111-1111-111111111111",
         "farm_name": " Test Farm ",
+        "crop_code": "coconut",
         "state_name": "Odisha",
         "district_name": "Puri",
         "block_code": 123,

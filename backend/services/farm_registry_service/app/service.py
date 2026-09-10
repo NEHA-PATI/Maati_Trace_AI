@@ -185,6 +185,14 @@ def register_farm(context: RequestContext, payload: FarmRegisterRequest) -> dict
             409,
         )
 
+    crop_profile = repository.get_active_crop_registration_option(payload.crop_code)
+    if crop_profile is None:
+        raise FarmRegistryError(
+            "FARM_CROP_UNSUPPORTED",
+            "Select an active crop configured by the MaatiTrace administrator.",
+            422,
+        )
+
     try:
         area_acres = calculate_area_acres(payload.polygon)
     except FarmGeometryError as exc:
@@ -216,6 +224,11 @@ def register_farm(context: RequestContext, payload: FarmRegisterRequest) -> dict
                 "block_name": location.get("block_name"),
                 "block_code": location.get("block_code"),
                 "village_name": payload.village_name,
+                "crop_code": crop_profile["crop_code"],
+                "crop_name": crop_profile["crop_name"],
+                "crop_variety": payload.crop_variety,
+                "crop_stage": payload.crop_stage,
+                "planting_date": payload.planting_date,
                 "polygon_geojson": payload.polygon,
                 "h3_resolution": h3_result["resolution"],
                 "h3_cells": h3_result["h3_cells_bigint"],

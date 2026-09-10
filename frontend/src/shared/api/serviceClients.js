@@ -57,6 +57,9 @@ export const hotStreamClient =
 export const analyticsClient =
   createServiceClient("analytics");
 
+export const observabilityClient =
+  createServiceClient("observability");
+
 export const gatewayClient =
   createServiceClient("gateway");
 

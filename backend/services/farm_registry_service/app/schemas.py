@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
@@ -31,6 +31,10 @@ class FarmRegisterRequest(StrictModel):
     block_name: str | None = Field(default=None, max_length=100)
     block_code: int | None = Field(default=None, ge=1)
     village_name: str | None = Field(default=None, max_length=150)
+    crop_code: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9_\-]+$")
+    crop_variety: str | None = Field(default=None, max_length=120)
+    crop_stage: str | None = Field(default=None, max_length=120)
+    planting_date: date | None = None
     polygon: dict[str, Any]
     h3_resolution: int = Field(default=12, ge=7, le=12)
 
@@ -41,6 +45,9 @@ class FarmRegisterRequest(StrictModel):
         "district_name",
         "block_name",
         "village_name",
+        "crop_code",
+        "crop_variety",
+        "crop_stage",
     )
     @classmethod
     def clean_text(cls, value: str | None) -> str | None:
@@ -69,6 +76,11 @@ class FarmResponse(StrictModel):
     block_name: str | None = None
     block_code: int | None = None
     village_name: str | None = None
+    crop_code: str | None = None
+    crop_name: str | None = None
+    crop_variety: str | None = None
+    crop_stage: str | None = None
+    planting_date: date | None = None
     polygon_geojson: dict[str, Any]
     h3_resolution: int
     h3_cell_count: int

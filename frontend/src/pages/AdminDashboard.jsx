@@ -315,6 +315,18 @@ export default function AdminDashboard() {
 
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="border-b border-gray-100 px-4 py-3">
+              <span className="text-sm font-semibold text-gray-800">System Management</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              <Link to="/admin/system" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <p className="text-sm font-semibold text-gray-800">Feature Engine &amp; pipelines</p>
+                <p className="text-xs text-gray-500">Crop profiles, formulas, raster, analytics, hot stream</p>
+              </Link>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-4 py-3">
               <span className="text-sm font-semibold text-gray-800">Crop Observations</span>
             </div>
             <div className="divide-y divide-gray-50">

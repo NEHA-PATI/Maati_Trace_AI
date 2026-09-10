@@ -44,3 +44,38 @@ export async function getFarmGridCellDetails(farmId, gridCellId) {
   return analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells/${gridCellId}/details`);
 }
 
+/* ---------------- Crop feature/formula engine ---------------- */
+
+export async function getCropProfiles() {
+  return extractItems(await analyticsClient.request(`/v1/analytics/crop-profiles`));
+}
+export async function getCalculatedComponents() {
+  return extractItems(await analyticsClient.request(`/v1/analytics/components`));
+}
+export async function getCropFormulas(cropCode = "") {
+  const query = cropCode ? `?crop_code=${encodeURIComponent(cropCode)}` : "";
+  return extractItems(await analyticsClient.request(`/v1/analytics/formulas${query}`));
+}
+export async function getLatestGridCalculations(farmId) {
+  return extractItems(await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-calculations/latest`));
+}
+export async function getLatestFarmCalculations(farmId, scope = "farm") {
+  return extractItems(
+    await analyticsClient.request(`/v1/analytics/farms/${farmId}/calculations/latest?scope=${encodeURIComponent(scope)}`),
+  );
+}
+export async function getGridCellCalculations(farmId, gridCellId) {
+  return extractItems(
+    await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-cells/${gridCellId}/calculations`),
+  );
+}
+export async function materializeFarmFeatures(farmId, payload) {
+  return analyticsClient.request(`/v1/analytics/farms/${farmId}/features/materialize`, { method: "POST", body: payload });
+}
+export async function materializeFarmCalculations(farmId, payload) {
+  return analyticsClient.request(`/v1/analytics/farms/${farmId}/calculations/materialize`, { method: "POST", body: payload });
+}
+export async function materializeFarmIntelligence(farmId, payload) {
+  return analyticsClient.request(`/v1/analytics/farms/${farmId}/intelligence/materialize`, { method: "POST", body: payload });
+}
+

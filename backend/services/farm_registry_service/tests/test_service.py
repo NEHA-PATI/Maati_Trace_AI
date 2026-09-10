@@ -42,6 +42,7 @@ def payload(farmer_id=FARMER_ID):
         {
             "farmer_id": str(farmer_id),
             "farm_name": "Test Farm",
+            "crop_code": "coconut",
             "state_name": "Odisha",
             "district_name": "Puri",
             "block_code": 123,
@@ -89,6 +90,11 @@ def created_farm_row():
         "block_name": "Sadar",
         "block_code": 123,
         "village_name": None,
+        "crop_code": "coconut",
+        "crop_name": "Coconut",
+        "crop_variety": None,
+        "crop_stage": None,
+        "planting_date": None,
         "polygon_geojson": payload().polygon,
         "h3_resolution": 12,
         "h3_cell_count": 1,
@@ -137,6 +143,16 @@ def configure_success(monkeypatch, *, complete=True):
             "h3_cells_bigint": [123456789],
             "cell_count": 1,
             "bbox": [85.831, 19.814, 85.833, 19.816],
+        },
+    )
+    monkeypatch.setattr(
+        service.repository,
+        "get_active_crop_registration_option",
+        lambda _crop_code: {
+            "crop_code": "coconut",
+            "crop_name": "Coconut",
+            "profile_version": "coconut_v1",
+            "crop_type": "perennial",
         },
     )
     monkeypatch.setattr(
