@@ -3,7 +3,7 @@ from services.hot_stream_orchestrator_service.app.environment_schemas import (
 )
 
 
-def test_environment_refresh_does_not_replace_sentinel2():
-    assert "sentinel_2_l2a" not in DEFAULT_ENVIRONMENT_DATASETS
+def test_environment_refresh_includes_sentinel2_with_all_environment_datasets():
+    assert "sentinel_2_l2a" in DEFAULT_ENVIRONMENT_DATASETS
     assert "landsat_c2_l2" in DEFAULT_ENVIRONMENT_DATASETS
     assert "sentinel_1_rtc" in DEFAULT_ENVIRONMENT_DATASETS

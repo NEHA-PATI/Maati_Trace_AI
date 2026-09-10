@@ -86,3 +86,20 @@ export async function cloneCropConfiguration(payload) {
 export async function getComponentCatalog() {
   return items(await analyticsClient.request(`/v1/analytics/components`));
 }
+
+export async function getAdminMetricContent(cropCode = "") {
+  const query = cropCode ? `?crop_code=${encodeURIComponent(cropCode)}` : "";
+  return items(await analyticsClient.request(`/v1/analytics/admin/metric-content${query}`));
+}
+export async function updateMetricContent(contentId, payload) {
+  return analyticsClient.request(`/v1/analytics/admin/metric-content/${contentId}`, { method: "PUT", body: payload });
+}
+export async function cloneMetricContent(contentId, newVersion) {
+  return analyticsClient.request(`/v1/analytics/admin/metric-content/${contentId}/clone`, {
+    method: "POST",
+    body: { new_version: newVersion },
+  });
+}
+export async function publishMetricContent(contentId) {
+  return analyticsClient.request(`/v1/analytics/admin/metric-content/${contentId}/publish`, { method: "POST", body: {} });
+}

@@ -20,6 +20,7 @@ from services.crop_observation_service.app.middleware import (
 )
 from services.crop_observation_service.app.routers import (
     admin,
+    admin_extended,
     crops,
     farm_crops,
     history,
@@ -161,3 +162,4 @@ app.include_router(media.router)
 app.include_router(system_media.router)
 app.include_router(history.router)
 app.include_router(admin.router)
+app.include_router(admin_extended.router)

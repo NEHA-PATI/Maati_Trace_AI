@@ -88,7 +88,7 @@ def materialize_features(
         )
         if not rows:
             raise FeatureEngineError(
-                "No usable Sentinel-2 H3 anchor observations were found in the requested period. Backfill Sentinel-2 history first.",
+                "No usable H3 environmental observations were found in the requested period. Process at least one H3-compatible environmental dataset first.",
                 "FEATURE_ANCHOR_DATA_MISSING",
                 409,
             )

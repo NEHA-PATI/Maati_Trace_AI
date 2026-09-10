@@ -50,15 +50,26 @@ def save_daily_status(
 
     # observed_on is always decided by the server for an online save — never
     # the client's clock, and never rewritten by a later edit on the same day.
+    observed_on = today_ist()
+    previous = repo.get_daily_observation_by_key(crop_cycle_id, stage_code, observed_on)
     row = repo.upsert_daily_status(
         crop_cycle_id=crop_cycle_id,
         config_version_id=cycle["config_version_id"],
         stage_code=stage_code,
-        observed_on=today_ist(),
+        observed_on=observed_on,
         crop_status=payload.crop_status,
         client_entry_id=payload.client_entry_id,
         captured_at_client=payload.captured_at_client,
     )
+
+    if previous is not None and previous.get("crop_status") != row.get("crop_status"):
+        repo.create_observation_revision(
+            observation_type="DAILY_STAGE",
+            observation_id=row["daily_observation_id"],
+            previous_payload={"crop_status": previous.get("crop_status")},
+            new_payload={"crop_status": row.get("crop_status")},
+            changed_by_user_id=context.principal.user_id,
+        )
 
     if payload.crop_status == "SERIOUS_PROBLEM":
         farm_crop = repo.get_farm_crop(cycle["farm_crop_id"])
@@ -106,8 +117,8 @@ def save_practice_observation(
             404,
         )
 
-    # A practice can only be recorded against today's daily status — create
-    # it (defaulting to GOOD) if the farmer hasn't logged a status yet today.
+    # A practice can only be recorded after today's crop status exists.
+    # Never infer GOOD: opening Pest/Disease may be the reason the farmer is here.
     daily = repo.get_daily_observation_by_key(crop_cycle_id, stage_code, today_ist())
     if daily is None:
         raise CropObservationError(
@@ -120,6 +131,9 @@ def save_practice_observation(
         stage_practice_id=stage_practice["stage_practice_id"],
         answers=payload.answers,
     )
+    previous_practice = repo.get_practice_observation_by_daily_code(
+        daily["daily_observation_id"], practice_code
+    )
 
     row = repo.upsert_practice_observation(
         daily_observation_id=daily["daily_observation_id"],
@@ -128,6 +142,15 @@ def save_practice_observation(
         answers=validated_answers,
         client_entry_id=payload.client_entry_id,
     )
+
+    if previous_practice is not None and previous_practice.get("answers") != row.get("answers"):
+        repo.create_observation_revision(
+            observation_type="PRACTICE",
+            observation_id=row["practice_observation_id"],
+            previous_payload={"answers": previous_practice.get("answers") or {}},
+            new_payload={"answers": row.get("answers") or {}},
+            changed_by_user_id=context.principal.user_id,
+        )
 
     return PracticeObservationResponse(
         practice_observation_id=row["practice_observation_id"],

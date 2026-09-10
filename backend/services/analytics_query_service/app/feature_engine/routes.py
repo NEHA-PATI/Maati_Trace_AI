@@ -22,6 +22,7 @@ from services.analytics_query_service.app.feature_engine.schemas import (
     FormulaCreateRequest,
     FormulaUpdateRequest,
     IntelligenceMaterializeRequest,
+    MetricContentUpdateRequest,
     SeedFormulasRequest,
 )
 from services.analytics_query_service.app.feature_engine.service import (
@@ -70,6 +71,11 @@ def formulas(crop_code: str | None = Query(default=None)):
 @router.get("/v1/analytics/components")
 def components():
     return {"items": repository.get_component_catalog()}
+
+
+@router.get("/v1/analytics/metric-content")
+def metric_content(crop_code: str | None = Query(default=None)):
+    return {"items": repository.list_public_metric_content(crop_code)}
 
 
 @router.post("/v1/analytics/farms/{farm_id}/features/materialize")
@@ -152,6 +158,53 @@ def grid_cell_calculations(farm_id: UUID, grid_cell_id: UUID):
 
 
 # ---------------- Admin crop / formula configuration ----------------
+@router.get("/v1/analytics/admin/metric-content")
+def admin_metric_content(
+    crop_code: str | None = Query(default=None),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    _admin(authorization)
+    return {"items": repository.admin_list_metric_content(crop_code)}
+
+
+@router.put("/v1/analytics/admin/metric-content/{content_id}")
+def admin_update_metric_content(
+    content_id: UUID,
+    payload: MetricContentUpdateRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    user = _admin(authorization)
+    try:
+        return repository.admin_update_metric_content(content_id, payload.model_dump(), user["user_id"])
+    except Exception as exc:
+        _raise_feature_error(exc)
+
+
+@router.post("/v1/analytics/admin/metric-content/{content_id}/clone", status_code=201)
+def admin_clone_metric_content(
+    content_id: UUID,
+    payload: CloneVersionRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    user = _admin(authorization)
+    try:
+        return repository.admin_clone_metric_content(content_id, payload.new_version, user["user_id"])
+    except Exception as exc:
+        _raise_feature_error(exc)
+
+
+@router.post("/v1/analytics/admin/metric-content/{content_id}/publish")
+def admin_publish_metric_content(
+    content_id: UUID,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    user = _admin(authorization)
+    try:
+        return repository.admin_publish_metric_content(content_id, user["user_id"])
+    except Exception as exc:
+        _raise_feature_error(exc)
+
+
 @router.get("/v1/analytics/admin/crop-profiles")
 def admin_profiles(
     include_inactive: bool = Query(default=True),

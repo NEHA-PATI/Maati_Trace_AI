@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -86,14 +86,38 @@ def list_active_crops(*, locale: str) -> list[dict[str, Any]]:
 
     images = _run(
         """
-        SELECT DISTINCT ON (crop_id) crop_id, asset_id
-        FROM crop_observation.system_media_assets
-        WHERE crop_id = ANY(:crop_ids) AND asset_type = 'CROP_CARD_IMAGE' AND is_active = true
-        ORDER BY crop_id, created_at DESC;
+        SELECT DISTINCT ON (smb.target_id)
+            smb.target_id AS crop_id, sma.asset_id
+        FROM crop_observation.system_media_bindings smb
+        JOIN crop_observation.system_media_assets sma
+          ON sma.asset_id = smb.asset_id
+        WHERE smb.target_type = 'CROP'
+          AND smb.asset_role = 'CROP_CARD_IMAGE'
+          AND smb.target_id = ANY(:crop_ids)
+          AND smb.is_active = true
+          AND sma.upload_status = 'READY'
+        ORDER BY smb.target_id, smb.created_at DESC;
         """,
         {"crop_ids": [row["crop_id"] for row in crops]},
     )
     image_by_crop = {row["crop_id"]: row["asset_id"] for row in images}
+
+    # Legacy fallback during the binding migration.
+    missing_crop_ids = [row["crop_id"] for row in crops if row["crop_id"] not in image_by_crop]
+    if missing_crop_ids:
+        legacy_images = _run(
+            """
+            SELECT DISTINCT ON (crop_id) crop_id, asset_id
+            FROM crop_observation.system_media_assets
+            WHERE crop_id = ANY(:crop_ids)
+              AND asset_type = 'CROP_CARD_IMAGE'
+              AND is_active = true
+              AND upload_status = 'READY'
+            ORDER BY crop_id, created_at DESC;
+            """,
+            {"crop_ids": missing_crop_ids},
+        )
+        image_by_crop.update({row["crop_id"]: row["asset_id"] for row in legacy_images})
 
     items = []
     for crop in crops:
@@ -339,6 +363,50 @@ def get_stage_practices_full(stage_id: UUID) -> dict[str, Any]:
         for field_options in options_by_field.values():
             for option in field_options:
                 option["translations"] = option_translations_by_option.get(option["field_option_id"], [])
+
+        option_media = _run(
+            """
+            SELECT DISTINCT ON (smb.target_id)
+                smb.target_id, sma.asset_id
+            FROM crop_observation.system_media_bindings smb
+            JOIN crop_observation.system_media_assets sma ON sma.asset_id = smb.asset_id
+            WHERE smb.target_type = 'FIELD_OPTION'
+              AND smb.asset_role = 'OPTION_IMAGE'
+              AND smb.target_id = ANY(:ids)
+              AND smb.is_active = true
+              AND sma.upload_status = 'READY'
+            ORDER BY smb.target_id, smb.created_at DESC;
+            """,
+            {"ids": [o["field_option_id"] for o in options]},
+        )
+        option_media_by_id = {row["target_id"]: row["asset_id"] for row in option_media}
+        for field_options in options_by_field.values():
+            for option in field_options:
+                asset_id = option_media_by_id.get(option["field_option_id"])
+                option["image_url"] = (
+                    f"/v1/crop-observations/system-media/{asset_id}/content" if asset_id else None
+                )
+
+    guides = _run(
+        """
+        SELECT sma.asset_id
+        FROM crop_observation.system_media_bindings smb
+        JOIN crop_observation.system_media_assets sma ON sma.asset_id = smb.asset_id
+        WHERE smb.target_type = 'STAGE_PRACTICE'
+          AND smb.target_id = ANY(:ids)
+          AND smb.asset_role = 'PRACTICE_GUIDE_IMAGE'
+          AND smb.is_active = true
+          AND sma.upload_status = 'READY'
+        ORDER BY smb.created_at DESC;
+        """,
+        {"ids": stage_practice_ids},
+    )
+    guide_by_practice = {row["target_id"]: row["asset_id"] for row in guides}
+    for practice in practices:
+        asset_id = guide_by_practice.get(practice["stage_practice_id"])
+        practice["guide_image_url"] = (
+            f"/v1/crop-observations/system-media/{asset_id}/content" if asset_id else None
+        )
 
     return {"practices": practices, "fields_by_practice": fields_by_practice, "options_by_field": options_by_field}
 
@@ -783,6 +851,46 @@ def count_owner_media(owner_type: str, owner_id: UUID, media_role: str) -> int:
     return int(rows[0]["media_count"]) if rows else 0
 
 
+def cleanup_expired_media_requests(owner_type: str, owner_id: UUID) -> int:
+    """Release slots reserved by abandoned upload tickets.
+
+    A browser may request a presigned/local upload URL and then close before
+    uploading. Those REQUESTED rows must not permanently consume one of the
+    farmer's two image slots. The physical object, if any, is intentionally
+    not deleted here; the maintenance script handles orphan cleanup safely.
+    """
+    row = _run_write(
+        """
+        WITH expired AS (
+            SELECT ma.media_asset_id
+            FROM crop_observation.media_assets ma
+            JOIN crop_observation.observation_media om
+              ON om.media_asset_id = ma.media_asset_id
+            WHERE om.owner_type = :owner_type
+              AND om.owner_id = :owner_id
+              AND ma.upload_status = 'REQUESTED'
+              AND COALESCE(
+                    ma.upload_expires_at,
+                    ma.created_at + interval '15 minutes'
+                  ) <= now()
+        ),
+        removed AS (
+            DELETE FROM crop_observation.observation_media om
+            USING expired e
+            WHERE om.media_asset_id = e.media_asset_id
+            RETURNING om.media_asset_id
+        )
+        UPDATE crop_observation.media_assets ma
+        SET upload_status = 'REJECTED', updated_at = now()
+        FROM expired e
+        WHERE ma.media_asset_id = e.media_asset_id
+        RETURNING ma.media_asset_id;
+        """,
+        {"owner_type": owner_type, "owner_id": owner_id},
+    )
+    return 1 if row else 0
+
+
 def count_owner_media_by_purpose(owner_type: str, owner_id: UUID, media_role: str, media_purpose: str) -> int:
     rows = _run(
         """
@@ -793,7 +901,16 @@ def count_owner_media_by_purpose(owner_type: str, owner_id: UUID, media_role: st
           AND om.owner_id = :owner_id
           AND om.media_role = :media_role
           AND om.media_purpose = :media_purpose
-          AND ma.upload_status != 'DELETED';
+          AND (
+                ma.upload_status IN ('UPLOADED', 'VERIFIED', 'READY')
+                OR (
+                    ma.upload_status = 'REQUESTED'
+                    AND COALESCE(
+                        ma.upload_expires_at,
+                        ma.created_at + interval '15 minutes'
+                    ) > now()
+                )
+              );
         """,
         {
             "owner_type": owner_type,
@@ -808,12 +925,23 @@ def count_owner_media_by_purpose(owner_type: str, owner_id: UUID, media_role: st
 def next_owner_media_slot(owner_type: str, owner_id: UUID, media_role: str, media_purpose: str) -> int:
     rows = _run(
         """
-        SELECT COALESCE(MAX(slot_number), 0) + 1 AS next_slot
-        FROM crop_observation.observation_media
-        WHERE owner_type = :owner_type
-          AND owner_id = :owner_id
-          AND media_role = :media_role
-          AND media_purpose = :media_purpose;
+        SELECT COALESCE(MAX(om.slot_number), 0) + 1 AS next_slot
+        FROM crop_observation.observation_media om
+        JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
+        WHERE om.owner_type = :owner_type
+          AND om.owner_id = :owner_id
+          AND om.media_role = :media_role
+          AND om.media_purpose = :media_purpose
+          AND (
+                ma.upload_status IN ('UPLOADED', 'VERIFIED', 'READY')
+                OR (
+                    ma.upload_status = 'REQUESTED'
+                    AND COALESCE(
+                        ma.upload_expires_at,
+                        ma.created_at + interval '15 minutes'
+                    ) > now()
+                )
+              );
         """,
         {
             "owner_type": owner_type,
@@ -834,21 +962,26 @@ def create_media_asset(
     mime_type: str,
     byte_size: int,
     duration_seconds: float | None,
+    storage_backend: str,
+    original_filename: str | None = None,
+    upload_expires_at: datetime | None = None,
 ) -> dict[str, Any]:
     return _run_write(
         """
         INSERT INTO crop_observation.media_assets (
             owner_user_id, bucket_name, object_key, media_type, mime_type,
-            byte_size, duration_seconds, upload_status
+            byte_size, duration_seconds, upload_status, storage_backend,
+            original_filename, upload_expires_at
         )
         VALUES (
             :owner_user_id, :bucket_name, :object_key, :media_type, :mime_type,
-            :byte_size, :duration_seconds, 'REQUESTED'
+            :byte_size, :duration_seconds, 'REQUESTED', :storage_backend,
+            :original_filename, :upload_expires_at
         )
         RETURNING
             media_asset_id, owner_user_id, bucket_name, object_key, media_type,
-            mime_type, byte_size, duration_seconds, checksum_sha256,
-            upload_status, created_at, uploaded_at, verified_at;
+            mime_type, byte_size, duration_seconds, checksum_sha256, upload_status,
+            storage_backend, original_filename, upload_expires_at, created_at, uploaded_at, verified_at;
         """,
         {
             "owner_user_id": owner_user_id,
@@ -858,6 +991,9 @@ def create_media_asset(
             "mime_type": mime_type,
             "byte_size": byte_size,
             "duration_seconds": duration_seconds,
+            "storage_backend": storage_backend,
+            "original_filename": original_filename,
+            "upload_expires_at": upload_expires_at,
         },
     )
 
@@ -868,7 +1004,8 @@ def get_media_asset(media_asset_id: UUID) -> dict[str, Any] | None:
         SELECT
             media_asset_id, owner_user_id, bucket_name, object_key, media_type,
             mime_type, byte_size, duration_seconds, checksum_sha256,
-            upload_status, created_at, uploaded_at, verified_at
+            upload_status, storage_backend, original_filename, upload_expires_at, updated_at,
+            created_at, uploaded_at, verified_at
         FROM crop_observation.media_assets
         WHERE media_asset_id = :media_asset_id;
         """,
@@ -885,7 +1022,8 @@ def mark_media_ready(media_asset_id: UUID) -> dict[str, Any] | None:
         RETURNING
             media_asset_id, owner_user_id, bucket_name, object_key, media_type,
             mime_type, byte_size, duration_seconds, checksum_sha256,
-            upload_status, created_at, uploaded_at, verified_at;
+            upload_status, storage_backend, original_filename, upload_expires_at, updated_at,
+            created_at, uploaded_at, verified_at;
         """,
         {"media_asset_id": media_asset_id},
     )
@@ -924,7 +1062,7 @@ def list_media_for_owner(owner_type: str, owner_id: UUID) -> list[dict[str, Any]
         """
         SELECT
             om.media_role, om.owner_id, ma.media_asset_id, ma.media_type, ma.mime_type,
-            ma.upload_status, ma.duration_seconds, om.media_purpose, om.slot_number
+            ma.upload_status, ma.duration_seconds, ma.byte_size, om.media_purpose, om.slot_number
         FROM crop_observation.observation_media om
         JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
         WHERE om.owner_type = :owner_type
@@ -933,6 +1071,44 @@ def list_media_for_owner(owner_type: str, owner_id: UUID) -> list[dict[str, Any]
         ORDER BY ma.created_at;
         """,
         {"owner_type": owner_type, "owner_id": owner_id},
+    )
+
+
+def delete_media_asset(media_asset_id: UUID) -> dict[str, Any] | None:
+    """Soft-delete the asset and its relationship in one transaction."""
+    return _run_write(
+        """
+        WITH detached AS (
+            DELETE FROM crop_observation.observation_media
+            WHERE media_asset_id = :media_asset_id
+            RETURNING media_asset_id
+        )
+        UPDATE crop_observation.media_assets
+        SET upload_status = 'DELETED', updated_at = now()
+        WHERE media_asset_id = :media_asset_id
+          AND upload_status != 'DELETED'
+        RETURNING media_asset_id, object_key, storage_backend, owner_user_id;
+        """,
+        {"media_asset_id": media_asset_id},
+    )
+
+
+def get_media_owner(media_asset_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT COALESCE(ds.crop_cycle_id, dp.crop_cycle_id) AS crop_cycle_id,
+               om.owner_type, om.owner_id
+        FROM crop_observation.observation_media om
+        JOIN crop_observation.media_assets ma ON ma.media_asset_id = om.media_asset_id
+        LEFT JOIN crop_observation.daily_stage_observations ds
+          ON om.owner_type = 'DAILY_STAGE' AND ds.daily_observation_id = om.owner_id
+        LEFT JOIN crop_observation.practice_observations po
+          ON om.owner_type = 'PRACTICE' AND po.practice_observation_id = om.owner_id
+        LEFT JOIN crop_observation.daily_stage_observations dp
+          ON po.daily_observation_id = dp.daily_observation_id
+        WHERE ma.media_asset_id = :media_asset_id;
+        """,
+        {"media_asset_id": media_asset_id},
     )
 
 
@@ -1308,3 +1484,446 @@ def create_review_flag(
             "priority": priority,
         },
     )
+
+# =============================================================================
+# Production-final system media / review overrides.
+# These binding-first helpers intentionally supersede the legacy direct
+# crop_id/stage_id media lookup functions above while preserving legacy rows as
+# a fallback during migration.
+# =============================================================================
+
+
+def get_system_media_asset(asset_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
+            mime_type, byte_size, locale, duration_seconds, storage_backend,
+            original_filename, is_active, upload_status, checksum_sha256,
+            created_by_user_id, upload_expires_at, created_at, updated_at
+        FROM crop_observation.system_media_assets
+        WHERE asset_id = :asset_id
+          AND upload_status = 'READY';
+        """,
+        {"asset_id": asset_id},
+    )
+
+
+def create_system_media_asset(
+    *,
+    asset_type: str,
+    crop_id: UUID | None,
+    stage_id: UUID | None,
+    bucket_name: str,
+    object_key: str,
+    mime_type: str,
+    byte_size: int,
+    locale: str | None,
+    duration_seconds: float | None,
+    storage_backend: str,
+    original_filename: str | None,
+    upload_status: str = "READY",
+    created_by_user_id: UUID | None = None,
+    is_active: bool = True,
+    upload_expires_at: datetime | None = None,
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.system_media_assets (
+            asset_type, crop_id, stage_id, bucket_name, object_key, mime_type,
+            byte_size, locale, duration_seconds, storage_backend,
+            original_filename, upload_status, created_by_user_id, is_active,
+            upload_expires_at
+        )
+        VALUES (
+            :asset_type, :crop_id, :stage_id, :bucket_name, :object_key, :mime_type,
+            :byte_size, :locale, :duration_seconds, :storage_backend,
+            :original_filename, :upload_status, :created_by_user_id, :is_active,
+            :upload_expires_at
+        )
+        RETURNING
+            asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
+            mime_type, byte_size, locale, duration_seconds, storage_backend,
+            original_filename, upload_status, created_by_user_id, is_active,
+            upload_expires_at, created_at, updated_at;
+        """,
+        {
+            "asset_type": asset_type,
+            "crop_id": crop_id,
+            "stage_id": stage_id,
+            "bucket_name": bucket_name,
+            "object_key": object_key,
+            "mime_type": mime_type,
+            "byte_size": byte_size,
+            "locale": locale,
+            "duration_seconds": duration_seconds,
+            "storage_backend": storage_backend,
+            "original_filename": original_filename,
+            "upload_status": upload_status,
+            "created_by_user_id": created_by_user_id,
+            "is_active": is_active,
+            "upload_expires_at": upload_expires_at,
+        },
+    )
+
+
+def mark_system_media_ready(asset_id: UUID) -> dict[str, Any] | None:
+    return _run_write(
+        """
+        UPDATE crop_observation.system_media_assets
+        SET upload_status = 'READY', is_active = true, updated_at = now()
+        WHERE asset_id = :asset_id
+        RETURNING
+            asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
+            mime_type, byte_size, locale, duration_seconds, storage_backend,
+            original_filename, upload_status, created_by_user_id, is_active,
+            upload_expires_at, created_at, updated_at;
+        """,
+        {"asset_id": asset_id},
+    )
+
+
+def get_system_media_asset_any_status(asset_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
+            mime_type, byte_size, locale, duration_seconds, storage_backend,
+            original_filename, is_active, upload_status, checksum_sha256,
+            created_by_user_id, upload_expires_at, created_at, updated_at
+        FROM crop_observation.system_media_assets
+        WHERE asset_id = :asset_id;
+        """,
+        {"asset_id": asset_id},
+    )
+
+
+def activate_system_media_binding(
+    *,
+    asset_id: UUID,
+    target_type: str,
+    target_id: UUID,
+    asset_role: str,
+    locale: str | None,
+    slot_number: int | None = None,
+) -> dict[str, Any]:
+    """Atomically replace the active logical binding for the target/role."""
+    return _run_write(
+        """
+        WITH deactivated AS (
+            UPDATE crop_observation.system_media_bindings
+            SET is_active = false
+            WHERE target_type = :target_type
+              AND target_id = :target_id
+              AND asset_role = :asset_role
+              AND COALESCE(locale, '') = COALESCE(:locale, '')
+              AND COALESCE(slot_number, -1) = COALESCE(:slot_number, -1)
+              AND is_active = true
+            RETURNING binding_id
+        )
+        INSERT INTO crop_observation.system_media_bindings (
+            asset_id, target_type, target_id, asset_role, locale, slot_number, is_active
+        )
+        VALUES (
+            :asset_id, :target_type, :target_id, :asset_role, :locale, :slot_number, true
+        )
+        RETURNING binding_id, asset_id, target_type, target_id, asset_role,
+                  locale, slot_number, is_active, created_at;
+        """,
+        {
+            "asset_id": asset_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "asset_role": asset_role,
+            "locale": locale,
+            "slot_number": slot_number,
+        },
+    )
+
+
+def deactivate_system_media_binding(binding_id: UUID) -> dict[str, Any] | None:
+    return _run_write(
+        """
+        UPDATE crop_observation.system_media_bindings
+        SET is_active = false
+        WHERE binding_id = :binding_id AND is_active = true
+        RETURNING binding_id, asset_id, target_type, target_id, asset_role,
+                  locale, slot_number, is_active, created_at;
+        """,
+        {"binding_id": binding_id},
+    )
+
+
+def get_system_media_binding(binding_id: UUID) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT binding_id, asset_id, target_type, target_id, asset_role,
+               locale, slot_number, is_active
+        FROM crop_observation.system_media_bindings
+        WHERE binding_id = :binding_id;
+        """,
+        {"binding_id": binding_id},
+    )
+
+
+def list_system_media_bindings(
+    *,
+    target_type: str | None = None,
+    target_id: UUID | None = None,
+    asset_role: str | None = None,
+    locale: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    return _run(
+        """
+        SELECT
+            smb.binding_id, smb.asset_id, smb.target_type, smb.target_id,
+            smb.asset_role, smb.locale, smb.slot_number, smb.is_active,
+            sma.mime_type, sma.byte_size, sma.duration_seconds,
+            sma.storage_backend, sma.object_key, sma.upload_status,
+            sma.original_filename, sma.created_at
+        FROM crop_observation.system_media_bindings smb
+        JOIN crop_observation.system_media_assets sma ON sma.asset_id = smb.asset_id
+        WHERE smb.is_active = true
+          AND sma.upload_status = 'READY'
+          AND (:target_type IS NULL OR smb.target_type = :target_type)
+          AND (:target_id IS NULL OR smb.target_id = :target_id)
+          AND (:asset_role IS NULL OR smb.asset_role = :asset_role)
+          AND (:locale IS NULL OR smb.locale = :locale)
+        ORDER BY sma.created_at DESC
+        LIMIT :limit;
+        """,
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "asset_role": asset_role,
+            "locale": locale,
+            "limit": limit,
+        },
+    )
+
+
+def _get_bound_asset(
+    *,
+    target_type: str,
+    target_id: UUID,
+    asset_role: str,
+    locale: str | None = None,
+) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            sma.asset_id, sma.mime_type, sma.duration_seconds,
+            sma.storage_backend, sma.object_key
+        FROM crop_observation.system_media_bindings smb
+        JOIN crop_observation.system_media_assets sma ON sma.asset_id = smb.asset_id
+        WHERE smb.target_type = :target_type
+          AND smb.target_id = :target_id
+          AND smb.asset_role = :asset_role
+          AND COALESCE(smb.locale, '') = COALESCE(:locale, '')
+          AND smb.is_active = true
+          AND sma.upload_status = 'READY'
+        ORDER BY smb.created_at DESC
+        LIMIT 1;
+        """,
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "asset_role": asset_role,
+            "locale": locale,
+        },
+    )
+
+
+def get_crop_card_image(crop_id: UUID) -> dict[str, Any] | None:
+    bound = _get_bound_asset(
+        target_type="CROP",
+        target_id=crop_id,
+        asset_role="CROP_CARD_IMAGE",
+    )
+    if bound:
+        return bound
+    return _run_one(
+        """
+        SELECT asset_id, mime_type, storage_backend, object_key
+        FROM crop_observation.system_media_assets
+        WHERE crop_id = :crop_id
+          AND asset_type = 'CROP_CARD_IMAGE'
+          AND is_active = true
+          AND upload_status = 'READY'
+        ORDER BY created_at DESC LIMIT 1;
+        """,
+        {"crop_id": crop_id},
+    )
+
+
+def get_stage_image(stage_id: UUID) -> dict[str, Any] | None:
+    bound = _get_bound_asset(
+        target_type="STAGE",
+        target_id=stage_id,
+        asset_role="STAGE_IMAGE",
+    )
+    if bound:
+        return bound
+    return _run_one(
+        """
+        SELECT asset_id, mime_type, storage_backend, object_key
+        FROM crop_observation.system_media_assets
+        WHERE stage_id = :stage_id
+          AND asset_type = 'STAGE_IMAGE'
+          AND is_active = true
+          AND upload_status = 'READY'
+        ORDER BY created_at DESC LIMIT 1;
+        """,
+        {"stage_id": stage_id},
+    )
+
+
+def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any] | None:
+    bound = _get_bound_asset(
+        target_type="STAGE",
+        target_id=stage_id,
+        asset_role="INSTRUCTION_AUDIO",
+        locale=locale,
+    )
+    if bound:
+        return bound
+    return _run_one(
+        """
+        SELECT asset_id, mime_type, duration_seconds, storage_backend, object_key
+        FROM crop_observation.system_media_assets
+        WHERE stage_id = :stage_id
+          AND asset_type = 'STAGE_INSTRUCTION_AUDIO'
+          AND locale = :locale
+          AND is_active = true
+          AND upload_status = 'READY'
+        ORDER BY created_at DESC LIMIT 1;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+
+
+def create_review_flag(
+    *,
+    farmer_user_id: UUID,
+    farm_id: UUID,
+    crop_cycle_id: UUID,
+    source_type: str,
+    source_id: UUID,
+    flag_type: str,
+    priority: str,
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.review_flags (
+            farmer_user_id, farm_id, crop_cycle_id, source_type, source_id,
+            flag_type, priority, status
+        )
+        VALUES (
+            :farmer_user_id, :farm_id, :crop_cycle_id, :source_type, :source_id,
+            :flag_type, :priority, 'OPEN'
+        )
+        ON CONFLICT (source_type, source_id, flag_type) WHERE status = 'OPEN'
+        DO UPDATE SET priority = EXCLUDED.priority
+        RETURNING review_flag_id, status;
+        """,
+        {
+            "farmer_user_id": farmer_user_id,
+            "farm_id": farm_id,
+            "crop_cycle_id": crop_cycle_id,
+            "source_type": source_type,
+            "source_id": source_id,
+            "flag_type": flag_type,
+            "priority": priority,
+        },
+    )
+
+
+def get_practice_observation_by_daily_code(
+    daily_observation_id: UUID,
+    practice_code: str,
+) -> dict[str, Any] | None:
+    return _run_one(
+        """
+        SELECT
+            practice_observation_id, daily_observation_id, stage_practice_id,
+            practice_code, answers, completion_status, client_entry_id,
+            created_at, updated_at
+        FROM crop_observation.practice_observations
+        WHERE daily_observation_id = :daily_observation_id
+          AND practice_code = :practice_code;
+        """,
+        {"daily_observation_id": daily_observation_id, "practice_code": practice_code},
+    )
+
+
+def create_observation_revision(
+    *,
+    observation_type: str,
+    observation_id: UUID,
+    previous_payload: dict[str, Any] | None,
+    new_payload: dict[str, Any],
+    changed_by_user_id: UUID,
+) -> dict[str, Any]:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.observation_revisions (
+            observation_type, observation_id, revision_number,
+            previous_payload, new_payload, changed_by_user_id
+        )
+        SELECT
+            :observation_type,
+            :observation_id,
+            COALESCE(MAX(revision_number), 0) + 1,
+            CAST(:previous_payload AS jsonb),
+            CAST(:new_payload AS jsonb),
+            :changed_by_user_id
+        FROM crop_observation.observation_revisions
+        WHERE observation_type = :observation_type
+          AND observation_id = :observation_id
+        RETURNING revision_id, observation_type, observation_id,
+                  revision_number, previous_payload, new_payload,
+                  changed_by_user_id, changed_at;
+        """,
+        {
+            "observation_type": observation_type,
+            "observation_id": observation_id,
+            "previous_payload": json.dumps(previous_payload) if previous_payload is not None else None,
+            "new_payload": json.dumps(new_payload),
+            "changed_by_user_id": changed_by_user_id,
+        },
+    )
+
+
+def deactivate_system_media_for_target(
+    *,
+    target_type: str,
+    target_id: UUID,
+    asset_role: str,
+    locale: str | None = None,
+) -> int:
+    """Deactivate active logical bindings without deleting the physical asset."""
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text(
+                    """
+                    UPDATE crop_observation.system_media_bindings
+                    SET is_active = false
+                    WHERE target_type = :target_type
+                      AND target_id = :target_id
+                      AND asset_role = :asset_role
+                      AND COALESCE(locale, '') = COALESCE(:locale, '')
+                      AND is_active = true;
+                    """
+                ),
+                {
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "asset_role": asset_role,
+                    "locale": locale,
+                },
+            )
+            return int(result.rowcount or 0)
+    except SQLAlchemyError as exc:
+        raise CropObservationRepositoryError(str(exc)) from exc

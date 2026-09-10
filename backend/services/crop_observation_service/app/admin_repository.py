@@ -63,7 +63,7 @@ def _exec_write(query, params: dict[str, Any]) -> None:
 
 
 def list_all_crops() -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT crop_id, crop_code, lifecycle_type, default_stage_strategy,
                is_active, display_order
@@ -71,7 +71,18 @@ def list_all_crops() -> list[dict[str, Any]]:
         ORDER BY display_order;
         """,
         {},
-    )
+    )]
+    if rows:
+        translations = _run(
+            "SELECT crop_id, locale, display_name, short_description FROM crop_observation.crop_translations WHERE crop_id = ANY(:ids);",
+            {"ids": [row["crop_id"] for row in rows]},
+        )
+        by_id = {}
+        for item in translations:
+            by_id.setdefault(item["crop_id"], []).append(dict(item))
+        for row in rows:
+            row["translations"] = by_id.get(row["crop_id"], [])
+    return rows
 
 
 def create_crop(
@@ -268,6 +279,24 @@ def clone_configuration(
                         },
                     )
 
+                # System media is immutable/reusable. Clone only the logical
+                # bindings to the new stage; do not duplicate S3/local files.
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO crop_observation.system_media_bindings
+                            (asset_id, target_type, target_id, asset_role, locale, slot_number, is_active)
+                        SELECT asset_id, 'STAGE', :new_stage_id, asset_role, locale, slot_number, true
+                        FROM crop_observation.system_media_bindings
+                        WHERE target_type = 'STAGE'
+                          AND target_id = :source_stage_id
+                          AND is_active = true
+                        ON CONFLICT DO NOTHING;
+                        """
+                    ),
+                    {"new_stage_id": new_stage["stage_id"], "source_stage_id": stage["stage_id"]},
+                )
+
                 stage_practices = conn.execute(
                     text(
                         """
@@ -307,6 +336,22 @@ def clone_configuration(
                             "media_config": json.dumps(sp["media_config"] or {}),
                         },
                     ).mappings().first()
+
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO crop_observation.system_media_bindings
+                                (asset_id, target_type, target_id, asset_role, locale, slot_number, is_active)
+                            SELECT asset_id, 'STAGE_PRACTICE', :new_target, asset_role, locale, slot_number, true
+                            FROM crop_observation.system_media_bindings
+                            WHERE target_type = 'STAGE_PRACTICE'
+                              AND target_id = :source_target
+                              AND is_active = true
+                            ON CONFLICT DO NOTHING;
+                            """
+                        ),
+                        {"new_target": new_sp["stage_practice_id"], "source_target": sp["stage_practice_id"]},
+                    )
 
                     fields = conn.execute(
                         text(
@@ -396,6 +441,22 @@ def clone_configuration(
                                 },
                             ).mappings().first()
 
+                            conn.execute(
+                                text(
+                                    """
+                                    INSERT INTO crop_observation.system_media_bindings
+                                        (asset_id, target_type, target_id, asset_role, locale, slot_number, is_active)
+                                    SELECT asset_id, 'FIELD_OPTION', :new_target, asset_role, locale, slot_number, true
+                                    FROM crop_observation.system_media_bindings
+                                    WHERE target_type = 'FIELD_OPTION'
+                                      AND target_id = :source_target
+                                      AND is_active = true
+                                    ON CONFLICT DO NOTHING;
+                                    """
+                                ),
+                                {"new_target": new_option["field_option_id"], "source_target": option["field_option_id"]},
+                            )
+
                             option_translations = conn.execute(
                                 text(
                                     "SELECT locale, label FROM crop_observation.practice_field_option_translations "
@@ -453,7 +514,7 @@ def publish_configuration(config_version_id: UUID, *, published_by_user_id: UUID
 
 
 def list_stages_for_config(config_version_id: UUID) -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT stage_id, config_version_id, stage_code, display_order,
                is_initial, is_enabled, expected_start_day, expected_end_day
@@ -462,7 +523,17 @@ def list_stages_for_config(config_version_id: UUID) -> list[dict[str, Any]]:
         ORDER BY display_order;
         """,
         {"cv": config_version_id},
-    )
+    )]
+    translations = _run(
+        "SELECT stage_id, locale, display_name, short_description, instruction_text FROM crop_observation.crop_stage_translations WHERE stage_id = ANY(:ids);",
+        {"ids": [row["stage_id"] for row in rows]},
+    ) if rows else []
+    by_id = {}
+    for item in translations:
+        by_id.setdefault(item["stage_id"], []).append(dict(item))
+    for row in rows:
+        row["translations"] = by_id.get(row["stage_id"], [])
+    return rows
 
 
 def get_stage(stage_id: UUID) -> dict[str, Any] | None:
@@ -552,7 +623,7 @@ def upsert_stage_translation(stage_id: UUID, locale: str, fields: dict[str, Any]
 
 
 def list_practice_templates() -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT practice_template_id, practice_code, system_type, is_active
         FROM crop_observation.practice_templates
@@ -560,7 +631,17 @@ def list_practice_templates() -> list[dict[str, Any]]:
         ORDER BY practice_code;
         """,
         {},
-    )
+    )]
+    translations = _run(
+        "SELECT practice_template_id, locale, display_name, help_text FROM crop_observation.practice_translations WHERE practice_template_id = ANY(:ids);",
+        {"ids": [row["practice_template_id"] for row in rows]},
+    ) if rows else []
+    by_id = {}
+    for item in translations:
+        by_id.setdefault(item["practice_template_id"], []).append(dict(item))
+    for row in rows:
+        row["translations"] = by_id.get(row["practice_template_id"], [])
+    return rows
 
 
 def get_practice_template_by_code(practice_code: str) -> dict[str, Any] | None:
@@ -572,7 +653,7 @@ def get_practice_template_by_code(practice_code: str) -> dict[str, Any] | None:
 
 
 def list_stage_practices_for_stage(stage_id: UUID) -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT sp.stage_practice_id, sp.stage_id, sp.practice_template_id, pt.practice_code,
                sp.availability_scope, sp.display_order, sp.is_enabled, sp.media_config
@@ -582,7 +663,21 @@ def list_stage_practices_for_stage(stage_id: UUID) -> list[dict[str, Any]]:
         ORDER BY sp.display_order;
         """,
         {"stage_id": stage_id},
-    )
+    )]
+    translations = _run(
+        """
+        SELECT practice_template_id, locale, display_name, help_text
+        FROM crop_observation.practice_translations
+        WHERE practice_template_id = ANY(:ids);
+        """,
+        {"ids": [row["practice_template_id"] for row in rows]},
+    ) if rows else []
+    by_id = {}
+    for item in translations:
+        by_id.setdefault(item["practice_template_id"], []).append(dict(item))
+    for row in rows:
+        row["translations"] = by_id.get(row["practice_template_id"], [])
+    return rows
 
 
 def get_stage_practice(stage_practice_id: UUID) -> dict[str, Any] | None:
@@ -664,7 +759,7 @@ def upsert_practice_translation(practice_template_id: UUID, locale: str, fields:
 
 
 def list_fields_for_stage_practice(stage_practice_id: UUID) -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT field_definition_id, stage_practice_id, field_code, field_type, semantic_type,
                display_order, is_required, is_enabled, validation_config, ui_config
@@ -673,7 +768,17 @@ def list_fields_for_stage_practice(stage_practice_id: UUID) -> list[dict[str, An
         ORDER BY display_order;
         """,
         {"id": stage_practice_id},
-    )
+    )]
+    translations = _run(
+        "SELECT field_definition_id, locale, label, help_text FROM crop_observation.practice_field_translations WHERE field_definition_id = ANY(:ids);",
+        {"ids": [row["field_definition_id"] for row in rows]},
+    ) if rows else []
+    by_id = {}
+    for item in translations:
+        by_id.setdefault(item["field_definition_id"], []).append(dict(item))
+    for row in rows:
+        row["translations"] = by_id.get(row["field_definition_id"], [])
+    return rows
 
 
 def get_field(field_definition_id: UUID) -> dict[str, Any] | None:
@@ -774,7 +879,7 @@ def upsert_field_translation(field_definition_id: UUID, locale: str, fields: dic
 
 
 def list_options_for_field(field_definition_id: UUID) -> list[dict[str, Any]]:
-    return _run(
+    rows = [dict(row) for row in _run(
         """
         SELECT field_option_id, field_definition_id, option_code, display_order,
                icon_key, is_active, metadata
@@ -783,7 +888,17 @@ def list_options_for_field(field_definition_id: UUID) -> list[dict[str, Any]]:
         ORDER BY display_order;
         """,
         {"id": field_definition_id},
-    )
+    )]
+    translations = _run(
+        "SELECT field_option_id, locale, label FROM crop_observation.practice_field_option_translations WHERE field_option_id = ANY(:ids);",
+        {"ids": [row["field_option_id"] for row in rows]},
+    ) if rows else []
+    by_id = {}
+    for item in translations:
+        by_id.setdefault(item["field_option_id"], []).append(dict(item))
+    for row in rows:
+        row["translations"] = by_id.get(row["field_option_id"], [])
+    return rows
 
 
 def get_option(field_option_id: UUID) -> dict[str, Any] | None:
@@ -882,6 +997,22 @@ def count_locales_for_field(field_definition_id: UUID) -> list[str]:
     rows = _run(
         "SELECT locale FROM crop_observation.practice_field_translations WHERE field_definition_id = :id;",
         {"id": field_definition_id},
+    )
+    return [r["locale"] for r in rows]
+
+
+def count_locales_for_crop(crop_id: UUID) -> list[str]:
+    rows = _run(
+        "SELECT locale FROM crop_observation.crop_translations WHERE crop_id = :id;",
+        {"id": crop_id},
+    )
+    return [r["locale"] for r in rows]
+
+
+def count_locales_for_option(field_option_id: UUID) -> list[str]:
+    rows = _run(
+        "SELECT locale FROM crop_observation.practice_field_option_translations WHERE field_option_id = :id;",
+        {"id": field_option_id},
     )
     return [r["locale"] for r in rows]
 

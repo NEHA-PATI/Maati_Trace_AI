@@ -51,6 +51,29 @@ def test_polygon_to_h3_bigints_returns_full_set_when_unbounded():
     assert len(result["h3_cells_bigint"]) == result["cell_count"]
 
 
+def test_small_valid_farm_gets_resolution_12_anchor_cell():
+    small_polygon = {
+        "type": "Polygon",
+        "coordinates": [[
+            [85.820000, 20.290000],
+            [85.820010, 20.290000],
+            [85.820010, 20.290010],
+            [85.820000, 20.290010],
+            [85.820000, 20.290000],
+        ]],
+    }
+
+    result = polygon_to_h3_bigints(
+        geojson=small_polygon,
+        resolution=12,
+        include_cells=True,
+    )
+
+    assert result["cell_count"] == 1
+    assert result["returned_cell_count"] == 1
+    assert len(result["h3_cells_bigint"]) == 1
+
+
 def test_h3_preview_endpoint():
     payload = {
         "resolution": 12,

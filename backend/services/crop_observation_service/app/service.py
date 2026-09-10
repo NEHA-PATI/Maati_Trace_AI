@@ -227,6 +227,7 @@ def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPra
                         "option_code": option["option_code"],
                         "label": option_label or option["option_code"],
                         "icon_key": option["icon_key"],
+                        "image_url": option.get("image_url"),
                     }
                 )
 
@@ -248,6 +249,7 @@ def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPra
                 name=name or stage_practice["practice_code"],
                 display_order=stage_practice["display_order"],
                 media_config=stage_practice.get("media_config") or {},
+                guide_image_url=stage_practice.get("guide_image_url"),
                 fields=fields,
             )
         )
@@ -357,11 +359,15 @@ def get_stage_screen(
     today_observation = None
     if today_daily is not None:
         today_practices = repo.list_practice_observations_for_daily(today_daily["daily_observation_id"])
-        today_observation = {
+            today_observation = {
             "daily_observation_id": today_daily["daily_observation_id"],
             "crop_status": today_daily["crop_status"],
             "practices": [
-                {"practice_code": p["practice_code"], "answers": p["answers"]}
+                {
+                    "practice_observation_id": p["practice_observation_id"],
+                    "practice_code": p["practice_code"],
+                    "answers": p["answers"],
+                }
                 for p in today_practices
             ],
         }

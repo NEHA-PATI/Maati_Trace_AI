@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,9 @@ export default function TranslationFields({ initialEn, initialOr, onSave, labelK
   const [en, setEn] = useState(initialEn || {});
   const [or, setOr] = useState(initialOr || {});
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => setEn(initialEn || {}), [initialEn]);
+  useEffect(() => setOr(initialOr || {}), [initialOr]);
 
   async function handleSave() {
     setSaving(true);

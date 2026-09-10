@@ -1,8 +1,7 @@
-from datetime import date
-from typing import Any
+import asyncio
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config.settings import settings
@@ -14,12 +13,14 @@ from services.hot_stream_orchestrator_service.app.schemas import (
     FarmAnalysisMaterializeRequest,
     FarmAnalysisMaterializeResponse,
     HealthResponse,
+    LatestAnalysisRequest,
     Sentinel2HistoryBackfillRequest,
 )
 from services.hot_stream_orchestrator_service.app.service import (
     HotStreamOrchestratorError,
     ensure_farm_analysis_ready,
     materialize_farm_analysis,
+    run_latest_analysis,
 )
 from services.hot_stream_orchestrator_service.app.environment_schemas import (
     EnvironmentRefreshRequest,
@@ -32,6 +33,10 @@ from services.hot_stream_orchestrator_service.app.environment_service import (
 from services.hot_stream_orchestrator_service.app.history_backfill import (
     backfill_sentinel2_history,
 )
+from services.hot_stream_orchestrator_service.app.repository import (
+    get_or_create_active_latest_analysis_job,
+    get_latest_pipeline_job,
+)
 from services.analytics_query_service.app.repository import (
     get_farm_grid_cells,
     get_latest_features,
@@ -43,6 +48,21 @@ from services.analytics_query_service.app.repository import (
 SERVICE_NAME = "hot_stream_orchestrator_service"
 
 configure_json_logging(SERVICE_NAME)
+
+
+async def _run_latest_analysis_in_background(
+    farm_id: UUID,
+    payload: LatestAnalysisRequest,
+    job_id: str,
+) -> None:
+    """Run blocking source adapters off the HTTP event loop."""
+
+    await asyncio.to_thread(
+        run_latest_analysis,
+        farm_id,
+        payload,
+        job_id=job_id,
+    )
 
 app = FastAPI(
     title="Hot Stream Orchestrator Service",
@@ -195,44 +215,105 @@ def materialize_farm_grid_endpoint(farm_id: UUID):
     return result
 
 
+@app.post("/v1/hot-stream/farms/{farm_id}/run-latest-analysis", status_code=202)
+def run_latest_analysis_endpoint(
+    farm_id: UUID,
+    payload: LatestAnalysisRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Queue the one complete normal farm-to-intelligence workflow."""
+
+    # Validate before creating a queued job so a bad farm returns immediately
+    # and cannot leave an orphaned analysis record.
+    try:
+        ensure_farm_analysis_ready(farm_id)
+    except HotStreamOrchestratorError as exc:
+        _raise_hot_stream_error(exc)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "LATEST_ANALYSIS_VALIDATION_ERROR", "message": str(exc)},
+        ) from exc
+
+    job, already_running = get_or_create_active_latest_analysis_job(
+        farm_id=farm_id,
+        metadata={"request": payload.model_dump(), "analysis_status": "queued"},
+    )
+    job_id = str(job["job_id"])
+    if already_running:
+        return {
+            "farm_id": str(farm_id),
+            "job_id": job_id,
+            "status": "already_running",
+            "current_stage": job.get("current_stage"),
+        }
+    background_tasks.add_task(
+        _run_latest_analysis_in_background,
+        farm_id,
+        payload,
+        job_id,
+    )
+    return {
+        "farm_id": str(farm_id),
+        "job_id": job_id,
+        "status": "queued",
+        "current_stage": "queued",
+    }
+
+
+@app.get("/v1/hot-stream/farms/{farm_id}/analysis-status")
+def latest_analysis_status_endpoint(farm_id: UUID):
+    job = get_latest_pipeline_job(farm_id)
+    if not job:
+        return {
+            "farm_id": str(farm_id),
+            "status": "not_started",
+            "current_stage": None,
+            "stages": [],
+        }
+    metadata = job.get("metadata") or {}
+    job_status = job.get("status")
+    analysis_status = metadata.get("analysis_status") or job_status
+    if job_status == "failed":
+        analysis_status = "failed"
+    elif job_status in {"pending", "running"} and analysis_status == "queued":
+        analysis_status = "running"
+    return {
+        "farm_id": str(farm_id),
+        "job_id": str(job["job_id"]),
+        "status": analysis_status,
+        "job_status": job_status,
+        "current_stage": job.get("current_stage"),
+        "stages": metadata.get("stages") or [],
+        "error_code": job.get("error_code"),
+        "error_message": job.get("error_message"),
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
+        "updated_at": job.get("updated_at"),
+    }
+
+
 @app.post("/v1/hot-stream/farms/{farm_id}/full-refresh")
-def full_refresh_farm_endpoint(farm_id: UUID, payload: FarmAnalysisMaterializeRequest | None = None):
-    stages: list[dict[str, Any]] = []
+def full_refresh_farm_endpoint(
+    farm_id: UUID,
+    payload: FarmAnalysisMaterializeRequest | None = None,
+):
+    """Compatibility alias for the canonical synchronous workflow."""
 
-    # 1. repair
-    try:
-        repair = ensure_farm_analysis_ready(farm_id)
-        stages.append({"name": "repair", "status": "succeeded", "details": {"repaired_fields": repair.get("repaired_fields", []), "warnings": repair.get("warnings", [])}})
-    except Exception as exc:
-        stages.append({"name": "repair", "status": "failed", "code": getattr(exc, "code", "REPAIR_FAILED"), "message": str(exc)})
-        return {"farm_id": str(farm_id), "status": "failed", "stages": stages}
-
-    # 2. farm-analysis materialize
-    try:
-        mat_payload = payload or FarmAnalysisMaterializeRequest(start_date="2020-01-01", end_date=date.today().isoformat())
-        analysis = materialize_farm_analysis(farm_id, mat_payload)
-        stages.append({"name": "h3_analysis", "status": "succeeded", "details": {"raster_row_count": analysis.get("raster_result", {}).get("row_count"), "lakehouse_rows": analysis.get("lakehouse_result", {}).get("postgres_rows_written")}})
-    except Exception as exc:
-        stages.append({"name": "h3_analysis", "status": "failed", "code": getattr(exc, "code", "ANALYSIS_FAILED"), "message": str(exc)})
-        return {"farm_id": str(farm_id), "status": "failed", "stages": stages}
-
-    # 3. trends materialize
-    try:
-        trends = materialize_trends_for_farm(farm_id)
-        stages.append({"name": "trends", "status": trends.get("status", "partial"), "details": {"trends_created": trends.get("trends_created")}})
-    except Exception as exc:
-        stages.append({"name": "trends", "status": "failed", "code": getattr(exc, "code", "TRENDS_FAILED"), "message": str(exc)})
-        return {"farm_id": str(farm_id), "status": "partial", "stages": stages}
-
-    # 4. grid materialize
-    try:
-        grid = materialize_grid_for_farm(farm_id)
-        stages.append({"name": "grid", "status": grid.get("status", "partial"), "details": {"grid_cells_created": grid.get("grid_cells_created"), "grid_values_created": grid.get("grid_values_created")}})
-    except Exception as exc:
-        stages.append({"name": "grid", "status": "failed", "code": getattr(exc, "code", "GRID_FAILED"), "message": str(exc)})
-        return {"farm_id": str(farm_id), "status": "partial", "stages": stages}
-
-    return {"farm_id": str(farm_id), "status": "succeeded", "stages": stages}
+    if payload is None:
+        canonical = LatestAnalysisRequest()
+    else:
+        canonical = LatestAnalysisRequest(
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            max_cloud_cover=payload.max_cloud_cover,
+            h3_resolution=payload.h3_resolution,
+            max_candidate_scenes=payload.max_candidate_scenes,
+            provider=payload.provider,
+            collection_id=payload.collection_id,
+            force_refresh=payload.force_refresh,
+        )
+    return run_latest_analysis(farm_id, canonical)
 
 
 @app.post(
@@ -241,10 +322,12 @@ def full_refresh_farm_endpoint(farm_id: UUID, payload: FarmAnalysisMaterializeRe
 )
 def environment_refresh_endpoint(farm_id: UUID, payload: EnvironmentRefreshRequest):
     """
-    New Tier-A/Tier-B enrichment pipeline.
+    Explicit environment-only diagnostic/admin operation.
 
-    Sentinel-2 is intentionally NOT handled here; the existing full-refresh
-    endpoint remains the protected Sentinel-2 path.
+    Normal farmer traffic uses run-latest-analysis, which invokes one
+    all-dataset environmental stage (including Sentinel-2) before calculated
+    intelligence. This endpoint remains useful for an operator retry of that
+    same stage.
     """
     try:
         result = materialize_environment(farm_id, payload)

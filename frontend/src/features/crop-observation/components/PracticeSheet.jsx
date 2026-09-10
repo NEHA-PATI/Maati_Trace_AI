@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   getPracticeHistory,
+  deleteMedia,
+  fetchAuthedMediaBlob,
+  listOwnerMedia,
   savePracticeObservation,
   uploadMedia,
 } from "@/features/crop-observation/api/cropObservationApi";
@@ -26,6 +29,7 @@ export default function PracticeSheet({
   initialAnswers,
   onClose,
   onSaved,
+  practiceObservationId,
 }) {
   const [answers, setAnswers] = useState(initialAnswers || {});
   const [issuePhotos, setIssuePhotos] = useState([]);
@@ -38,6 +42,7 @@ export default function PracticeSheet({
   const [formError, setFormError] = useState("");
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState("");
+  const [existingMedia, setExistingMedia] = useState([]);
 
   const mediaConfig = practice.media_config || {};
   const issueEnabled = mediaConfig.issue_evidence?.enabled;
@@ -60,6 +65,20 @@ export default function PracticeSheet({
       cancelled = true;
     };
   }, [cropCycleId, stageCode, practice.practice_code, locale]);
+
+  useEffect(() => {
+    if (!practiceObservationId) return undefined;
+    let cancelled = false;
+    listOwnerMedia("PRACTICE", practiceObservationId)
+      .then((rows) => { if (!cancelled) setExistingMedia(rows || []); })
+      .catch(() => { if (!cancelled) setExistingMedia([]); });
+    return () => { cancelled = true; };
+  }, [practiceObservationId]);
+
+  async function removeExistingMedia(mediaAssetId) {
+    await deleteMedia(mediaAssetId);
+    setExistingMedia((rows) => rows.filter((row) => row.media_asset_id !== mediaAssetId));
+  }
 
   function setFieldValue(fieldCode, value) {
     setAnswers((prev) => ({ ...prev, [fieldCode]: value }));
@@ -119,8 +138,8 @@ export default function PracticeSheet({
       }
       setFormError(
         err?.code === "STAGE_STATUS_REQUIRED"
-          ? "Save today's crop status first."
-          : err?.message || "Could not save. Please try again.",
+          ? primary(STRINGS.statusRequired, locale)
+          : err?.message || primary(STRINGS.couldNotSave, locale),
       );
     } finally {
       setSaving(false);
@@ -129,9 +148,9 @@ export default function PracticeSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 animate-in fade-in lg:items-center lg:justify-center lg:p-6" onClick={onClose}>
       <div
-        className="flex max-h-[88vh] flex-col rounded-t-[22px] bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
+        className="flex max-h-[88vh] w-full flex-col rounded-t-[22px] bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom-4 duration-200 lg:max-w-[780px] lg:rounded-[24px] lg:pb-0"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-[#E9E7DC]" />
@@ -171,6 +190,17 @@ export default function PracticeSheet({
             </section>
           ) : null}
 
+          {existingMedia.length > 0 ? (
+            <section className="space-y-2">
+              <p className="text-sm font-bold text-[#5B6055]">Existing evidence</p>
+              <div className="grid grid-cols-2 gap-2">
+                {existingMedia.map((media) => (
+                  <ExistingMedia key={media.media_asset_id} media={media} onDelete={removeExistingMedia} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {practice.fields.map((field) => {
             const FieldIcon = iconForField(field);
             return (
@@ -203,7 +233,7 @@ export default function PracticeSheet({
                 value={issuePhotos}
                 onChange={setIssuePhotos}
                 locale={locale}
-                title="Problem photos"
+                title={primary(STRINGS.problemPhotos, locale)}
                 maxImages={issueMax}
               />
             ) : null}
@@ -212,7 +242,7 @@ export default function PracticeSheet({
                 value={practicePhotos}
                 onChange={setPracticePhotos}
                 locale={locale}
-                title="Action photos"
+                title={primary(STRINGS.actionPhotos, locale)}
                 maxImages={practiceMax}
               />
             ) : null}
@@ -237,6 +267,26 @@ export default function PracticeSheet({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ExistingMedia({ media, onDelete }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetchAuthedMediaBlob(media.content_url)
+      .then((blob) => { if (active) setUrl(URL.createObjectURL(blob)); })
+      .catch(() => {});
+    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+  }, [media.content_url]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[#E9E7DC] bg-[#F7F8F3] p-1">
+      {url && media.media_type === "IMAGE" ? <img src={url} alt="" className="h-24 w-full object-cover" /> : null}
+      {url && media.media_type === "AUDIO" ? <audio controls src={url} className="w-full" /> : null}
+      <button type="button" onClick={() => onDelete(media.media_asset_id)} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-rose-600 shadow" aria-label="Remove evidence">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

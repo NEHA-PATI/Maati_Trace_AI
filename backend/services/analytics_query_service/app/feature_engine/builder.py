@@ -20,7 +20,9 @@ from services.analytics_query_service.app.feature_engine.math_utils import (
 
 FEATURE_VERSION = "farm_h3_engineered_features_v1"
 
-# The feature layer is anchored on valid Sentinel-2 H3 observations in V1.
+# The feature layer prefers Sentinel-2 H3 observations, then falls back to a
+# successful H3-compatible optical/radar source when a sibling dataset is
+# unavailable. All environmental observations are still joined into the vector.
 S2_TEMPORAL_FIELDS = (
     "ndvi",
     "gndvi",
@@ -509,8 +511,30 @@ def build_feature_rows(
         raise ValueError("Farm crop_code is required before feature engineering")
 
     s2_rows = _dedupe_h3_daily(bundle.get("sentinel2") or [])
+    s1_rows = _dedupe_h3_daily(bundle.get("sentinel1") or [])
+    landsat_rows = _dedupe_h3_daily(bundle.get("landsat") or [])
+
+    # Select the first successful H3 source that has data in the requested
+    # window. A source may exist in the historical bundle but still be absent
+    # for this run's dates, so selection must be window-aware.
+    anchor_dataset = "sentinel2"
+    anchor_rows = s2_rows
+    for candidate_name, candidate_rows in (
+        ("sentinel2", s2_rows),
+        ("sentinel1", s1_rows),
+        ("landsat", landsat_rows),
+    ):
+        if any(
+            (observed_date := _date(row.get("snapshot_date"))) is not None
+            and start_date <= observed_date <= end_date
+            for row in candidate_rows
+        ):
+            anchor_dataset = candidate_name
+            anchor_rows = candidate_rows
+            break
+
     anchors = [
-        row for row in s2_rows
+        row for row in anchor_rows
         if (d := _date(row.get("snapshot_date"))) is not None and start_date <= d <= end_date
     ]
     if latest_only and anchors:
@@ -526,8 +550,15 @@ def build_feature_rows(
         if d:
             same_date_s2[d].append(row)
 
-    s1_by_h3 = _by_h3(_dedupe_h3_daily(bundle.get("sentinel1") or []))
-    landsat_by_h3 = _by_h3(_dedupe_h3_daily(bundle.get("landsat") or []))
+    anchor_by_h3 = _by_h3(anchor_rows)
+    same_date_anchor: dict[date, list[dict[str, Any]]] = defaultdict(list)
+    for row in anchor_rows:
+        d = _date(row.get("snapshot_date"))
+        if d:
+            same_date_anchor[d].append(row)
+
+    s1_by_h3 = _by_h3(s1_rows)
+    landsat_by_h3 = _by_h3(landsat_rows)
     gpm = _dedupe_daily(bundle.get("gpm") or [], "observation_date")
     era5 = _dedupe_daily(bundle.get("era5") or [], "observation_date")
     smap = list(bundle.get("smap") or [])
@@ -544,8 +575,8 @@ def build_feature_rows(
         if target is None:
             continue
 
-        features = _temporal_features(anchor, s2_by_h3.get(h3_index, []), profile)
-        features.update(_spatial_features(anchor, same_date_s2.get(target, [])))
+        features = _temporal_features(anchor, anchor_by_h3.get(h3_index, []), profile)
+        features.update(_spatial_features(anchor, same_date_anchor.get(target, [])))
 
         # Sentinel-1: compare closest prior ratio against prior history for this H3.
         s1_history = s1_by_h3.get(h3_index, [])
@@ -630,8 +661,17 @@ def build_feature_rows(
         features.update(soil_features)
 
         anchor_valid = _num(anchor.get("valid_fraction")) or 0.0
+        s2_current = _nearest_before(
+            s2_by_h3.get(h3_index, []), target, date_key="snapshot_date", max_age_days=35
+        )
         source_quality = {
-            "sentinel2": _source_quality("sentinel2", target=target, row=anchor, valid_fraction=anchor_valid, date_key="snapshot_date"),
+            "sentinel2": _source_quality(
+                "sentinel2",
+                target=target,
+                row=s2_current,
+                valid_fraction=_num(s2_current.get("valid_fraction")) if s2_current else None,
+                date_key="snapshot_date",
+            ),
             "sentinel1": _source_quality("sentinel1", target=target, row=s1_current, valid_fraction=_num(s1_current.get("valid_fraction")) if s1_current else None, date_key="snapshot_date"),
             "landsat": _source_quality("landsat", target=target, row=landsat_current, valid_fraction=_num(landsat_current.get("valid_fraction")) if landsat_current else None, date_key="snapshot_date"),
             "gpm": _source_quality("gpm", target=target, row=_nearest_before(gpm, target, date_key="observation_date", max_age_days=2), coverage=rain_coverage, date_key="observation_date"),
@@ -649,7 +689,7 @@ def build_feature_rows(
         confidence = safe_mean([q for q in source_quality.values() if q > 0]) or 0.0
 
         source_dates = {
-            "sentinel2": str(target),
+            "sentinel2": str(_date(s2_current.get("snapshot_date"))) if s2_current else None,
             "sentinel1": str(_date(s1_current.get("snapshot_date"))) if s1_current else None,
             "landsat": str(_date(landsat_current.get("snapshot_date"))) if landsat_current else None,
             "gpm": str(_date((_nearest_before(gpm, target, date_key="observation_date", max_age_days=2) or {}).get("observation_date"))) if gpm else None,
@@ -660,7 +700,7 @@ def build_feature_rows(
             "forecast_issue": str(_date(forecast_current.get("issued_at"))) if forecast_current else None,
         }
         source_versions = {
-            "sentinel2": _source_version(anchor),
+            "sentinel2": _source_version(s2_current),
             "sentinel1": _source_version(s1_current),
             "landsat": _source_version(landsat_current),
             "gpm": _source_version(_nearest_before(gpm, target, date_key="observation_date", max_age_days=2)),
@@ -684,7 +724,7 @@ def build_feature_rows(
             "crop_code": crop_code,
             "crop_profile_version": str(profile["profile_version"]),
             "feature_version": FEATURE_VERSION,
-            "anchor_dataset": "sentinel_2_l2a",
+            "anchor_dataset": f"{anchor_dataset}_l2a" if anchor_dataset != "sentinel2" else "sentinel_2_l2a",
             "anchor_scene_id": anchor.get("scene_id"),
             "observed_area_m2": _num(anchor.get("observed_area_m2")),
             "anchor_valid_fraction": anchor_valid,

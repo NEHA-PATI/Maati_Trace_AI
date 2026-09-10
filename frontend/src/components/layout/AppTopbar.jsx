@@ -6,7 +6,7 @@ import { useAuth } from "@/features/auth/context/useAuth";
 
 const NAV_ITEMS = [
   { to: "/farmer/me", label: "Dashboard" },
-  { to: "/my-crops", label: "My Crop" },
+  { to: "/my-crops/language", label: "My Crop" },
   { to: "/", label: "Home" },
   { to: "/our-method", label: "Our Method" },
   { to: "/use-cases", label: "Use Cases" },

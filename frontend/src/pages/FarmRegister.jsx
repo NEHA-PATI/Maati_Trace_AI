@@ -1,17 +1,15 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useCallback } from "react";
 import {
   MapPin, User, Hexagon, FileText, Check, ChevronRight,
-  ChevronLeft, Search, CornerDownRight, Loader2, Undo2, Trash2, Map as MapIcon,
+  ChevronLeft, Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapContainer, Marker, Polygon, Polyline, TileLayer, useMapEvents } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import FarmCard from "@/components/ui-custom/FarmCard";
 import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import { getMyFarmerProfile } from "@/lib/api/farmer";
@@ -27,11 +25,12 @@ import {
   validateLocation,
 } from "@/lib/api/location";
 import {
-  materializeFarmAnalysis,
-  materializeFarmGrid,
-  materializeFarmTrends,
+  runLatestAnalysis,
 } from "@/lib/api/hotStream";
 import { getStoredUser } from "@/features/auth/session";
+import FarmBoundaryStep from "@/features/farm-registration/boundary/FarmBoundaryStep";
+import { resolveFarmLocation } from "@/features/farm-registration/boundary/locationGeocoder";
+import { calculateBoundarySummary } from "@/features/farm-registration/boundary/boundaryUtils";
 
 const STEPS = [
   { num: "01", label: "Location", icon: MapPin },
@@ -55,163 +54,15 @@ const EMPTY_FORM = {
   crop_variety: "",
   crop_stage: "",
   planting_date: "",
-  coordinatesText: "",
   runNow: true,
 };
-
-const SAMPLE_POLYGON = [
-  [85.831, 19.814],
-  [85.833, 19.814],
-  [85.833, 19.816],
-  [85.831, 19.816],
-  [85.831, 19.814],
-];
-
-const MAP_CENTER = [19.81, 85.85];
+const FARM_DRAFT_KEY = "maatitrace:farm-registration:draft:v1";
 const MotionDiv = motion.div;
-
-function normalizePointList(points) {
-  return points
-    .filter((point) => Array.isArray(point) && point.length >= 2)
-    .map(([lon, lat]) => [Number(lon), Number(lat)]);
-}
-
-function isValidCoordinatePair(point) {
-  if (!Array.isArray(point) || point.length < 2) return false;
-  const [lon, lat] = point;
-  return Number.isFinite(lon) && Number.isFinite(lat) && lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90;
-}
-
-function isValidPolygon(points) {
-  const normalized = normalizePointList(points).filter(isValidCoordinatePair);
-  const unique = normalized.filter((point, index, arr) =>
-    arr.findIndex((candidate) => candidate[0] === point[0] && candidate[1] === point[1]) === index
-  );
-  return unique.length >= 3 && closePolygon(unique).length >= 4;
-}
-
-function closePolygon(points) {
-  const normalized = normalizePointList(points);
-  if (normalized.length < 3) return normalized;
-  const [firstLon, firstLat] = normalized[0];
-  const [lastLon, lastLat] = normalized[normalized.length - 1];
-  if (firstLon === lastLon && firstLat === lastLat) return normalized;
-  return [...normalized, [firstLon, firstLat]];
-}
-
-function polygonToGeoJson(points) {
-  return {
-    type: "Polygon",
-    coordinates: [closePolygon(points)],
-  };
-}
-
-function parsePolygonCoordinates(text) {
-  if (!text?.trim()) return SAMPLE_POLYGON;
-  const parsed = JSON.parse(text);
-  if (parsed?.type === "Polygon" && Array.isArray(parsed.coordinates?.[0])) return parsed.coordinates[0];
-  if (Array.isArray(parsed)) return parsed;
-  throw new Error("Boundary coordinates must be a GeoJSON polygon or a coordinate array.");
-}
-
-function toLatLngArray(points) {
-  return normalizePointList(points).map(([lng, lat]) => [lat, lng]);
-}
 
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
 }
 
-function MapClickCapture({ onAddPoint }) {
-  useMapEvents({
-    click(event) {
-      onAddPoint([Number(event.latlng.lng.toFixed(6)), Number(event.latlng.lat.toFixed(6))]);
-    },
-  });
-  return null;
-}
-
-function MapEditor({ points, setPoints }) {
-  useEffect(() => {
-    const leafletCssId = "leaflet-css";
-    if (!document.getElementById(leafletCssId)) {
-      const link = document.createElement("link");
-      link.id = leafletCssId;
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(link);
-    }
-  }, []);
-
-  const polygonLatLngs = toLatLngArray(points);
-  const center = polygonLatLngs[0] || MAP_CENTER;
-
-  return (
-    <div className="space-y-3">
-      <div className="relative h-72 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100">
-        <MapContainer
-          center={center}
-          zoom={16}
-          scrollWheelZoom
-          className="h-full w-full"
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
-          />
-          <MapClickCapture onAddPoint={(point) => setPoints((prev) => [...prev, point])} />
-          {polygonLatLngs.map((position, index) => (
-            <Marker key={`${position[0]}-${position[1]}-${index}`} position={position} />
-          ))}
-          {polygonLatLngs.length >= 2 && (
-            <Polyline
-              positions={polygonLatLngs}
-              pathOptions={{
-                color: "#ff3333",
-                weight: 3,
-                dashArray: "8,5",
-              }}
-            />
-          )}
-          {polygonLatLngs.length >= 3 && (
-            <Polygon
-              positions={polygonLatLngs}
-              pathOptions={{
-                color: "#ff3333",
-                weight: 3,
-                dashArray: "8,5",
-                fillColor: "#ff3333",
-                fillOpacity: 0.08,
-              }}
-            />
-          )}
-        </MapContainer>
-        <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-xl bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-700 shadow-sm">
-          Click on the map to add polygon points
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => setPoints((prev) => prev.slice(0, -1))} className="rounded-xl border-gray-200 text-xs font-semibold">
-          <Undo2 className="mr-1 h-3.5 w-3.5" />
-          Undo last point
-        </Button>
-        <Button type="button" variant="outline" onClick={() => setPoints([])} className="rounded-xl border-gray-200 text-xs font-semibold">
-          <Trash2 className="mr-1 h-3.5 w-3.5" />
-          Clear polygon
-        </Button>
-        <Button type="button" variant="outline" onClick={() => setPoints((prev) => closePolygon(prev.length >= 3 ? prev : SAMPLE_POLYGON))} className="rounded-xl border-gray-200 text-xs font-semibold">
-          <Check className="mr-1 h-3.5 w-3.5" />
-          Close polygon
-        </Button>
-        <Button type="button" variant="outline" onClick={() => setPoints(SAMPLE_POLYGON)} className="rounded-xl border-gray-200 text-xs font-semibold">
-          <MapIcon className="mr-1 h-3.5 w-3.5" />
-          Use sample polygon near selected block
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 export default function FarmRegister() {
   const navigate = useNavigate();
@@ -230,14 +81,50 @@ export default function FarmRegister() {
   const [pipelineStatus, setPipelineStatus] = useState("");
   const [registeredFarm, setRegisteredFarm] = useState(null);
   const [linkedFarmer, setLinkedFarmer] = useState(null);
-  const [polygonPoints, setPolygonPoints] = useState([]);
+  const [farmGeometry, setFarmGeometry] = useState(null);
+  const [resolvedMapLocation, setResolvedMapLocation] = useState(null);
+  const [locationResolving, setLocationResolving] = useState(false);
+  const [locationResolutionError, setLocationResolutionError] = useState("");
+  const [boundaryConfirmed, setBoundaryConfirmed] = useState(false);
   const [h3Preview, setH3Preview] = useState(null);
   const [validationWarning, setValidationWarning] = useState("");
   const [pipelineStage, setPipelineStage] = useState(0);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [backendErrorDetail, setBackendErrorDetail] = useState("");
 
-  const update = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
+  const update = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (["state_name", "district_name", "block_code", "block_name", "village_name"].includes(field)) {
+      setResolvedMapLocation(null);
+      setLocationResolutionError("");
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(FARM_DRAFT_KEY);
+      if (!stored) return;
+      const draft = JSON.parse(stored);
+      if (draft.formData) setFormData((current) => ({ ...current, ...draft.formData }));
+      if (draft.farmGeometry) setFarmGeometry(draft.farmGeometry);
+      if (draft.resolvedMapLocation) setResolvedMapLocation(draft.resolvedMapLocation);
+    } catch {
+      localStorage.removeItem(FARM_DRAFT_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FARM_DRAFT_KEY, JSON.stringify({
+        formData,
+        farmGeometry,
+        resolvedMapLocation,
+        savedAt: new Date().toISOString(),
+      }));
+    } catch {
+      // Draft recovery is best-effort and must never block registration.
+    }
+  }, [farmGeometry, formData, resolvedMapLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,24 +209,7 @@ export default function FarmRegister() {
     [blocks, formData.block_code],
   );
 
-  const polygonGeoJson = useMemo(() => {
-    if (isValidPolygon(polygonPoints)) return polygonToGeoJson(polygonPoints);
-    try {
-      const parsed = parsePolygonCoordinates(formData.coordinatesText);
-      return isValidPolygon(parsed) ? polygonToGeoJson(parsed) : null;
-    } catch {
-      return null;
-    }
-  }, [formData.coordinatesText, polygonPoints]);
-
-  const polygonPreviewPoints = useMemo(() => {
-    if (polygonPoints.length) return closePolygon(polygonPoints);
-    try {
-      return closePolygon(parsePolygonCoordinates(formData.coordinatesText));
-    } catch {
-      return [];
-    }
-  }, [formData.coordinatesText, polygonPoints]);
+  const boundarySummary = useMemo(() => calculateBoundarySummary(farmGeometry), [farmGeometry]);
 
   const canNext = useMemo(() => {
     if (step === 0) return Boolean(formData.district_name && formData.block_code);
@@ -353,10 +223,10 @@ export default function FarmRegister() {
       }
       return Boolean(formData.farmer_id);
     }
-    if (step === 2) return Boolean(polygonGeoJson);
+    if (step === 2) return boundarySummary.valid && boundaryConfirmed;
     if (step === 3) return true;
     return true;
-  }, [formData, step, polygonGeoJson, user?.role, linkedFarmer]);
+  }, [formData, step, boundarySummary.valid, boundaryConfirmed, user?.role, linkedFarmer]);
 
   const successFarmCard = useMemo(() => {
     if (!registeredFarm) return null;
@@ -372,9 +242,46 @@ export default function FarmRegister() {
       ndvi: 0.62,
       moisture: 0.44,
       status: "verified",
-      h3Count: registeredFarm.h3_cell_count || polygonPoints.length || 0,
+      h3Count: registeredFarm.h3_cell_count || boundarySummary.pointCount || 0,
     };
-  }, [registeredFarm, formData, polygonPoints.length]);
+  }, [registeredFarm, formData, boundarySummary.pointCount]);
+
+  async function handleResolveSelectedLocation() {
+    setLocationResolving(true);
+    setLocationResolutionError("");
+    try {
+      const result = await resolveFarmLocation({
+        state_name: formData.state_name,
+        district_name: formData.district_name,
+        block_name: selectedBlock?.block_name || formData.block_name,
+        village_name: formData.village_name,
+      });
+      setResolvedMapLocation(result);
+      return result;
+    } catch (error) {
+      setLocationResolutionError(error.message || "The selected location could not be found.");
+      return null;
+    } finally {
+      setLocationResolving(false);
+    }
+  }
+
+  async function handleNextStep() {
+    if (step === 0) {
+      const resolved = await handleResolveSelectedLocation();
+      if (!resolved) {
+        setError("We could not find the exact village. Continue and use your current location?");
+      }
+    }
+    setStep((current) => Math.min(current + 1, 4));
+  }
+
+  const handleBoundaryGeometryChange = useCallback((geometry) => {
+    setFarmGeometry(geometry);
+    setBoundaryConfirmed(false);
+    setH3Preview(null);
+    setValidationWarning("");
+  }, []);
 
   async function handleRegister() {
     setLoading(true);
@@ -385,8 +292,8 @@ export default function FarmRegister() {
     setPipelineStage(0);
     setPipelineStatus("Validating location...");
     try {
-      if (!polygonGeoJson) {
-        throw new Error("Draw at least 3 points and close the polygon before registering.");
+      if (!boundarySummary.valid || !farmGeometry || !boundaryConfirmed) {
+        throw new Error("Complete and confirm the farm boundary before registration.");
       }
       const validated = await validateLocation({
         state_name: formData.state_name,
@@ -410,18 +317,14 @@ export default function FarmRegister() {
         throw new Error("Complete your farmer profile before registering a farm.");
       }
 
-      const geoJson = polygonGeoJson || null;
-      if (!geoJson) {
-        throw new Error("Draw a valid polygon or use the sample polygon before registering.");
-      }
       setPipelineStatus("Generating H3 preview...");
       setPipelineStage(1);
       try {
         const preview = await previewH3({
-          polygon: geoJson,
-          // Resolution is selected by the boundary service default.
-          // resolution: 12,
+          polygon: farmGeometry,
           include_cells: false,
+          resolution: 12,
+          max_cells: 20000,
         });
         setH3Preview(preview);
       } catch (previewErr) {
@@ -441,9 +344,8 @@ export default function FarmRegister() {
         block_name: validated.block_name,
         block_code: validated.block_code,
         village_name: formData.village_name || null,
-        polygon: geoJson,
-        // Resolution is selected by the farm registry service default.
-        // h3_resolution: 12,
+        polygon: farmGeometry,
+        h3_resolution: 12,
       };
 
       setPipelineStatus("Registering farm...");
@@ -452,28 +354,23 @@ export default function FarmRegister() {
       setRegisteredFarm(farmPayload);
 
       if (formData.runNow) {
-        setPipelineStatus("Materializing analysis...");
+        setPipelineStatus("Starting complete farm analysis...");
         setPipelineStage(3);
-        await materializeFarmAnalysis(farmPayload.farm_id, {
-          start_date: "2025-12-01",
-          end_date: new Date().toISOString().slice(0, 10),
-          max_cloud_cover: 30,
-          // Resolution is selected by the orchestrator service default.
-          // h3_resolution: 12,
+        const endDate = new Date();
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - 365);
+        await runLatestAnalysis(farmPayload.farm_id, {
+          start_date: startDate.toISOString().slice(0, 10),
+          end_date: endDate.toISOString().slice(0, 10),
+          max_cloud_cover: 40,
           provider: "planetary_computer",
           collection_id: "sentinel-2-l2a",
-          use_tiny_preview_bbox: true,
-          tiny_bbox_size_deg: 0.0002,
-        }).catch(() => setValidationWarning("Farm analysis endpoint pending. Registration still completed."));
-
-        await materializeFarmTrends(farmPayload.farm_id, {}).catch(() => null);
-        setPipelineStage(7);
-        await materializeFarmGrid(farmPayload.farm_id, {}).catch(() => null);
-        setPipelineStage(8);
+        }).catch(() => setValidationWarning("Farm registered, but the analysis job could not be started. Open the farm and retry analysis."));
       }
 
       setPipelineStatus("Registered. Redirecting to land intelligence...");
       setPipelineStage(9);
+      localStorage.removeItem(FARM_DRAFT_KEY);
       setTimeout(() => navigate(`/land/${farmPayload.farm_id}`), 800);
     } catch (err) {
       setBackendErrorDetail(JSON.stringify({
@@ -499,7 +396,7 @@ export default function FarmRegister() {
 
   return (
     <div ref={pageRef} className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100" style={{ fontFamily: "'Poppins', sans-serif" }}>
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-10 lg:px-12">
+      <div className={`mx-auto flex w-full flex-1 flex-col justify-center px-6 py-10 lg:px-12 ${step === 2 ? "max-w-[1600px]" : "max-w-2xl"}`}>
         <MotionDiv initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-500">Farm Registration</span>
           <h1 className="mt-1 text-3xl font-black text-gray-900">Register a Land Parcel</h1>
@@ -531,6 +428,14 @@ export default function FarmRegister() {
         </div>
 
         {error && <div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-600">{error}</div>}
+        {locationResolutionError && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
+            <span>{locationResolutionError} You can continue and use your current location.</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => { setError(""); setStep(1); }} className="h-9 rounded-xl border-amber-300 text-amber-800">
+              Continue manually
+            </Button>
+          </div>
+        )}
         {validationWarning && <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">{validationWarning}</div>}
         {pipelineStatus && <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">{pipelineStatus}</div>}
         <HexagonPipelineLoader
@@ -554,7 +459,7 @@ export default function FarmRegister() {
             `State: ${formData.state_name || "â€”"}`,
             `District: ${formData.district_name || "â€”"}`,
             `Block: ${formData.block_name || "â€”"}`,
-            `Points: ${polygonPoints.length}`,
+            `Boundary: ${boundarySummary.valid ? `${boundarySummary.pointCount} corners` : "not completed"}`,
           ]}
           failure={error || null}
         />
@@ -635,6 +540,12 @@ export default function FarmRegister() {
                       </div>
                     </div>
                   </div>
+                  <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
+                    <Button type="button" variant="outline" onClick={handleResolveSelectedLocation} disabled={locationResolving} className="h-10 rounded-xl border-emerald-200 text-sm font-semibold text-emerald-700">
+                      {locationResolving ? "Finding location…" : "Find village on map"}
+                    </Button>
+                    {resolvedMapLocation ? <span className="text-sm font-semibold text-emerald-700">Location found ({resolvedMapLocation.precision}).</span> : null}
+                  </div>
                 </div>
               )}
 
@@ -703,57 +614,34 @@ export default function FarmRegister() {
               )}
 
               {step === 2 && (
-                <div className="space-y-5 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                <div className="space-y-5 rounded-3xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
                   <div className="mb-1 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-md">
-                      <FileText className="h-4 w-4 text-white" strokeWidth={2.5} />
+                      <Hexagon className="h-4 w-4 text-white" strokeWidth={2.5} />
                     </div>
                     <span className="font-bold text-gray-800">Draw Boundary</span>
                   </div>
-                  <div className="grid gap-4 lg:grid-cols-[1.35fr_0.9fr]">
-                    <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Farm Boundary Map</p>
-                          <p className="text-sm text-gray-600">Click the map to add coordinates. These points become the polygon sent to the backend.</p>
-                        </div>
-                        <div className="text-right text-xs text-gray-500">
-                          <p>{polygonPoints.length} point{polygonPoints.length === 1 ? "" : "s"} selected</p>
-                          <p>{polygonGeoJson ? "Polygon ready" : "Polygon pending"}</p>
-                        </div>
-                      </div>
-                      <div id="maatitrace-register-map" className="overflow-hidden rounded-2xl border border-gray-200">
-                        <MapEditor points={polygonPoints} setPoints={setPolygonPoints} />
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="rounded-2xl border border-gray-100 bg-white p-3 text-sm text-gray-700">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Polygon Status</p>
-                        <p className="mt-1 text-lg font-bold">{polygonGeoJson ? "Ready" : "Pending"}</p>
-                      </div>
-                      <div className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-600">
-                        {polygonPreviewPoints.length > 0 ? polygonPreviewPoints.map((point, index) => (
-                          <div key={`${point[0]}-${point[1]}-${index}`} className="flex items-center justify-between border-b border-gray-100 py-1 last:border-0">
-                            <span className="font-semibold text-gray-500">Point {index + 1}</span>
-                            <span className="font-mono text-[11px]">{point[1].toFixed(6)}, {point[0].toFixed(6)}</span>
-                          </div>
-                        )) : (
-                          <p>No polygon points yet.</p>
-                        )}
-                      </div>
-                      <div className="rounded-2xl border border-violet-100 bg-violet-50 p-3">
-                        <span className="text-xs font-bold text-violet-700">
-                          {polygonGeoJson ? "Polygon ready for backend" : "Polygon pending - draw at least 3 points"}
-                        </span>
-                      </div>
-                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
-                        Use the sample polygon button for quick validation if you need a backend check.
-                      </div>
-                    </div>
-                  </div>
-                  {backendErrorDetail && (
-                    <pre className="whitespace-pre-wrap rounded-2xl border border-rose-100 bg-rose-50 p-3 text-[11px] text-rose-600">{backendErrorDetail}</pre>
-                  )}
+                  {resolvedMapLocation?.precision && resolvedMapLocation.precision !== "village" ? (
+                    <p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-800">
+                      We found the {resolvedMapLocation.precision} location. Zoom in or use your current location to find the farm.
+                    </p>
+                  ) : null}
+                  <FarmBoundaryStep
+                    geometry={farmGeometry}
+                    onGeometryChange={handleBoundaryGeometryChange}
+                    resolvedLocation={resolvedMapLocation}
+                    locationLabel={[formData.village_name, formData.block_name, formData.district_name].filter(Boolean).join(", ")}
+                    onChangeLocation={() => setStep(0)}
+                    onConfirm={() => {
+                      if (!boundarySummary.valid) {
+                        setError(boundarySummary.message);
+                        return;
+                      }
+                      setBoundaryConfirmed(true);
+                      setStep(3);
+                    }}
+                  />
+                  {backendErrorDetail ? <pre className="whitespace-pre-wrap rounded-2xl border border-rose-100 bg-rose-50 p-3 text-[11px] text-rose-600">{backendErrorDetail}</pre> : null}
                 </div>
               )}
 
@@ -774,7 +662,7 @@ export default function FarmRegister() {
                       { label: "Farmer ID", value: formData.farmer_id || linkedFarmer?.farmer_id || "New" },
                       { label: "Survey No.", value: formData.survey_number || "-" },
                       { label: "Village", value: formData.village_name || "-" },
-                      { label: "Polygon Points", value: polygonPoints.length || "GeoJSON" },
+                      { label: "Boundary", value: boundarySummary.valid ? `${boundarySummary.acres.toFixed(2)} acre · ${boundarySummary.pointCount} corners` : "Pending" },
                     ].map((item) => (
                       <div key={item.label} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
                         <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-gray-400">{item.label}</span>
@@ -835,9 +723,12 @@ export default function FarmRegister() {
                       setError("");
                       setPipelineStatus("");
                       setValidationWarning("");
-                      setPolygonPoints([]);
+                      setFarmGeometry(null);
+                      setBoundaryConfirmed(false);
+                      setResolvedMapLocation(null);
                       setH3Preview(null);
                       setFormData(EMPTY_FORM);
+                      localStorage.removeItem(FARM_DRAFT_KEY);
                     }} className="h-11 flex-1 rounded-2xl border-gray-200 text-sm font-semibold">
                       Register Another
                     </Button>
@@ -855,7 +746,7 @@ export default function FarmRegister() {
               Back
             </Button>
             {step < 3 && (
-              <Button onClick={() => setStep((current) => Math.min(4, current + 1))} disabled={!canNext || loading} className="h-10 rounded-2xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-600 disabled:opacity-40">
+              <Button onClick={handleNextStep} disabled={!canNext || loading || locationResolving} className="h-10 rounded-2xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-600 disabled:opacity-40">
                 Continue
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
@@ -867,4 +758,3 @@ export default function FarmRegister() {
     </div>
   );
 }
-

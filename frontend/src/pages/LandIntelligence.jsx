@@ -1,94 +1,63 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Activity, ArrowLeft, CalendarDays, ChevronRight, CloudSun,
-  Droplets, Gauge, Layers, LayoutGrid, Leaf, MapPin, Mountain, RefreshCw,
-  Ruler, Sparkles, Sprout, Sun, TrendingUp, Waves, X,
+  Activity, ArrowLeft, CalendarDays, ChevronRight,
+  Droplets, Layers, Leaf, MapPin, Mountain, RefreshCw,
+  Sparkles, Sprout, Sun, TrendingUp, Waves, X,
 } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
-import {
-  buildFieldInterpretation,
-  interpretLandMetric,
-  LAND_METRICS,
-  METRIC_STATUSES,
-  metricValueFromCell,
-  metricValueFromSummary,
-} from "@/features/land-intelligence/metricInterpretation";
 import { getFarm } from "@/lib/api/farm";
 import {
   getFarmGridCellDetails,
+  getGridCellCalculations,
   getFarmGridCells,
   getFarmH3Cells,
-  getFarmSummary,
-  getFarmTrends,
   getLatestFarmCalculations,
   getLatestGridCalculations,
-  getLatestGridValues,
-  getLatestSentinel2,
-  getSentinel2History,
+  getMetricContent,
 } from "@/lib/api/analytics";
 import {
+  buildCalculatedFieldInterpretation,
   CALCULATED_METRICS,
   interpretCalculatedMetric,
 } from "@/features/land-intelligence/calculatedMetrics";
-import { fullRefreshFarm } from "@/lib/api/hotStream";
+import {
+  getLatestAnalysisStatus,
+  runLatestAnalysis as triggerLatestAnalysis,
+} from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
 
 const PARAMETERS = [
   ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
-  ...LAND_METRICS,
-  { key: "temperature", name: "Surface Temperature" },
-  { key: "cloud", name: "Cloud Cover" },
-  { key: "valid_pixels", name: "Data Quality" },
 ];
 
 const PIPELINE_STEPS = [
-  "Repairing farm metadata",
-  "Computing H3 cells",
-  "Searching latest satellite scene",
-  "Computing per-H3 satellite indices",
-  "Writing H3 analytics",
-  "Computing trends",
-  "Building 10m grid",
-  "Computing H3-to-grid coverage %",
-  "Computing weighted grid values",
-  "Refreshing land intelligence",
+  "Preparing farm metadata",
+  "Processing all environmental datasets (Sentinel-2 included)",
+  "Computing mandatory trends",
+  "Preparing display-grid geometry and crosswalk",
+  "Building crop features, H3 metrics and calculated-grid projection",
 ];
 
-const METRIC_ICONS = {
-  ndvi: Leaf,
-  evi: TrendingUp,
-  savi: Sprout,
-  ndmi: Droplets,
-  ndwi: Waves,
-  msi: Gauge,
-  ndre: Sparkles,
-  bsi: Mountain,
-  nbr: Activity,
-};
-
-const STATUS_PRIORITY = {
-  critical: 5,
-  needs_attention: 4,
-  watch: 3,
-  good: 2,
-  excellent: 1,
-  unavailable: 0,
+const CALCULATED_METRIC_ICONS = {
+  crop_condition: Sprout,
+  water_stress: Droplets,
+  moisture_condition: Waves,
+  growth_condition: TrendingUp,
+  growth_anomaly: Activity,
+  heat_stress: Sun,
+  waterlogging_risk: Waves,
+  soil_condition: Mountain,
+  nutrient_stress_risk: Leaf,
+  erosion_risk: Mountain,
 };
 
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload;
   return payload?.items || payload?.data || payload?.grid_cells || payload?.grid_values || payload?.h3_cells || [];
-}
-
-function pretty(value, digits = 2) {
-  if (value === null || value === undefined || value === "") return "--";
-  const num = Number(value);
-  if (Number.isNaN(num)) return String(value);
-  return num.toFixed(digits);
 }
 
 function formatDate(value) {
@@ -98,26 +67,11 @@ function formatDate(value) {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function skyLabel(cloud) {
-  if (cloud === null || cloud === undefined || cloud === "" || Number.isNaN(Number(cloud))) return "Sky not recorded";
-  const value = Number(cloud);
-  if (value < 15) return "Sky was clear";
-  if (value < 40) return "Some clouds that day";
-  return "Cloudy that day";
-}
-
-function imageQualityLabel(validPct) {
-  if (validPct === null || validPct === undefined || Number.isNaN(Number(validPct))) return "Not recorded";
-  const value = Number(validPct);
-  if (value >= 80) return "Good picture";
-  if (value >= 50) return "Partial picture";
-  return "Poor picture";
-}
-
-function worstReading(readings) {
-  return [...readings]
-    .filter((r) => r.result.status !== "unavailable")
-    .sort((a, b) => STATUS_PRIORITY[b.result.status] - STATUS_PRIORITY[a.result.status])[0];
+function metricDisplayName(metric, content) {
+  const configured = Array.isArray(content)
+    ? content.find((item) => item.metric_key === metric.key)
+    : null;
+  return configured?.display_name || configured?.displayName || metric.name;
 }
 
 function Reveal({ children, delay = 0, className = "" }) {
@@ -151,12 +105,8 @@ export default function LandIntelligence() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [farm, setFarm] = useState(null);
-  const [summary, setSummary] = useState(null);
-  const [latestSentinel, setLatestSentinel] = useState(null);
-  const [, setHistory] = useState([]);
-  const [, setTrends] = useState([]);
+  const [metricContent, setMetricContent] = useState([]);
   const [gridCells, setGridCells] = useState([]);
-  const [gridValues, setGridValues] = useState([]);
   const [gridCalculations, setGridCalculations] = useState([]);
   const [farmCalculations, setFarmCalculations] = useState([]);
   const [h3Cells, setH3Cells] = useState([]);
@@ -177,33 +127,21 @@ export default function LandIntelligence() {
   }
 
   async function loadLandIntelligence() {
-    const [farmPayload, summaryPayload, latestPayload, historyPayload, trendsPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
+    const [farmPayload, gridCellsPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
-      getFarmSummary(farmId).catch(() => null),
-      getLatestSentinel2(farmId).catch(() => null),
-      getSentinel2History(farmId, 10).catch(() => []),
-      getFarmTrends(farmId).catch(() => []),
       getFarmGridCells(farmId).catch(() => []),
-      getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
       getLatestGridCalculations(farmId).catch(() => []),
       getLatestFarmCalculations(farmId).catch(() => []),
     ]);
 
     console.log("FARM", farmPayload);
-    console.log("SUMMARY", summaryPayload);
-    console.log("LATEST_SENTINEL", latestPayload);
     console.log("GRID_CELLS", gridCellsPayload);
-    console.log("GRID_VALUES", gridValuesPayload);
     console.log("H3_CELLS", h3Payload);
 
     setFarm(farmPayload);
-    setSummary(summaryPayload);
-    setLatestSentinel(latestPayload);
-    setHistory(normalizeList(historyPayload));
-    setTrends(normalizeList(trendsPayload));
+    setMetricContent(await getMetricContent(farmPayload?.crop_code || "").catch(() => []));
     setGridCells(normalizeList(gridCellsPayload));
-    setGridValues(normalizeList(gridValuesPayload));
     setGridCalculations(normalizeList(gridCalculationsPayload));
     setFarmCalculations(normalizeList(farmCalculationsPayload));
     setH3Cells(normalizeList(h3Payload));
@@ -224,6 +162,72 @@ export default function LandIntelligence() {
     };
   }, [farmId]);
 
+  // Registration queues the same canonical workflow before navigating here.
+  // Pick that job up on first load so the page does not require a second manual
+  // click to show progress or refresh the intelligence result.
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+    const stageOrder = new Map([
+      ["farm_ready", 0],
+      ["environment_datasets", 1],
+      ["trends", 2],
+      ["grid_context", 3],
+      ["intelligence", 4],
+    ]);
+    const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+
+    async function pollAnalysis() {
+      const status = await getLatestAnalysisStatus(farmId).catch(() => null);
+      if (cancelled || !status) return;
+
+      const stages = Array.isArray(status.stages) ? status.stages : [];
+      stages.forEach((stage) => {
+        const index = stageOrder.get(stage.name);
+        if (index === undefined) return;
+        updatePipelineStage(index, stage.name, [
+          `Status: ${stage.status}`,
+          ...(stage.details ? [JSON.stringify(stage.details)] : []),
+          ...(stage.message ? [stage.message] : []),
+        ]);
+      });
+      const currentIndex = stageOrder.get(status.current_stage);
+      if (currentIndex !== undefined) setPipelineStage(currentIndex);
+
+      if (terminalStatuses.has(status.status)) {
+        setRefreshing(false);
+        if (status.status === "failed") {
+          setPipelineFailure(status.error_message || "The farm analysis pipeline failed.");
+          setPipelineStatus("Pipeline failed");
+          setPipelineOpen(true);
+        } else if (status.status === "completed_with_warnings") {
+          setPipelineFailure("Analysis completed with source-data warnings. See stage details.");
+          setPipelineStatus("Analysis completed with warnings");
+          setPipelineOpen(true);
+        } else {
+          setPipelineFailure("");
+          setPipelineStatus("Analysis complete");
+          setPipelineOpen(false);
+        }
+        await loadLandIntelligence().catch(() => null);
+        return;
+      }
+
+      if (status.status === "running" || status.status === "queued") {
+        setRefreshing(true);
+        setPipelineOpen(true);
+        setPipelineStatus(`Analysis ${status.status}`);
+        timer = window.setTimeout(pollAnalysis, 2000);
+      }
+    }
+
+    pollAnalysis();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [farmId]);
+
   useEffect(() => {
     let cancelled = false;
     async function loadDetails() {
@@ -231,8 +235,13 @@ export default function LandIntelligence() {
         setSelectedDetails(null);
         return;
       }
-      const details = await getFarmGridCellDetails(farmId, selectedCell.grid_cell_id).catch(() => null);
-      if (!cancelled) setSelectedDetails(details);
+      const [details, calculations] = await Promise.all([
+        getFarmGridCellDetails(farmId, selectedCell.grid_cell_id).catch(() => null),
+        getGridCellCalculations(farmId, selectedCell.grid_cell_id).catch(() => []),
+      ]);
+      if (!cancelled) {
+        setSelectedDetails(details ? { ...details, calculated_metrics: calculations } : { calculated_metrics: calculations });
+      }
     }
     loadDetails();
     return () => {
@@ -249,39 +258,20 @@ export default function LandIntelligence() {
     const calcById = new Map(
       (Array.isArray(gridCalculations) ? gridCalculations : []).map((value) => [String(value.grid_cell_id), value]),
     );
-    const byId = new Map(gridValues.map((value) => [String(value.grid_cell_id), value]));
-    return gridCells.map((cell) => ({
+    return gridCells.filter((cell) => calcById.has(String(cell.grid_cell_id))).map((cell) => ({
       ...cell,
-      ...(byId.get(String(cell.grid_cell_id)) || {}),
       ...(calcById.get(String(cell.grid_cell_id)) || {}),
     }));
-  }, [gridCells, gridValues, gridCalculations]);
+  }, [gridCells, gridCalculations]);
 
-  const displayCells = mergedGridCells.length ? mergedGridCells : gridValues;
+  // Farmer maps are backed only by calculated predictions. Raw grid values
+  // remain available to technical/admin APIs, never as a UI fallback.
+  const displayCells = mergedGridCells;
   const displaySelected = selectedDetails?.grid_cell || selectedCell || null;
-  const latestSummary = summary || {};
   const h3Enabled = showH3 && canViewTechnicalH3Layer(user);
-  const latestSceneDate = latestSentinel?.scene_datetime || latestSentinel?.observation_date || latestSummary.latest_snapshot_date;
-  const latestSceneId = latestSentinel?.scene_id || latestSummary.latest_scene_id;
-  const hasAnalysis = Boolean(latestSummary.has_analysis || latestSummary.latest_snapshot_date || latestSentinel?.scene_id);
-  const stats = [
-    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "--", unit: "ac" },
-    { label: "Grid cells", value: displayCells.length || "--", unit: "" },
-    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "--", unit: "" },
-    { label: "Latest scene", value: latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet", unit: "" },
-    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "--", unit: "%" },
-    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "--", unit: "%" },
-  ];
+  const latestSceneDate = farmCalculationList[0]?.result_date || farm?.updated_at;
+  const hasAnalysis = Boolean(farmCalculationList.length || gridCalculations.length);
   const selectedParameterInfo = PARAMETERS.find((item) => item.key === selectedParameter);
-  const summaryMetricReadings = LAND_METRICS.map((metric) => ({
-    metric,
-    value: metricValueFromSummary(latestSummary, metric.key),
-    result: interpretLandMetric(metric.key, metricValueFromSummary(latestSummary, metric.key)),
-  }));
-  const statusPriority = STATUS_PRIORITY;
-  const priorityReading = [...summaryMetricReadings]
-    .filter(({ result }) => result.status !== "unavailable")
-    .sort((a, b) => statusPriority[b.result.status] - statusPriority[a.result.status])[0];
 
   async function runLatestAnalysis() {
     setRefreshing(true);
@@ -294,34 +284,58 @@ export default function LandIntelligence() {
       ]);
 
       const payload = {
-        start_date: "2025-12-01",
+        start_date: (() => {
+          const value = new Date();
+          value.setDate(value.getDate() - 365);
+          return value.toISOString().slice(0, 10);
+        })(),
         end_date: new Date().toISOString().slice(0, 10),
-        max_cloud_cover: 30,
-        // Resolution is selected by the orchestrator service default.
-        // h3_resolution: 12,
+        max_cloud_cover: 40,
         provider: "planetary_computer",
         collection_id: "sentinel-2-l2a",
-        use_tiny_preview_bbox: true,
-        tiny_bbox_size_deg: 0.0002,
       };
 
-      const refresh = await fullRefreshFarm(farmId, payload);
-      const stages = Array.isArray(refresh?.stages) ? refresh.stages : [];
-      stages.forEach((stage, index) => {
-        updatePipelineStage(index, stage.name || `Stage ${index + 1}`, [
-          `Status: ${stage.status}`,
-          ...(stage.details ? [JSON.stringify(stage.details)] : []),
-          ...(stage.message ? [stage.message] : []),
-        ]);
-      });
+      const queued = await triggerLatestAnalysis(farmId, payload);
+      const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+      const stageOrder = new Map([
+        ["farm_ready", 0],
+        ["environment_datasets", 1],
+        ["trends", 2],
+        ["grid_context", 3],
+        ["intelligence", 4],
+      ]);
+      let status = queued;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        status = await getLatestAnalysisStatus(farmId);
+        const stages = Array.isArray(status?.stages) ? status.stages : [];
+        stages.forEach((stage) => {
+          const index = stageOrder.get(stage.name);
+          if (index === undefined) return;
+          updatePipelineStage(index, stage.name, [
+            `Status: ${stage.status}`,
+            ...(stage.details ? [JSON.stringify(stage.details)] : []),
+            ...(stage.message ? [stage.message] : []),
+          ]);
+        });
+        if (terminalStatuses.has(status?.status)) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
 
-      if (refresh?.status !== "succeeded") {
-        setPipelineFailure(`Pipeline completed with status: ${refresh?.status}`);
+      if (status?.status === "failed") {
+        setPipelineFailure(status.error_message || "The farm analysis pipeline failed.");
         setPipelineOpen(true);
-        setPipelineStatus("Pipeline partial");
-      } else {
+        setPipelineStatus("Pipeline failed");
+      } else if (status?.status === "completed_with_warnings") {
+        setPipelineFailure("Analysis completed with source-data warnings. See stage details.");
+        setPipelineOpen(true);
+        setPipelineStatus("Analysis completed with warnings");
+      } else if (status?.status === "completed") {
         setPipelineStatus("Analysis complete");
         setPipelineOpen(false);
+      } else {
+        setPipelineFailure("Analysis is still running. Reopen this farm to check its status.");
+        setPipelineOpen(true);
+        setPipelineStatus("Analysis still running");
       }
 
       try {
@@ -343,62 +357,43 @@ export default function LandIntelligence() {
 
   // ---- derived, presentation-only ------------------------------------------
   const locationLine = [farm?.village_name, farm?.block_name, farm?.district_name].filter(Boolean).join(", ") || "Location pending";
-  const cloudValue = latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage;
-  const validValue = latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct;
-
   const selectedIndex = displaySelected
     ? displayCells.findIndex((cell) => String(cell.grid_cell_id) === String(displaySelected.grid_cell_id))
     : -1;
 
-  const cellMetricReadings = LAND_METRICS.map((metric) => {
-    const value = displaySelected
-      ? (selectedDetails?.weighted_average?.[metric.backendKey] ?? metricValueFromCell(displaySelected, metric.key))
-      : metricValueFromSummary(latestSummary, metric.key);
-    return { metric, value, result: interpretLandMetric(metric.key, value) };
+  const selectedCalculatedReadings = CALCULATED_METRICS.map((metric) => {
+    const detailRow = (selectedDetails?.calculated_metrics || []).find((row) => row.prediction_key === metric.key);
+    const gridRow = displaySelected?.calculations?.[metric.key];
+    const row = detailRow || gridRow;
+    return {
+      metric,
+      row,
+      result: interpretCalculatedMetric(metric.key, row?.score, metricContent),
+    };
   });
-  const worstCellReading = worstReading(cellMetricReadings);
-  const priorityForBanner = displaySelected ? worstCellReading : priorityReading;
-
-  const cellExtras = [
-    {
-      label: "Warmth",
-      icon: Sun,
-      value: pretty(selectedDetails?.weighted_average?.surface_temp_c ?? displaySelected?.surface_temp_c ?? latestSummary.avg_surface_temp_c, 1),
-      suffix: "°C",
-      tint: "bg-[var(--mt-gold-tint)] text-[var(--mt-gold-text)]",
-    },
-    {
-      label: "Sky",
-      icon: CloudSun,
-      value: skyLabel(selectedDetails?.weighted_average?.cloud_percentage ?? displaySelected?.cloud_percentage ?? cloudValue),
-      suffix: "",
-      tint: "bg-[var(--mt-sky-tint)] text-[var(--mt-sky-text)]",
-    },
-    {
-      label: "Picture",
-      icon: Layers,
-      value: imageQualityLabel(selectedDetails?.weighted_average?.valid_pixel_percentage ?? displaySelected?.valid_pixel_percentage ?? validValue),
-      suffix: "",
-      tint: "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]",
-    },
-  ];
-
-  const fieldInterpretationText = buildFieldInterpretation(cellMetricReadings, {
-    cloudPercentage:
-      selectedDetails?.weighted_average?.cloud_percentage ?? displaySelected?.cloud_percentage ?? cloudValue,
+  const farmCalculatedReadings = CALCULATED_METRICS.map((metric) => {
+    const row = farmCalculationList.find((item) => item.prediction_key === metric.key);
+    return { metric, row, result: interpretCalculatedMetric(metric.key, row?.score, metricContent) };
   });
-
-  const facts = [
-    { icon: Ruler, tint: "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]", value: farm?.area_acres ? `${pretty(farm.area_acres, 2)} ac` : "—", label: "Farm Area" },
-    { icon: LayoutGrid, tint: "bg-[var(--mt-sky-tint)] text-[var(--mt-sky-text)]", value: displayCells.length ? String(displayCells.length) : "Not yet", label: "Zones Checked" },
-    { icon: CalendarDays, tint: "bg-[var(--mt-gold-tint)] text-[var(--mt-gold-text)]", value: latestSceneDate ? formatDate(latestSceneDate) : "Not yet", label: "Last Check" },
+  const calculatedReadingsForInterpretation = displaySelected ? selectedCalculatedReadings : farmCalculatedReadings;
+  const signalReadings = calculatedReadingsForInterpretation.map(({ metric, result }) => ({ metric, result }));
+  const calculatedFieldInterpretationText = buildCalculatedFieldInterpretation(calculatedReadingsForInterpretation, {
+    cropName: farm?.crop_name || farm?.crop_code || "Your crop",
+    contentOverrides: { fieldInterpretation: metricContent.find((item) => item.metric_key === "crop_condition")?.field_interpretation || {} },
+  });
+  const calculatedLegend = [
+    { label: "Good", color: "#16a34a" },
+    { label: "Watch", color: "#84cc16" },
+    { label: "Attention", color: "#eab308" },
+    { label: "High", color: "#f97316" },
+    { label: "Critical", color: "#dc2626" },
   ];
 
   // Shared body of the selected-cell / farm-summary panel (desktop aside + mobile sheet).
   const panelBody = () => (
     <>
       <div className="text-[10.5px] font-extrabold uppercase tracking-[0.08em] text-[var(--mt-leaf-deep)]">
-        {displaySelected ? "Selected land cell" : "Farm summary"}
+        {displaySelected ? "Selected land cell" : "Calculated crop intelligence"}
       </div>
       <div className="mt-1 flex items-center justify-between gap-3">
         <div className="text-[18px] font-extrabold text-[var(--mt-ink)]">
@@ -421,38 +416,32 @@ export default function LandIntelligence() {
         </button>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {cellMetricReadings.map(({ metric, result }) => (
-          <div key={metric.key} className={`rounded-[14px] border p-3 ${result.surfaceClass}`}>
-            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-              <span className="min-w-0 text-[11.5px] font-bold leading-tight text-[var(--mt-ink)]">{metric.name}</span>
-              <StatusBadge result={result} short className="shrink-0" />
-            </div>
-            <div className={`mt-2 text-[13px] font-extrabold leading-tight ${result.textClass}`}>{result.headline}</div>
+      {calculatedReadingsForInterpretation.length > 0 && (
+        <div className="mt-4 rounded-[var(--mt-radius-md)] border border-emerald-100 bg-emerald-50/40 p-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-800">
+            Calculated crop intelligence
           </div>
-        ))}
-      </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {calculatedReadingsForInterpretation.map(({ metric, result }) => (
+              <div key={metric.key} className="rounded-xl border border-emerald-100 bg-white p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${result.className}`}>{result.label}</span>
+                </div>
+                <div className={`mt-1 text-[10px] font-bold ${result.textClass}`}>{result.headline}</div>
+                <div className="mt-1 text-[10px] leading-snug text-slate-500">{result.paragraph || result.signalMeaning}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 rounded-[var(--mt-radius-md)] bg-[var(--mt-leaf-tint)] p-4">
         <div className="flex items-center gap-2 text-[12.5px] font-extrabold text-[var(--mt-leaf-deep)]">
           <Sparkles className="h-4 w-4" strokeWidth={2.2} />
           Field interpretation
         </div>
-        <p className="mt-1.5 text-[12.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">{fieldInterpretationText}</p>
-      </div>
-
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {cellExtras.map((extra) => (
-          <div key={extra.label} className={`rounded-[12px] px-2.5 py-2 ${extra.tint}`}>
-            <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide">
-              <extra.icon className="h-3 w-3" strokeWidth={2.4} />
-              {extra.label}
-            </div>
-            <div className="mt-1 text-[12px] font-extrabold text-[var(--mt-ink)]">
-              {extra.value}{extra.suffix}
-            </div>
-          </div>
-        ))}
+        <p className="mt-1.5 text-[12.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">{calculatedFieldInterpretationText}</p>
       </div>
 
       {!hasAnalysis && (
@@ -506,6 +495,9 @@ export default function LandIntelligence() {
           <div className="truncate text-[16px] font-extrabold text-[var(--mt-ink)]">{farm?.farm_name || "Your farm"}</div>
           <div className="truncate text-[12px] font-semibold text-[var(--mt-ink-soft)]">{locationLine}</div>
         </div>
+        <span className="inline-block max-w-[120px] truncate rounded-full border border-[var(--mt-leaf)]/30 bg-[var(--mt-leaf-tint)] px-2.5 py-1.5 text-[11px] font-extrabold text-[var(--mt-leaf-deep)] sm:max-w-[180px] sm:px-3 sm:text-[12px]">
+          {farm?.crop_name || farm?.crop_code || "Crop not configured"}
+        </span>
         <button
           type="button"
           onClick={runLatestAnalysis}
@@ -551,10 +543,6 @@ export default function LandIntelligence() {
                   <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} />
                   {latestSceneDate ? `Checked ${formatDate(latestSceneDate)}` : "Not checked yet"}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-[var(--mt-ink)]">
-                  <CloudSun className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  {skyLabel(cloudValue)}
-                </span>
               </div>
             </div>
             <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-90" viewBox="0 0 1000 70" preserveAspectRatio="none" aria-hidden>
@@ -565,89 +553,49 @@ export default function LandIntelligence() {
         </Reveal>
 
         {/* ── priority banner ──────────────────────────────────────────── */}
-        {priorityForBanner && (
-          <Reveal delay={0.05}>
-            <div className={`flex items-center gap-4 rounded-[var(--mt-radius-md)] border p-4 md:px-5 ${priorityForBanner.result.surfaceClass}`}>
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white">
-                {(() => {
-                  const Icon = METRIC_ICONS[priorityForBanner.metric.key] || Activity;
-                  return <Icon className="h-5 w-5" style={{ color: priorityForBanner.result.color }} strokeWidth={2.2} />;
-                })()}
-              </span>
-              <div className="min-w-0">
-                <div className={`text-[15px] font-extrabold ${priorityForBanner.result.textClass}`}>{priorityForBanner.result.banner}</div>
-                {priorityForBanner.result.tip && (
-                  <div className={`mt-0.5 text-[13px] font-semibold ${priorityForBanner.result.textClass} opacity-90`}>{priorityForBanner.result.tip}</div>
-                )}
-              </div>
-            </div>
-          </Reveal>
-        )}
-
-        {/* ── facts ────────────────────────────────────────────────────── */}
         <Reveal delay={0.08}>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {facts.map((fact) => (
-              <div key={fact.label} className="flex items-center gap-3 rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white px-4 py-4">
-                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${fact.tint}`}>
-                  <fact.icon className="h-5 w-5" strokeWidth={2.1} />
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-[18px] font-extrabold text-[var(--mt-ink)]">{fact.value}</div>
-                  <div className="mt-0.5 text-[12.5px] font-bold text-[var(--mt-ink-soft)]">{fact.label}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-
-        {/* ── crop-specific calculated intelligence ────────────────────── */}
-        {farmCalculationList.length > 0 && (
           <section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Crop-specific calculated intelligence</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Calculated crop intelligence</p>
                 <h2 className="mt-1 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
-                  {farm?.crop_name || farm?.crop_code || "Configured crop"} · deterministic V1
+                  {farm?.crop_name || farm?.crop_code || "Configured crop"}
                 </h2>
-                <p className="mt-1 text-[11.5px] text-[var(--mt-ink-soft)]">
-                  Calculated from engineered H3 features and quality-aware crop formulas. Not ML predictions or laboratory diagnoses.
-                </p>
               </div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold text-emerald-700">
-                Latest {formatDate(farmCalculationList[0]?.result_date)}
-              </span>
+              {latestSceneDate && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold text-emerald-700">Latest {formatDate(latestSceneDate)}</span>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {CALCULATED_METRICS.map((metric) => {
-                const item = farmCalculationList.find((row) => row.prediction_key === metric.key);
-                const result = interpretCalculatedMetric(metric.key, item?.score);
+              {farmCalculatedReadings.map(({ metric, result }) => {
+                const Icon = CALCULATED_METRIC_ICONS[metric.key] || Activity;
                 return (
                   <button
                     key={metric.key}
                     type="button"
                     onClick={() => setSelectedParameter(metric.key)}
-                    className={`rounded-2xl border p-3 text-left transition ${selectedParameter === metric.key ? "border-emerald-500 ring-1 ring-emerald-300" : "border-slate-100 hover:border-emerald-200"}`}
+                    className={`min-h-[132px] rounded-2xl border p-3 text-left transition ${result.surfaceClass} ${selectedParameter === metric.key ? "ring-2 ring-emerald-300" : "hover:brightness-95"}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[12px] font-semibold text-slate-900">{metric.name}</p>
-                      <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${result.className}`}>{result.label}</span>
+                    <div className="flex items-start gap-2">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/80">
+                        <Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</p>
+                        <StatusBadge result={result} short className="mt-1" />
+                      </div>
                     </div>
-                    <div className="mt-1 flex items-end gap-1">
-                      <span className="text-2xl font-extrabold text-slate-900">{item?.score == null ? "--" : Number(item.score).toFixed(0)}</span>
-                      <span className="pb-1 text-[10px] text-slate-400">/100</span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-500">
-                      {item?.confidence != null && <span>Conf {Math.round(Number(item.confidence) * 100)}%</span>}
-                      {item?.affected_area_percent != null && <span>Affected {Number(item.affected_area_percent).toFixed(1)}%</span>}
-                    </div>
+                    <p className={`mt-3 line-clamp-3 text-[11px] font-bold leading-snug ${result.textClass}`}>{result.paragraph || result.headline}</p>
                   </button>
                 );
               })}
             </div>
+            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Field interpretation</p>
+              <p className="mt-1 text-[13px] font-semibold leading-relaxed text-slate-800">{calculatedFieldInterpretationText}</p>
+            </div>
           </section>
-        )}
+        </Reveal>
 
+        {/* ── crop-specific calculated intelligence ────────────────────── */}
         {/* ── map + selected cell ──────────────────────────────────────── */}
         <h2 className="flex items-center gap-2 pt-2 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
           <Layers className="h-[18px] w-[18px]" strokeWidth={2.1} />
@@ -696,7 +644,6 @@ export default function LandIntelligence() {
               <LandGridMap
                 farm={farm}
                 gridCells={displayCells}
-                gridValues={gridValues}
                 h3Cells={h3Enabled ? h3Cells : []}
                 selectedParameter={selectedParameter}
                 onGridCellClick={setSelectedCell}
@@ -707,10 +654,10 @@ export default function LandIntelligence() {
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--mt-line)] px-4 py-3.5 md:px-5">
-              {Object.values(METRIC_STATUSES).map((status) => (
+              {calculatedLegend.map((status) => (
                 <span key={status.label} className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--mt-ink)]">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color }} />
-                  {status.shortLabel}
+                  {status.label}
                 </span>
               ))}
             </div>
@@ -771,36 +718,25 @@ export default function LandIntelligence() {
             {displaySelected ? "For the cell you picked on the map" : "Across the whole farm"}
           </p>
         </div>
-        <Motion.div
-          key={displaySelected ? `cell-${displaySelected.grid_cell_id}` : "farm"}
-          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-          initial="hidden"
-          animate="show"
-          className="overflow-hidden rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white"
-        >
-          {cellMetricReadings.map(({ metric, result }) => {
-            const Icon = METRIC_ICONS[metric.key] || Activity;
-            return (
-              <Motion.div
-                key={metric.key}
-                variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}
-                className="flex flex-col gap-3 border-b border-[var(--mt-line)] p-4 last:border-b-0 md:flex-row md:items-start md:gap-5 md:px-5"
-                style={{ borderLeft: `4px solid ${result.color}` }}
-              >
-                <div className="flex items-center gap-3 md:w-[240px] md:shrink-0">
-                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[11px] ${result.surfaceClass}`}>
-                    <Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-[14px] font-extrabold text-[var(--mt-ink)]">{metric.name}</div>
-                    <StatusBadge result={result} className="mt-1" />
+        {calculatedReadingsForInterpretation.length > 0 && (
+          <div className="mb-3 overflow-hidden rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white">
+            {signalReadings.map(({ metric, result }) => {
+              const Icon = CALCULATED_METRIC_ICONS[metric.key] || Activity;
+              return (
+                <div key={metric.key} className="flex flex-col gap-3 border-b border-[var(--mt-line)] p-4 last:border-b-0 md:flex-row md:items-start md:gap-5 md:px-5" style={{ borderLeft: `4px solid ${result.color}` }}>
+                  <div className="flex items-center gap-3 md:w-[240px] md:shrink-0">
+                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[11px] ${result.className}`}><Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} /></span>
+                    <div className="min-w-0"><div className="text-[14px] font-extrabold text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</div><StatusBadge result={result} className="mt-1" /></div>
+                  </div>
+                  <div className="text-[13.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">
+                    <p>{result.signalMeaning}</p>
+                    <p className="mt-1 text-[12px] font-bold" style={{ color: result.color }}>{result.headline || result.paragraph}</p>
                   </div>
                 </div>
-                <p className="text-[13.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">{result.paragraph}</p>
-              </Motion.div>
-            );
-          })}
-        </Motion.div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Motion.div>
   );

@@ -141,6 +141,7 @@ class ScreenPracticeOut(BaseModel):
     name: str
     display_order: int
     media_config: dict[str, Any] = Field(default_factory=dict)
+    guide_image_url: str | None = None
     fields: list[ScreenPracticeFieldOut] = Field(default_factory=list)
 
 
@@ -239,6 +240,24 @@ class MediaAssetResponse(BaseModel):
     duration_seconds: float | None
     upload_status: str
     content_url: str | None = None
+
+
+class OwnerMediaOut(BaseModel):
+    media_asset_id: UUID
+    media_type: str
+    mime_type: str
+    byte_size: int
+    duration_seconds: float | None = None
+    media_role: str
+    media_purpose: str
+    slot_number: int | None = None
+    content_url: str
+
+
+class MediaAccessResponse(BaseModel):
+    url: str
+    external: bool = False
+    expires_in_seconds: int | None = None
 
 
 # ---------------------------------------------------------------------------

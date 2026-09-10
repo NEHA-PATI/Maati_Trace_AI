@@ -27,6 +27,10 @@ import {
   publishFormula,
   updateCropProfile,
   updateFormula,
+  getAdminMetricContent,
+  updateMetricContent,
+  cloneMetricContent,
+  publishMetricContent,
 } from "@/lib/api/featureProcessingAdmin";
 import { materializeFarmIntelligence } from "@/lib/api/analytics";
 import { getAllServiceHealth } from "@/lib/api/health";
@@ -45,6 +49,7 @@ const FE_TABS = [
   ["profiles", "Crop Profiles"],
   ["formulas", "Formula Registry"],
   ["components", "Component Catalog"],
+  ["content", "Metric Content"],
 ];
 
 const RASTER_ADAPTERS = [
@@ -248,6 +253,51 @@ function FormulaEditor({ formula, components, onSaved }) {
   );
 }
 
+function MetricContentEditor({ content, onSaved }) {
+  const [form, setForm] = useState(() => ({
+    display_name: content?.display_name || "",
+    signal_meaning: content?.signal_meaning || "",
+    ranges: JSON.stringify(content?.ranges || {}, null, 2),
+    messages: JSON.stringify(content?.messages || {}, null, 2),
+    field_interpretation: JSON.stringify(content?.field_interpretation || {}, null, 2),
+  }));
+  const [error, setError] = useState("");
+  const update = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
+
+  async function save() {
+    setError("");
+    try {
+      await updateMetricContent(content.content_id, {
+        display_name: form.display_name,
+        signal_meaning: form.signal_meaning,
+        ranges: parseJson(form.ranges),
+        messages: parseJson(form.messages),
+        field_interpretation: parseJson(form.field_interpretation),
+      });
+      onSaved?.();
+    } catch (err) {
+      setError(err?.message || "Unable to save metric content draft.");
+    }
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-amber-100 bg-amber-50/30 p-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div><Label className="text-xs">Metric name</Label><Input value={form.display_name} onChange={(e) => update("display_name", e.target.value)} /></div>
+        <div><Label className="text-xs">Scope</Label><Input disabled value={`${content.crop_code} · ${content.content_version}`} /></div>
+      </div>
+      <div><Label className="text-xs">Signal meaning shown to farmers</Label><textarea rows={3} value={form.signal_meaning} onChange={(e) => update("signal_meaning", e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" /></div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <JsonField label="Score ranges JSON (logic-compatible labels/messages)" value={form.ranges} onChange={(v) => update("ranges", v)} rows={12} />
+        <JsonField label="Status messages JSON" value={form.messages} onChange={(v) => update("messages", v)} rows={12} />
+        <JsonField label="Field interpretation JSON" value={form.field_interpretation} onChange={(v) => update("field_interpretation", v)} rows={12} />
+      </div>
+      {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
+      <Button onClick={save} className="rounded-xl bg-amber-600 text-white hover:bg-amber-700"><Save className="mr-2 h-4 w-4" />Save content draft</Button>
+    </div>
+  );
+}
+
 function ServiceHealthStrip({ health }) {
   const entries = Object.entries(health || {});
   if (!entries.length) return null;
@@ -303,12 +353,14 @@ export default function SystemManagementPage() {
   const [profiles, setProfiles] = useState([]);
   const [formulas, setFormulas] = useState([]);
   const [components, setComponents] = useState([]);
+  const [metricContent, setMetricContent] = useState([]);
   const [health, setHealth] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [editingProfile, setEditingProfile] = useState(null);
   const [editingFormula, setEditingFormula] = useState(null);
+  const [editingContent, setEditingContent] = useState(null);
   const [newProfile, setNewProfile] = useState(false);
   const [newFormula, setNewFormula] = useState(false);
   const [cloneCrop, setCloneCrop] = useState({ source_crop_code: "coconut", target_crop_code: "", target_crop_name: "", target_profile_version: "", formula_version_suffix: "v1" });
@@ -319,13 +371,14 @@ export default function SystemManagementPage() {
     setLoading(true);
     setError("");
     try {
-      const [summaryValue, runValues, sourceValues, profileValues, formulaValues, componentValues, healthValue] = await Promise.all([
+      const [summaryValue, runValues, sourceValues, profileValues, formulaValues, componentValues, contentValues, healthValue] = await Promise.all([
         getFeatureProcessingSummary().catch(() => ({})),
         getFeatureProcessingRuns(150).catch(() => []),
         getFeatureProcessingSources().catch(() => []),
         getAdminCropProfiles().catch(() => []),
         getAdminFormulas().catch(() => []),
         getComponentCatalog().catch(() => []),
+        getAdminMetricContent().catch(() => []),
         getAllServiceHealth().catch(() => ({})),
       ]);
       setSummary(summaryValue || {});
@@ -334,6 +387,7 @@ export default function SystemManagementPage() {
       setProfiles(profileValues || []);
       setFormulas(formulaValues || []);
       setComponents(componentValues || []);
+      setMetricContent(contentValues || []);
       setHealth(healthValue || {});
     } catch (err) {
       setError(err?.message || "Unable to load system management console.");
@@ -577,6 +631,33 @@ export default function SystemManagementPage() {
               ))}
             </div>
           )}
+
+          {feTab === "content" && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs text-amber-900">
+                <p className="font-semibold">Farmer-facing metric content</p>
+                <p className="mt-1">Edit the signal meaning, score-range labels, status sentences, and field-summary wording here. Calculation thresholds remain controlled by the published formula registry. Changes are draft-first and become visible to farmers only after publishing.</p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {metricContent.map((content) => (
+                  <div key={content.content_id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><p className="font-bold text-slate-800">{content.display_name}</p><p className="font-mono text-[10px] text-slate-400">{content.crop_code} · {content.metric_key} · {content.content_version}</p></div>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${content.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{content.status}{content.is_active ? " · active" : ""}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs text-slate-600">{content.signal_meaning}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setEditingContent(content)}>Edit/View</Button>
+                      {content.status === "draft" && <Button size="sm" onClick={async () => { try { await publishMetricContent(content.content_id); await load(); } catch (err) { setError(err?.message || "Publish failed."); } }} className="bg-amber-600 text-white">Publish</Button>}
+                      {content.status !== "draft" && <Button size="sm" variant="outline" onClick={async () => { const version = window.prompt("New content version", `${content.metric_key}_v2`); if (!version) return; try { await cloneMetricContent(content.content_id, version.trim()); await load(); } catch (err) { setError(err?.message || "Clone failed."); } }}>Clone draft</Button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!metricContent.length && <div className="rounded-2xl border border-slate-100 bg-white p-5 text-sm text-slate-500">No content rows are available. Apply migration <code>20260910_01_crop_intelligence_metric_content.sql</code>.</div>}
+              {editingContent && <MetricContentEditor content={editingContent} onSaved={() => { setEditingContent(null); load(); }} />}
+            </div>
+          )}
         </>
       )}
 
@@ -658,14 +739,15 @@ export default function SystemManagementPage() {
           <ServiceHealthStrip health={{ orchestrator: health.orchestrator, raster: health.raster, lakehouse: health.lakehouse, stac: health.stac }} />
           <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Orchestration endpoints</p>
+            <p className="mt-1 text-[11px]">Normal farmer traffic uses <code>POST /v1/hot-stream/farms/&#123;id&#125;/run-latest-analysis</code> and polls <code>GET /v1/hot-stream/farms/&#123;id&#125;/analysis-status</code>. The routes below are operator diagnostics/backfills.</p>
             <ul className="mt-2 list-inside list-disc space-y-1">
-              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/full-refresh</code> — repair → Sentinel-2 H3 analysis → trends → grid</li>
-              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/sentinel2/history-backfill</code> — historical Sentinel-2 scenes for the feature anchor</li>
-              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/environment-refresh</code> — Tier-A/B multi-source enrichment</li>
+              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/full-refresh</code> — compatibility alias for the canonical full pipeline</li>
+              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/sentinel2/history-backfill</code> — operator backfill for historical Sentinel-2 observations</li>
+              <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/environment-refresh</code> — operator dataset-stage retry; Sentinel-2 is included</li>
             </ul>
             <p className="mt-2">Scheduling cadence is operational config; a no-code scheduler UI is a follow-up.</p>
           </div>
-          <RunTable runs={runsFor(["farm_analysis_materialize", "environment_refresh", "sentinel2_history_backfill"])} />
+          <RunTable runs={runsFor(["farm_latest_analysis", "farm_analysis_materialize", "environment_refresh", "sentinel2_history_backfill"])} />
         </div>
       )}
     </div>

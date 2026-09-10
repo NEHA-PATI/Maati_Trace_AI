@@ -1,22 +1,26 @@
-import { NavLink } from "react-router-dom";
+import { createElement } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { LayoutGrid, Sprout, MapPinPlus, Bell, User } from "lucide-react";
 
 const TABS = [
   { to: "/farmer/me", label: "Dashboard", icon: LayoutGrid },
-  { to: "/my-crops", label: "My Crop", icon: Sprout },
+  { to: "/my-crops/language", label: "My Crop", icon: Sprout },
   { to: "/farm-register", label: "Add Farm", icon: MapPinPlus },
   { to: "/notifications", label: "Alerts", icon: Bell },
   { to: "/settings", label: "Account", icon: User },
 ];
 
 export default function MobileTabBar() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith("/farm-register")) return null;
+
   return (
     <nav
       aria-label="Main"
       className="mt-surface fixed inset-x-0 bottom-0 z-50 flex items-stretch border-t border-[var(--mt-line)] bg-white/95 backdrop-blur-md md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      {TABS.map(({ to, label, icon: Icon }) => (
+      {TABS.map(({ to, label, icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -35,7 +39,7 @@ export default function MobileTabBar() {
                   isActive ? "bg-[var(--mt-leaf-tint)]" : "bg-transparent"
                 }`}
               >
-                <Icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                {createElement(icon, { className: "h-[18px] w-[18px]", strokeWidth: 2.2 })}
               </span>
               {label}
             </>

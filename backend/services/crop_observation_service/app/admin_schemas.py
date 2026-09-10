@@ -17,6 +17,7 @@ class AdminCropOut(BaseModel):
     default_stage_strategy: str
     is_active: bool
     display_order: int
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminCropCreateRequest(BaseModel):
@@ -63,6 +64,7 @@ class AdminStageOut(BaseModel):
     is_enabled: bool
     expected_start_day: int | None
     expected_end_day: int | None
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminStageCreateRequest(BaseModel):
@@ -93,6 +95,7 @@ class AdminPracticeTemplateOut(BaseModel):
     practice_code: str
     system_type: str
     is_active: bool
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminStagePracticeOut(BaseModel):
@@ -104,6 +107,7 @@ class AdminStagePracticeOut(BaseModel):
     display_order: int
     is_enabled: bool
     media_config: dict = Field(default_factory=dict)
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminStagePracticeCreateRequest(BaseModel):
@@ -139,6 +143,7 @@ class AdminFieldOut(BaseModel):
     display_order: int
     is_required: bool
     is_enabled: bool
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminFieldCreateRequest(BaseModel):
@@ -169,6 +174,7 @@ class AdminOptionOut(BaseModel):
     display_order: int
     icon_key: str | None
     is_active: bool
+    translations: list[dict] = Field(default_factory=list)
 
 
 class AdminOptionCreateRequest(BaseModel):
@@ -222,6 +228,7 @@ class ValidationIssue(BaseModel):
     stage_code: str | None = None
     practice_code: str | None = None
     field_code: str | None = None
+    locale: str | None = None
 
 
 class ValidationResponse(BaseModel):
