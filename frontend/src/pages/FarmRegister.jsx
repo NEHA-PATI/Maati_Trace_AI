@@ -26,6 +26,8 @@ import {
 } from "@/lib/api/location";
 import {
   runLatestAnalysis,
+  getLatestAnalysisStatus,
+  ANALYSIS_PIPELINE_STEPS,
 } from "@/lib/api/hotStream";
 import { getStoredUser } from "@/features/auth/session";
 import FarmBoundaryStep from "@/features/farm-registration/boundary/FarmBoundaryStep";
@@ -58,9 +60,47 @@ const EMPTY_FORM = {
 };
 const FARM_DRAFT_KEY = "maatitrace:farm-registration:draft:v1";
 const MotionDiv = motion.div;
+const REGISTRATION_PIPELINE_STEPS = [
+  "Validate farmer, crop and boundary",
+  "Validate farm location",
+  "Generate H3 hexagons",
+  "Save farm record and polygon",
+  "Start complete analysis",
+];
+const PIPELINE_STEPS = [
+  ...REGISTRATION_PIPELINE_STEPS,
+  ...ANALYSIS_PIPELINE_STEPS.map(([, label]) => label),
+];
 
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
+}
+
+function getAnalysisProgress(status, offset) {
+  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
+  if (terminal) {
+    const finalStep = REGISTRATION_PIPELINE_STEPS.length + ANALYSIS_PIPELINE_STEPS.length - 1;
+    return {
+      step: finalStep,
+      label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
+      status: status.status,
+    };
+  }
+  const rows = Array.isArray(status?.stages) ? status.stages : [];
+  const current = status?.current_stage;
+  const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
+  let step = index >= 0 ? index : 0;
+  let label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || "Running analysis";
+  const environment = rows.find((row) => row.name === "environment_datasets");
+  const datasets = environment?.details?.datasets || [];
+  if (current === "environment_datasets" && datasets.length) {
+    const active = datasets.findIndex((row) => row.status === "running");
+    const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
+    const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
+    step = 1 + datasetIndex;
+    label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || label;
+  }
+  return { step: offset + step, label, status: status?.status || "running" };
 }
 
 
@@ -284,6 +324,7 @@ export default function FarmRegister() {
   }, []);
 
   async function handleRegister() {
+    let keepPipelineOpen = false;
     setLoading(true);
     setError("");
     setBackendErrorDetail("");
@@ -295,6 +336,9 @@ export default function FarmRegister() {
       if (!boundarySummary.valid || !farmGeometry || !boundaryConfirmed) {
         throw new Error("Complete and confirm the farm boundary before registration.");
       }
+      setPipelineStage(0);
+      setPipelineStatus("Validating farm location...");
+      setPipelineStage(1);
       const validated = await validateLocation({
         state_name: formData.state_name,
         district_name: formData.district_name,
@@ -318,7 +362,7 @@ export default function FarmRegister() {
       }
 
       setPipelineStatus("Generating H3 preview...");
-      setPipelineStage(1);
+      setPipelineStage(2);
       try {
         const preview = await previewH3({
           polygon: farmGeometry,
@@ -348,28 +392,40 @@ export default function FarmRegister() {
         h3_resolution: 12,
       };
 
-      setPipelineStatus("Registering farm...");
-      setPipelineStage(2);
+      setPipelineStatus("Saving farm record and polygon...");
+      setPipelineStage(3);
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
-      if (formData.runNow) {
-        setPipelineStatus("Starting complete farm analysis...");
-        setPipelineStage(3);
-        const endDate = new Date();
-        const startDate = new Date(endDate);
-        startDate.setDate(startDate.getDate() - 365);
-        await runLatestAnalysis(farmPayload.farm_id, {
-          start_date: startDate.toISOString().slice(0, 10),
-          end_date: endDate.toISOString().slice(0, 10),
-          max_cloud_cover: 40,
-          provider: "planetary_computer",
-          collection_id: "sentinel-2-l2a",
-        }).catch(() => setValidationWarning("Farm registered, but the analysis job could not be started. Open the farm and retry analysis."));
+      setPipelineStatus("Starting complete farm analysis...");
+      setPipelineStage(4);
+      const endDate = new Date();
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 365);
+      await runLatestAnalysis(farmPayload.farm_id, {
+        start_date: startDate.toISOString().slice(0, 10),
+        end_date: endDate.toISOString().slice(0, 10),
+        max_cloud_cover: 40,
+        provider: "planetary_computer",
+        collection_id: "sentinel-2-l2a",
+      });
+
+      let status = null;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        status = await getLatestAnalysisStatus(farmPayload.farm_id);
+        const progress = getAnalysisProgress(status, REGISTRATION_PIPELINE_STEPS.length);
+        setPipelineStage(progress.step);
+        setPipelineStatus(`${progress.label} · ${status.status || "running"}`);
+        if (["completed", "completed_with_warnings", "failed"].includes(status.status)) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
+      if (status?.status === "failed") {
+        throw new Error(status.error_message || "Farm analysis failed.");
       }
 
       setPipelineStatus("Registered. Redirecting to land intelligence...");
-      setPipelineStage(9);
+      setPipelineStage(PIPELINE_STEPS.length - 1);
+      keepPipelineOpen = true;
       localStorage.removeItem(FARM_DRAFT_KEY);
       setTimeout(() => navigate(`/land/${farmPayload.farm_id}`), 800);
     } catch (err) {
@@ -387,7 +443,7 @@ export default function FarmRegister() {
       setPipelineStage(-1);
     } finally {
       setLoading(false);
-      setPipelineOpen(false);
+      if (!keepPipelineOpen) setPipelineOpen(false);
     }
   }
 
@@ -443,18 +499,7 @@ export default function FarmRegister() {
           title="Land registration pipeline"
           status={pipelineStatus}
           currentStep={Math.max(0, pipelineStage)}
-          steps={[
-            "Validating location",
-            "Previewing H3 cells",
-            "Registering land boundary",
-            "Saving farm polygon",
-            "Starting satellite search",
-            "Running raster index processing",
-            "Writing H3 analytics",
-            "Building 10m visual grid",
-            "Computing H3-to-grid weighted averages",
-            "Preparing land intelligence page",
-          ]}
+          steps={PIPELINE_STEPS}
           details={[
             `State: ${formData.state_name || "â€”"}`,
             `District: ${formData.district_name || "â€”"}`,
@@ -678,10 +723,9 @@ export default function FarmRegister() {
                       H3 preview ready. Estimated cells: {h3Preview.cell_count || h3Preview.returned_cell_count || "pending"}
                     </div>
                   )}
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    <input type="checkbox" checked={formData.runNow} onChange={(e) => update("runNow", e.target.checked)} />
-                    Run latest analysis after registration
-                  </label>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">
+                    Complete analysis is automatically included with every new farm registration. The results will open after processing finishes.
+                  </div>
                   <Button onClick={handleRegister} disabled={loading} className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-bold text-white shadow-lg shadow-emerald-500/30 transition-all hover:-translate-y-0.5 hover:bg-emerald-600">
                     <Check className="mr-2 h-4 w-4" />
                     {loading ? "Registering..." : "Confirm & Register Farm"}
@@ -701,7 +745,7 @@ export default function FarmRegister() {
                   <div className="grid grid-cols-2 gap-3 text-left">
                     {[
                       { label: "Farm ID", value: registeredFarm.farm_id },
-                      { label: "Status", value: formData.runNow ? "Analysis requested" : "Registered" },
+                      { label: "Status", value: "Analysis completed" },
                       { label: "Survey Number", value: registeredFarm.survey_number || "Pending" },
                       { label: "H3 Cells", value: `${registeredFarm.h3_cell_count || 0} generated` },
                     ].map((item) => (

@@ -80,10 +80,12 @@ class Settings(BaseSettings):
     cartesia_api_key: str = ""
     cartesia_api_base: str = "https://api.cartesia.ai"
     cartesia_api_version: str = "2026-08-14"
-    cartesia_tts_model: str = "sonic-3.6-2026-08-27"
+    cartesia_tts_model: str = "sonic-3.6"
     cartesia_odia_voice_id: str = ""
     cartesia_english_voice_id: str = ""
     cartesia_tts_output_container: str = "mp3"
+    cartesia_tts_mp3_bit_rate: int = 128000
+    cartesia_tts_sample_rate: int = 44100
     cartesia_tts_speed: float = 0.95
     cartesia_tts_volume: float = 1.0
     cartesia_connect_timeout_seconds: int = 5

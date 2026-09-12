@@ -418,6 +418,29 @@ def get_fpo_by_id(
     return _dict(row)
 
 
+def list_fpos(
+    conn: Connection,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        text(
+            f"""
+            SELECT {FPO_SELECT}
+            FROM fpos f
+            WHERE f.is_active = TRUE
+            ORDER BY f.created_at DESC, f.fpo_id
+            LIMIT :limit
+            OFFSET :offset;
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
 def create_fpo_with_membership(
     conn: Connection,
     *,

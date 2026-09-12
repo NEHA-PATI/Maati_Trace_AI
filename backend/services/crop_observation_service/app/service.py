@@ -182,6 +182,13 @@ def start_crop_cycle(
         season_name=payload.season_name,
         current_stage_code=current_stage_code,
     )
+    if current_stage_code:
+        repo.record_cycle_stage(
+            row["crop_cycle_id"],
+            current_stage_code,
+            source="SYSTEM",
+            changed_by_user_id=None,
+        )
     return CropCycleResponse(**row)
 
 
@@ -203,13 +210,13 @@ def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPra
             {"locale": t["locale"], "display_name": t["display_name"]}
             for t in stage_practice["translations"]
         ]
-        name, _ = repo.pick_names(practice_translations, locale)
+        name, _ = repo.pick_names_strict(practice_translations, locale)
 
         fields = []
         for field in data["fields_by_practice"].get(stage_practice["stage_practice_id"], []):
             field_translations = field["translations"]
             labels = [{"locale": t["locale"], "display_name": t["label"]} for t in field_translations]
-            label, _ = repo.pick_names(labels, locale)
+            label, _ = repo.pick_names_strict(labels, locale)
             help_text = next(
                 (t["help_text"] for t in field_translations if t["locale"] == locale and t["help_text"]),
                 None,
@@ -221,7 +228,7 @@ def _build_practices_for_stage(stage_id: UUID, *, locale: str) -> list[ScreenPra
                     {"locale": t["locale"], "display_name": t["label"]}
                     for t in option.get("translations", [])
                 ]
-                option_label, _ = repo.pick_names(option_labels, locale)
+                option_label, _ = repo.pick_names_strict(option_labels, locale)
                 options.append(
                     {
                         "option_code": option["option_code"],
@@ -347,7 +354,7 @@ def get_stage_screen(
             stage_code=s["stage_code"],
             name=(repo.get_stage_names(s["stage_id"], locale=locale)[0] or s["stage_code"]),
             display_order=s["display_order"],
-            is_current=s["stage_code"] == stage_code,
+            is_current=s["stage_code"] == cycle.get("current_stage_code"),
         )
         for s in all_stages
     ]
@@ -359,7 +366,7 @@ def get_stage_screen(
     today_observation = None
     if today_daily is not None:
         today_practices = repo.list_practice_observations_for_daily(today_daily["daily_observation_id"])
-            today_observation = {
+        today_observation = {
             "daily_observation_id": today_daily["daily_observation_id"],
             "crop_status": today_daily["crop_status"],
             "practices": [

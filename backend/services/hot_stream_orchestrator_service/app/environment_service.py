@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from services.hot_stream_orchestrator_service.app.environment_clients import (
@@ -42,6 +42,7 @@ class EnvironmentRefreshError(RuntimeError):
 def materialize_environment(
     farm_id: UUID,
     payload: EnvironmentRefreshRequest,
+    progress_callback: Callable[[list[dict[str, Any]], str | None], None] | None = None,
 ) -> dict[str, Any]:
     if not payload.dataset_keys:
         raise EnvironmentRefreshError("At least one environmental dataset is required.")
@@ -87,6 +88,8 @@ def materialize_environment(
                 status="running",
                 metadata={"completed_datasets": stage_results, "current_dataset": dataset_key},
             )
+            if progress_callback:
+                progress_callback(stage_results, dataset_key)
             try:
                 dataset_options = payload.dataset_options.get(dataset_key) or {}
                 if dataset_key in STATIC_TABLES and not payload.force_refresh:
@@ -174,6 +177,8 @@ def materialize_environment(
                 status="running",
                 metadata={"completed_datasets": stage_results},
             )
+            if progress_callback:
+                progress_callback(stage_results, None)
 
         failures = [row for row in stage_results if row["status"] in {"failed", "unavailable"}]
         successes = [row for row in stage_results if row["status"] in {"succeeded", "cached"}]

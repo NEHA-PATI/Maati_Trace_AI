@@ -3,18 +3,23 @@ import { CheckCircle2, Music2, RefreshCw, Volume2 } from "lucide-react";
 
 import {
   generateConfigurationAudio,
+  generateStageInstructionAudio,
   getTtsStatus,
   listConfigurations,
+  listStages,
   listCrops,
   listSystemMedia,
   listTtsProfiles,
   listTtsVoices,
+  fetchTtsVoicePreview,
   resolveCropObservationServiceUrl,
   upsertTtsProfile,
+  upsertStageTranslation,
 } from "../api/cropObservationAdminApi";
 
 export default function CropObservationMediaVoicePage() {
   const [status, setStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [profiles, setProfiles] = useState([]);
   const [voices, setVoices] = useState({ "or-IN": [], "en-IN": [] });
   const [voiceLoading, setVoiceLoading] = useState("");
@@ -23,21 +28,32 @@ export default function CropObservationMediaVoicePage() {
   const [cropCode, setCropCode] = useState("");
   const [configs, setConfigs] = useState([]);
   const [configId, setConfigId] = useState("");
+  const [stages, setStages] = useState([]);
+  const [stageLoading, setStageLoading] = useState(false);
+  const [stageBusy, setStageBusy] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState({});
 
   async function reload() {
-    const [s, p, m, cropRows] = await Promise.all([
+    setStatusLoading(true);
+    const results = await Promise.allSettled([
       getTtsStatus(),
       listTtsProfiles(),
       listSystemMedia({ limit: 300 }),
       listCrops(),
     ]);
-    setStatus(s);
-    setProfiles(p);
-    setMedia(m);
-    setCrops(cropRows);
-    if (!cropCode && cropRows.length) setCropCode(cropRows[0].crop_code);
+    const [statusResult, profilesResult, mediaResult, cropsResult] = results;
+    if (statusResult.status === "fulfilled") setStatus(statusResult.value);
+    if (profilesResult.status === "fulfilled") setProfiles(profilesResult.value);
+    if (mediaResult.status === "fulfilled") setMedia(mediaResult.value);
+    if (cropsResult.status === "fulfilled") {
+      setCrops(cropsResult.value);
+      if (!cropCode && cropsResult.value.length) setCropCode(cropsResult.value[0].crop_code);
+    }
+    setStatusLoading(false);
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
   }
 
   useEffect(() => {
@@ -49,7 +65,7 @@ export default function CropObservationMediaVoicePage() {
     listConfigurations(cropCode)
       .then((rows) => {
         setConfigs(rows);
-        const preferred = rows.find((row) => row.status === "DRAFT") || rows.find((row) => row.status === "PUBLISHED") || rows[0];
+        const preferred = rows.find((row) => row.status === "DRAFT");
         setConfigId(preferred?.config_version_id || "");
       })
       .catch(() => {
@@ -57,6 +73,37 @@ export default function CropObservationMediaVoicePage() {
         setConfigId("");
       });
   }, [cropCode]);
+
+  useEffect(() => {
+    if (!configId) {
+      setStages([]);
+      return;
+    }
+    setStageLoading(true);
+    listStages(configId)
+      .then(setStages)
+      .catch(() => setStages([]))
+      .finally(() => setStageLoading(false));
+  }, [configId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPreviews() {
+      const next = {};
+      for (const locale of ["or-IN", "en-IN"]) {
+        const profile = profiles.find((item) => item.locale === locale);
+        const voice = voices[locale].find((item) => item.voice_id === profile?.voice_id);
+        if (!voice?.voice_id || !voice.preview_url) continue;
+        try {
+          next[locale] = URL.createObjectURL(await fetchTtsVoicePreview(voice.voice_id));
+        } catch { /* provider previews are optional */ }
+      }
+      if (!cancelled) setPreviewUrls(next);
+      else Object.values(next).forEach((url) => URL.revokeObjectURL(url));
+    }
+    loadPreviews();
+    return () => { cancelled = true; };
+  }, [profiles, voices]);
 
   async function loadVoices(locale) {
     setVoiceLoading(locale);
@@ -101,6 +148,44 @@ export default function CropObservationMediaVoicePage() {
     }
   }
 
+  async function saveStageText(stage, locale, instructionText) {
+    const translations = stage.translations || [];
+    const current = translations.find((item) => item.locale === locale) || {};
+    setStageBusy(`${stage.stage_id}:${locale}:save`);
+    try {
+      await upsertStageTranslation(stage.stage_id, locale, {
+        display_name: current.display_name || stage.stage_code,
+        instruction_text: instructionText.trim() || null,
+      });
+      setStages((previous) => previous.map((item) => item.stage_id !== stage.stage_id ? item : {
+        ...item,
+        translations: [
+          ...(item.translations || []).filter((translation) => translation.locale !== locale),
+          { ...current, locale, instruction_text: instructionText.trim() || null },
+        ],
+      }));
+      setMessage(`${locale === "or-IN" ? "Odia" : "English"} text saved for ${stage.stage_code}.`);
+    } catch (err) {
+      setMessage(err?.message || "Could not save instruction text.");
+    } finally {
+      setStageBusy("");
+    }
+  }
+
+  async function generateStage(stage, locale) {
+    setStageBusy(`${stage.stage_id}:${locale}:generate`);
+    setMessage("");
+    try {
+      await generateStageInstructionAudio(stage.stage_id, locale, { force: false });
+      setMessage(`${locale === "or-IN" ? "Odia" : "English"} audio generated for ${stage.stage_code}.`);
+      await reload();
+    } catch (err) {
+      setMessage(err?.message || "Could not generate instruction audio.");
+    } finally {
+      setStageBusy("");
+    }
+  }
+
   const audioRows = useMemo(() => media.filter((item) => item.asset_role === "INSTRUCTION_AUDIO"), [media]);
   const visualRows = useMemo(() => media.filter((item) => item.asset_role !== "INSTRUCTION_AUDIO"), [media]);
 
@@ -112,15 +197,14 @@ export default function CropObservationMediaVoicePage() {
             <h3 className="text-lg font-black text-slate-900">Instruction voice</h3>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">Cartesia is used only while configuring content. Generated clips are stored once in LOCAL/S3 storage and are replayed by farmers without another TTS call.</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${status?.api_key_configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-            {status?.api_key_configured ? "Cartesia connected" : "Cartesia key missing"}
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusLoading ? "bg-slate-100 text-slate-600" : status?.api_key_configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            {statusLoading ? "Checking Cartesia..." : status?.api_key_configured ? "Cartesia connected" : "Cartesia key missing"}
           </span>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           {["or-IN", "en-IN"].map((locale) => {
             const profile = profiles.find((p) => p.locale === locale);
-            const selected = voices[locale].find((voice) => voice.voice_id === profile?.voice_id);
             return (
               <div key={locale} className="rounded-xl border bg-slate-50 p-4">
                 <div className="flex items-center gap-2"><Volume2 className="h-4 w-4 text-emerald-700" /><div className="font-bold text-slate-900">{locale === "or-IN" ? "Odia instruction voice" : "English instruction voice"}</div></div>
@@ -134,7 +218,7 @@ export default function CropObservationMediaVoicePage() {
                     </select>
                   ) : null}
                 </div>
-                {selected?.preview_url ? <audio controls preload="none" className="mt-3 h-9 w-full" src={selected.preview_url} /> : null}
+                {previewUrls[locale] ? <audio controls preload="none" className="mt-3 h-9 w-full" src={previewUrls[locale]} /> : null}
               </div>
             );
           })}
@@ -143,7 +227,7 @@ export default function CropObservationMediaVoicePage() {
 
       <section className="rounded-2xl border bg-white p-5 shadow-sm">
         <h3 className="font-black text-slate-900">Generate crop instruction audio</h3>
-        <p className="mt-1 text-sm text-slate-500">Select a crop/configuration. Only missing or changed text/voice combinations call Cartesia; unchanged content reuses the TTS cache.</p>
+        <p className="mt-1 text-sm text-slate-500">Write the instruction in English and Odia below, save it, then generate the audio. Farmers will hear the generated clip for their selected language.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-[240px_1fr_auto]">
           <select value={cropCode} onChange={(e) => setCropCode(e.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm font-semibold">
             {crops.map((crop) => <option key={crop.crop_code} value={crop.crop_code}>{crop.crop_code}</option>)}
@@ -151,9 +235,32 @@ export default function CropObservationMediaVoicePage() {
           <select value={configId} onChange={(e) => setConfigId(e.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm">
             {configs.map((config) => <option key={config.config_version_id} value={config.config_version_id}>v{config.version_number} · {config.status}</option>)}
           </select>
-          <button disabled={!configId || busy} onClick={generateAll} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Generate missing / changed</button>
+          <button disabled={!configId || configs.find((row) => row.config_version_id === configId)?.status !== "DRAFT" || busy} onClick={generateAll} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Generate missing / changed</button>
         </div>
+        {!configId && configs.length ? <p className="mt-3 text-sm text-amber-700">Only draft configurations can generate audio. Clone the published configuration from the Configuration tab first.</p> : null}
         {message ? <p className="mt-3 text-sm font-medium text-slate-600">{message}</p> : null}
+      </section>
+
+      <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-black text-slate-900">Instruction text</h3>
+            <p className="mt-1 text-sm text-slate-500">Each stage has separate text for English and Odia. Audio can only be generated after text and a voice are configured.</p>
+          </div>
+          {stageLoading ? <span className="text-sm text-slate-500">Loading stages…</span> : null}
+        </div>
+        {!stageLoading && configId && !stages.length ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No stages exist in this draft configuration yet.</p> : null}
+        <div className="mt-4 space-y-4">
+          {stages.map((stage) => (
+            <InstructionTextEditor
+              key={stage.stage_id}
+              stage={stage}
+              busy={stageBusy}
+              onSave={saveStageText}
+              onGenerate={generateStage}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -166,6 +273,50 @@ export default function CropObservationMediaVoicePage() {
         <p className="mt-1 text-sm text-slate-500">Crop, stage, practice and pest/disease option images are uploaded directly inside Configuration, next to the object they belong to.</p>
         <MediaTable rows={visualRows} />
       </section>
+    </div>
+  );
+}
+
+function InstructionTextEditor({ stage, busy, onSave, onGenerate }) {
+  const english = stage.translations?.find((item) => item.locale === "en-IN")?.instruction_text || "";
+  const odia = stage.translations?.find((item) => item.locale === "or-IN")?.instruction_text || "";
+  const [values, setValues] = useState({ "en-IN": english, "or-IN": odia });
+
+  useEffect(() => setValues({ "en-IN": english, "or-IN": odia }), [english, odia]);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="font-bold text-slate-900">{stage.stage_code}</p>
+        {stage.is_initial ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">initial</span> : null}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {[{ locale: "en-IN", label: "English" }, { locale: "or-IN", label: "ଓଡ଼ିଆ (Odia)" }].map(({ locale, label }) => {
+          const saveKey = `${stage.stage_id}:${locale}:save`;
+          const generateKey = `${stage.stage_id}:${locale}:generate`;
+          return (
+            <div key={locale} className="space-y-2">
+              <label className="block text-xs font-bold text-slate-600">{label} speech text</label>
+              <textarea
+                value={values[locale]}
+                onChange={(event) => setValues((previous) => ({ ...previous, [locale]: event.target.value }))}
+                maxLength={1200}
+                rows={4}
+                placeholder={`Type the ${label} instruction that farmers should hear…`}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-emerald-500 focus:ring-2"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" disabled={!stage.config_version_id || busy === saveKey} onClick={() => onSave(stage, locale, values[locale])} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
+                  {busy === saveKey ? "Saving…" : "Save text"}
+                </button>
+                <button type="button" disabled={!values[locale].trim() || busy === generateKey} onClick={() => onGenerate(stage, locale)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  {busy === generateKey ? "Generating…" : "Generate audio"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

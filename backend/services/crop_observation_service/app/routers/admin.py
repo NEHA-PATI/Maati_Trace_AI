@@ -4,9 +4,10 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 
 from services.crop_observation_service.app import admin_repository as admin_repo
-from services.crop_observation_service.app import admin_service
+from services.crop_observation_service.app import admin_service, tts_service
 from services.crop_observation_service.app.admin_schemas import (
     AdminConfigVersionOut,
     AdminCropCreateRequest,
@@ -340,6 +341,15 @@ def tts_voices_endpoint(
     context: RequestContext = Depends(get_request_context),
 ):
     return admin_service.list_tts_voices(context, language)
+
+
+@router.get("/tts/voices/{voice_id}/preview")
+def tts_voice_preview_endpoint(
+    voice_id: str,
+    context: RequestContext = Depends(get_request_context),
+):
+    data, mime_type = tts_service.get_voice_preview(context, voice_id)
+    return Response(content=data, media_type=mime_type)
 
 
 @router.get("/tts/profiles", response_model=list[TtsProfileOut])

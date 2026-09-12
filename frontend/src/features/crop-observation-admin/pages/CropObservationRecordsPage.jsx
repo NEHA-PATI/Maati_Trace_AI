@@ -23,7 +23,7 @@ function pill(value) {
   return "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
 
-function RecordDrawer({ recordId, onClose, onUpdated }) {
+export function RecordDrawer({ recordId, onClose, onUpdated }) {
   const [record, setRecord] = useState(null);
   const [note, setNote] = useState("");
   const [review, setReview] = useState("NEW");

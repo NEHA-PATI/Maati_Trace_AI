@@ -120,7 +120,7 @@ def _option_label_lookup(stage_practice_id: UUID, *, locale: str) -> dict[str, d
     lookup: dict[str, dict[str, str]] = {}
     for (field_code, option_code), translations in by_field_and_option.items():
         pairs = [{"locale": t["locale"], "display_name": t["label"]} for t in translations]
-        label, _ = repo.pick_names(pairs, locale)
+        label, _ = repo.pick_names_strict(pairs, locale)
         lookup.setdefault(field_code, {})[option_code] = label or option_code
     return lookup
 
@@ -173,6 +173,7 @@ def get_practice_history(
         stage_code=stage_code,
         practice_code=practice_code,
         limit=limit,
+        exclude_observed_on=observation_service.today_ist(),
     )
     summaries = _media_summaries_by_owner("PRACTICE", [row["practice_observation_id"] for row in rows])
 

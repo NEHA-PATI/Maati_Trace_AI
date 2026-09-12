@@ -14,13 +14,17 @@ import TranslationFields from "./TranslationFields";
 import SystemMediaField from "./SystemMediaField";
 
 export default function StageEditor({ stage, practiceTemplates, onDeleted, readOnly }) {
+  const initialEn = stage.translations?.find((item) => item.locale === "en-IN") || {};
+  const initialOr = stage.translations?.find((item) => item.locale === "or-IN") || {};
   const [expanded, setExpanded] = useState(false);
   const [practices, setPractices] = useState([]);
   const [newPracticeCode, setNewPracticeCode] = useState(practiceTemplates[0]?.practice_code || "");
   const [audioBusy, setAudioBusy] = useState("");
   const [audioStatus, setAudioStatus] = useState("");
-  const initialEn = stage.translations?.find((item) => item.locale === "en-IN") || {};
-  const initialOr = stage.translations?.find((item) => item.locale === "or-IN") || {};
+  const [instructionText, setInstructionText] = useState({
+    "en-IN": initialEn.instruction_text || "",
+    "or-IN": initialOr.instruction_text || "",
+  });
 
   useEffect(() => {
     if (expanded) {
@@ -59,6 +63,19 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
     }
   }
 
+  async function handleSaveInstructionText(locale) {
+    setAudioStatus("");
+    try {
+      await upsertStageTranslation(stage.stage_id, locale, {
+        display_name: (locale === "en-IN" ? initialEn.display_name : initialOr.display_name) || stage.stage_code,
+        instruction_text: instructionText[locale].trim() || null,
+      });
+      setAudioStatus(`Saved ${locale} instruction text`);
+    } catch (error) {
+      setAudioStatus(error?.message || "Could not save instruction text.");
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3">
@@ -82,7 +99,7 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
             initialEn={initialEn}
             initialOr={initialOr}
             labelKey="display_name"
-            extraFields={["short_description", "instruction_text"]}
+            extraFields={["short_description"]}
             onSave={(locale, values) =>
               upsertStageTranslation(stage.stage_id, locale, {
                 display_name: values.display_name || stage.stage_code,
@@ -102,7 +119,23 @@ export default function StageEditor({ stage, practiceTemplates, onDeleted, readO
             />
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Instruction audio</p>
-              <p className="mt-1 text-xs text-slate-500">Generate once with Cartesia or replace with your own recorded MP3.</p>
+              <p className="mt-1 text-xs text-slate-500">Enter speech text in both languages, save it, then generate with Cartesia or replace it with your own recording.</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {[{ locale: "en-IN", label: "English" }, { locale: "or-IN", label: "ଓଡ଼ିଆ (Odia)" }].map(({ locale, label }) => (
+                  <div key={locale} className="rounded-lg border border-emerald-100 bg-white p-2">
+                    <label className="block text-xs font-bold text-slate-600">{label} speech text</label>
+                    <textarea
+                      value={instructionText[locale]}
+                      onChange={(event) => setInstructionText((previous) => ({ ...previous, [locale]: event.target.value }))}
+                      maxLength={1200}
+                      rows={3}
+                      placeholder={`Type the ${label} instruction…`}
+                      className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    {!readOnly ? <Button size="sm" variant="outline" onClick={() => handleSaveInstructionText(locale)}>Save text</Button> : null}
+                  </div>
+                ))}
+              </div>
               <div className="mt-3 grid gap-2">
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
                   <SystemMediaField
