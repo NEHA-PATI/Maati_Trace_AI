@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from services.crop_observation_service.app.errors import CropObservationRepositoryError
+from services.crop_observation_service.app.errors import CropObservationError, CropObservationRepositoryError
 from shared.db.postgres import engine
 
 DEFAULT_LOCALE = "en-IN"
@@ -52,6 +52,23 @@ def pick_names(
         # back to whatever exists so the catalogue entry is never blank.
         primary = next(iter(by_locale.values()))
     return primary, secondary
+
+
+def pick_names_strict(
+    translations: list[dict[str, Any]], locale: str
+) -> tuple[str | None, None]:
+    """Pick only the requested farmer language; never silently mix locales."""
+    value = next(
+        (row.get("display_name") for row in translations if row.get("locale") == locale),
+        None,
+    )
+    if not value:
+        raise CropObservationError(
+            "TRANSLATION_NOT_AVAILABLE",
+            "This crop content is not available in the selected language.",
+            409,
+        )
+    return value, None
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +174,7 @@ def get_crop_names(crop_id: UUID, *, locale: str) -> tuple[str | None, str | Non
         """,
         {"crop_id": crop_id},
     )
-    return pick_names(translations, locale)
+    return pick_names_strict(translations, locale)
 
 
 def get_published_config_version(crop_id: UUID) -> dict[str, Any] | None:
@@ -238,7 +255,7 @@ def get_stage_translations(stage_id: UUID) -> list[dict[str, Any]]:
 def get_stage_names(stage_id: UUID, *, locale: str) -> tuple[str | None, str | None]:
     rows = get_stage_translations(stage_id)
     translations = [{"locale": r["locale"], "display_name": r["display_name"]} for r in rows]
-    return pick_names(translations, locale)
+    return pick_names_strict(translations, locale)
 
 
 # ---------------------------------------------------------------------------
@@ -618,6 +635,50 @@ def get_crop_cycle(crop_cycle_id: UUID) -> dict[str, Any] | None:
     )
 
 
+def record_cycle_stage(crop_cycle_id: UUID, stage_code: str, *, source: str, changed_by_user_id: UUID | None) -> None:
+    """Move the operational stage and preserve an effective-date history."""
+    with engine.begin() as conn:
+        current = conn.execute(
+            text("SELECT current_stage_code FROM crop_observation.crop_cycles WHERE crop_cycle_id = :id FOR UPDATE;"),
+            {"id": crop_cycle_id},
+        ).mappings().first()
+        if current is None:
+            return
+        if current["current_stage_code"] == stage_code:
+            history = conn.execute(
+                text("SELECT 1 FROM crop_observation.crop_stage_history WHERE crop_cycle_id = :id LIMIT 1;"),
+                {"id": crop_cycle_id},
+            ).first()
+            if history:
+                return
+        conn.execute(
+            text("""
+                UPDATE crop_observation.crop_stage_history
+                SET effective_until = CURRENT_DATE
+                WHERE crop_cycle_id = :id AND effective_until IS NULL;
+            """),
+            {"id": crop_cycle_id},
+        )
+        conn.execute(
+            text("""
+                INSERT INTO crop_observation.crop_stage_history
+                    (crop_cycle_id, stage_code, effective_from, source, changed_by_user_id)
+                VALUES (:id, :stage_code, CURRENT_DATE, :source, :user_id);
+            """),
+            {"id": crop_cycle_id, "stage_code": stage_code, "source": source, "user_id": changed_by_user_id},
+        )
+        conn.execute(
+            text("""
+                UPDATE crop_observation.crop_cycles
+                SET current_stage_code = :stage_code,
+                    current_stage_source = :source,
+                    updated_at = now()
+                WHERE crop_cycle_id = :id;
+            """),
+            {"id": crop_cycle_id, "stage_code": stage_code, "source": source},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Stage practice lookup (for dynamic validation)
 # ---------------------------------------------------------------------------
@@ -694,6 +755,30 @@ def upsert_daily_status(
             "crop_status": crop_status,
             "client_entry_id": client_entry_id,
             "captured_at_client": captured_at_client,
+        },
+    )
+
+
+def create_outbox_event(
+    *,
+    aggregate_type: str,
+    aggregate_id: UUID,
+    event_type: str,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    return _run_write(
+        """
+        INSERT INTO crop_observation.outbox_events
+            (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (:aggregate_type, :aggregate_id, :event_type, CAST(:payload AS jsonb))
+        RETURNING event_id, aggregate_type, aggregate_id, event_type, event_version,
+                  payload, status, created_at, published_at;
+        """,
+        {
+            "aggregate_type": aggregate_type,
+            "aggregate_id": aggregate_id,
+            "event_type": event_type,
+            "payload": json.dumps(payload, default=str),
         },
     )
 
@@ -1013,11 +1098,25 @@ def get_media_asset(media_asset_id: UUID) -> dict[str, Any] | None:
     )
 
 
-def mark_media_ready(media_asset_id: UUID) -> dict[str, Any] | None:
+def update_media_object_key(media_asset_id: UUID, object_key: str) -> dict[str, Any] | None:
     return _run_write(
         """
         UPDATE crop_observation.media_assets
-        SET upload_status = 'READY', uploaded_at = now(), verified_at = now()
+        SET object_key = :object_key, updated_at = now()
+        WHERE media_asset_id = :media_asset_id
+          AND upload_status NOT IN ('DELETED', 'READY')
+        RETURNING media_asset_id, object_key;
+        """,
+        {"media_asset_id": media_asset_id, "object_key": object_key},
+    )
+
+
+def mark_media_ready(media_asset_id: UUID, checksum_sha256: str | None = None) -> dict[str, Any] | None:
+    return _run_write(
+        """
+        UPDATE crop_observation.media_assets
+        SET upload_status = 'READY', uploaded_at = now(), verified_at = now(),
+            checksum_sha256 = COALESCE(:checksum_sha256, checksum_sha256)
         WHERE media_asset_id = :media_asset_id
         RETURNING
             media_asset_id, owner_user_id, bucket_name, object_key, media_type,
@@ -1025,7 +1124,7 @@ def mark_media_ready(media_asset_id: UUID) -> dict[str, Any] | None:
             upload_status, storage_backend, original_filename, upload_expires_at, updated_at,
             created_at, uploaded_at, verified_at;
         """,
-        {"media_asset_id": media_asset_id},
+        {"media_asset_id": media_asset_id, "checksum_sha256": checksum_sha256},
     )
 
 
@@ -1421,6 +1520,7 @@ def list_practice_history(
     stage_code: str,
     practice_code: str,
     limit: int,
+    exclude_observed_on: date | None = None,
 ) -> list[dict[str, Any]]:
     return _run(
         """
@@ -1435,6 +1535,7 @@ def list_practice_history(
         WHERE dso.crop_cycle_id = :crop_cycle_id
           AND dso.stage_code = :stage_code
           AND po.practice_code = :practice_code
+          AND (:exclude_observed_on IS NULL OR dso.observed_on <> :exclude_observed_on)
         ORDER BY dso.observed_on DESC, po.created_at DESC
         LIMIT :limit;
         """,
@@ -1443,6 +1544,7 @@ def list_practice_history(
             "stage_code": stage_code,
             "practice_code": practice_code,
             "limit": limit,
+            "exclude_observed_on": exclude_observed_on,
         },
     )
 
@@ -1567,11 +1669,12 @@ def create_system_media_asset(
     )
 
 
-def mark_system_media_ready(asset_id: UUID) -> dict[str, Any] | None:
+def mark_system_media_ready(asset_id: UUID, checksum_sha256: str | None = None) -> dict[str, Any] | None:
     return _run_write(
         """
         UPDATE crop_observation.system_media_assets
-        SET upload_status = 'READY', is_active = true, updated_at = now()
+        SET upload_status = 'READY', is_active = true,
+            checksum_sha256 = COALESCE(:checksum_sha256, checksum_sha256), updated_at = now()
         WHERE asset_id = :asset_id
         RETURNING
             asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
@@ -1579,7 +1682,7 @@ def mark_system_media_ready(asset_id: UUID) -> dict[str, Any] | None:
             original_filename, upload_status, created_by_user_id, is_active,
             upload_expires_at, created_at, updated_at;
         """,
-        {"asset_id": asset_id},
+        {"asset_id": asset_id, "checksum_sha256": checksum_sha256},
     )
 
 
@@ -1608,19 +1711,31 @@ def activate_system_media_binding(
     slot_number: int | None = None,
 ) -> dict[str, Any]:
     """Atomically replace the active logical binding for the target/role."""
+    params = {
+        "asset_id": asset_id,
+        "target_type": target_type,
+        "target_id": target_id,
+        "asset_role": asset_role,
+        "locale": locale,
+        "slot_number": slot_number,
+    }
+    # Separate the replacement from the insert. A data-modifying CTE can
+    # still hit the partial unique index while replacing an active binding.
+    _run_write(
+        """
+        UPDATE crop_observation.system_media_bindings
+        SET is_active = false
+        WHERE target_type = :target_type
+          AND target_id = :target_id
+          AND asset_role = :asset_role
+          AND COALESCE(locale, '') = COALESCE(:locale, '')
+          AND COALESCE(slot_number, -1) = COALESCE(:slot_number, -1)
+          AND is_active = true;
+        """,
+        params,
+    )
     return _run_write(
         """
-        WITH deactivated AS (
-            UPDATE crop_observation.system_media_bindings
-            SET is_active = false
-            WHERE target_type = :target_type
-              AND target_id = :target_id
-              AND asset_role = :asset_role
-              AND COALESCE(locale, '') = COALESCE(:locale, '')
-              AND COALESCE(slot_number, -1) = COALESCE(:slot_number, -1)
-              AND is_active = true
-            RETURNING binding_id
-        )
         INSERT INTO crop_observation.system_media_bindings (
             asset_id, target_type, target_id, asset_role, locale, slot_number, is_active
         )
@@ -1630,14 +1745,7 @@ def activate_system_media_binding(
         RETURNING binding_id, asset_id, target_type, target_id, asset_role,
                   locale, slot_number, is_active, created_at;
         """,
-        {
-            "asset_id": asset_id,
-            "target_type": target_type,
-            "target_id": target_id,
-            "asset_role": asset_role,
-            "locale": locale,
-            "slot_number": slot_number,
-        },
+        params,
     )
 
 

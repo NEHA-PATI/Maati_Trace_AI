@@ -4,6 +4,12 @@ export const LOCALES = {
 };
 
 export const STRINGS = {
+  cards: { en: "Cards", or: "କାର୍ଡ" },
+  list: { en: "List", or: "ତାଲିକା" },
+  otherCrops: { en: "Other crops", or: "ଅନ୍ୟ ଫସଲ" },
+  addCropConfirm: { en: "Add this crop to your farm", or: "ଏହି ଫସଲକୁ ଆପଣଙ୍କ ଜମିରେ ଯୋଡିବେ" },
+  addCrop: { en: "Add crop", or: "ଫସଲ ଯୋଡନ୍ତୁ" },
+  cancel: { en: "Cancel", or: "ବାତିଲ" },
   chooseLanguageTitle: { en: "Choose your language", or: "ଆପଣଙ୍କ ଭାଷା ବାଛନ୍ତୁ" },
   chooseLanguageHelp: {
     en: "Choose the language you want to use for crop updates. You can change it later.",

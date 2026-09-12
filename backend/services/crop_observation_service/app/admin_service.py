@@ -78,7 +78,7 @@ def create_crop(context: RequestContext, payload: AdminCropCreateRequest) -> Adm
 
 def get_crop(context: RequestContext, crop_code: str) -> AdminCropOut:
     require_admin(context)
-    crop = repo.get_crop_by_code(crop_code)
+    crop = admin_repo.get_crop(crop_code)
     if crop is None:
         raise CropObservationError("CROP_NOT_FOUND", "This crop was not found.", 404)
     return AdminCropOut(**crop)
@@ -184,6 +184,10 @@ def validate_configuration(context: RequestContext, config_version_id: UUID) -> 
 
         stage_practices = admin_repo.list_stage_practices_for_stage(stage["stage_id"])
         for sp in stage_practices:
+            practice_locales = {item["locale"] for item in repo.get_practice_translations(sp["practice_template_id"])}
+            for locale in REQUIRED_LOCALES:
+                if locale not in practice_locales:
+                    errors.append(ValidationIssue(code="PRACTICE_TRANSLATION_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], locale=locale))
             fields = admin_repo.list_fields_for_stage_practice(sp["stage_practice_id"])
             required_field_count = sum(1 for f in fields if f["is_required"])
             if required_field_count > MAX_COMFORTABLE_REQUIRED_FIELDS:
@@ -217,6 +221,9 @@ def validate_configuration(context: RequestContext, config_version_id: UUID) -> 
                         for locale in REQUIRED_LOCALES:
                             if locale not in option_locales:
                                 errors.append(ValidationIssue(code="OPTION_TRANSLATION_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], field_code=field["field_code"], locale=locale))
+                        if field["field_type"] == "PICTURE_CHOICE":
+                            if not repo.list_system_media_bindings(target_type="FIELD_OPTION", target_id=option["field_option_id"], asset_role="OPTION_IMAGE", limit=1):
+                                warnings.append(ValidationIssue(code="OPTION_IMAGE_MISSING", stage_code=stage["stage_code"], practice_code=sp["practice_code"], field_code=field["field_code"]))
 
     return ValidationResponse(valid=len(errors) == 0, errors=errors, warnings=warnings)
 
@@ -493,6 +500,10 @@ def update_option(context: RequestContext, field_option_id: UUID, payload: Admin
     option = admin_repo.get_option(field_option_id)
     if option is None:
         raise CropObservationError("OPTION_NOT_FOUND", "This option was not found.", 404)
+    field = admin_repo.get_field(option["field_definition_id"])
+    sp = admin_repo.get_stage_practice(field["stage_practice_id"])
+    stage = admin_repo.get_stage(sp["stage_id"])
+    _require_draft(stage["config_version_id"])
     fields = payload.model_dump(exclude_unset=True)
     row = admin_repo.update_option(field_option_id, fields)
     return AdminOptionOut(**row)
@@ -503,6 +514,10 @@ def delete_option(context: RequestContext, field_option_id: UUID) -> None:
     option = admin_repo.get_option(field_option_id)
     if option is None:
         raise CropObservationError("OPTION_NOT_FOUND", "This option was not found.", 404)
+    field = admin_repo.get_field(option["field_definition_id"])
+    sp = admin_repo.get_stage_practice(field["stage_practice_id"])
+    stage = admin_repo.get_stage(sp["stage_id"])
+    _require_draft(stage["config_version_id"])
     admin_repo.delete_option(field_option_id)
 
 
@@ -513,6 +528,10 @@ def upsert_option_translation(
     option = admin_repo.get_option(field_option_id)
     if option is None:
         raise CropObservationError("OPTION_NOT_FOUND", "This option was not found.", 404)
+    field = admin_repo.get_field(option["field_definition_id"])
+    sp = admin_repo.get_stage_practice(field["stage_practice_id"])
+    stage = admin_repo.get_stage(sp["stage_id"])
+    _require_draft(stage["config_version_id"])
     admin_repo.upsert_option_translation(field_option_id, locale, payload.label)
     return {"status": "ok"}
 

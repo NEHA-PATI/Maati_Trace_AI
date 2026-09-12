@@ -18,6 +18,9 @@ if [[ "$FINAL_ONLY" != "1" ]]; then
     "$BACKEND_ROOT/data_contracts/sql/20260901_05_crop_observation_fix_missing_option_translations.sql"
     "$BACKEND_ROOT/data_contracts/sql/20260903_06_crop_observation_evidence_tts.sql"
     "$BACKEND_ROOT/data_contracts/sql/20260903_07_crop_observation_seed_coconut_mango.sql"
+    "$BACKEND_ROOT/data_contracts/sql/20260910_10_crop_observation_fix_missing_field_translations.sql"
+    "$BACKEND_ROOT/data_contracts/sql/20260910_11_crop_observation_seed_mango_defaults.sql"
+    "$BACKEND_ROOT/data_contracts/sql/20260911_12_crop_observation_seed_coconut_defaults.sql"
   )
 fi
 files+=("$BACKEND_ROOT/data_contracts/sql/20260909_09_crop_observation_production_finalize.sql")

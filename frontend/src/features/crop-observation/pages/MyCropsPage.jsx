@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, Plus, User } from "lucide-react";
+import { Grid2X2, List, User } from "lucide-react";
 
 import {
   attachCropToFarm,
@@ -12,7 +12,7 @@ import CropCard from "@/features/crop-observation/components/CropCard";
 import LanguageToggle from "@/features/crop-observation/components/LanguageToggle";
 import { CropListSkeleton } from "@/features/crop-observation/components/Skeletons";
 import { prefetchStageScreen } from "@/features/crop-observation/hooks/useCropScreen";
-import { useLocale } from "@/features/crop-observation/hooks/useLocale";
+import { hasStoredCropLocale, useLocale } from "@/features/crop-observation/hooks/useLocale";
 import { useMyFarms } from "@/features/crop-observation/hooks/useMyFarms";
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
 import { useAuth } from "@/features/auth/context/useAuth";
@@ -37,13 +37,29 @@ export default function MyCropsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyCropCode, setBusyCropCode] = useState("");
+  const [pendingCrop, setPendingCrop] = useState(null);
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem("crop_view_mode") || "cards"; } catch { return "cards"; }
+  });
 
   const farmerName = firstName(user?.full_name || user?.name);
   const attachedCrops = useMemo(
     () => crops.filter((crop) => farmCropByCode.has(crop.crop_code)),
     [crops, farmCropByCode],
   );
-  const availableCrops = attachedCrops.length ? attachedCrops : crops;
+  const otherCrops = useMemo(
+    () => crops.filter((crop) => !farmCropByCode.has(crop.crop_code)),
+    [crops, farmCropByCode],
+  );
+
+  useEffect(() => {
+    if (!hasStoredCropLocale()) navigate("/my-crops/language", { replace: true });
+  }, [navigate]);
+
+  function changeViewMode(mode) {
+    setViewMode(mode);
+    try { localStorage.setItem("crop_view_mode", mode); } catch { /* memory fallback */ }
+  }
 
   useEffect(() => {
     if (!farmId && farms.length > 0) setFarmId(farms[0].farm_id);
@@ -129,25 +145,15 @@ export default function MyCropsPage() {
           </div>
         </header>
 
-        {availableCrops.length ? (
-          <div className="mt-4 flex gap-3 rounded-2xl border border-[#ECD6A8] bg-[#FFF2D9] p-3 sm:max-w-[680px]">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#B36B00]" />
-            <div>
-              <p className="text-sm font-black text-[#1D2117]">
-                {primary(STRINGS.todaysUpdatePending, locale)} — {availableCrops[0].name}
-              </p>
-              <p className="mt-0.5 text-sm font-medium text-[#5B6055]">
-                {primary(STRINGS.takesOneMinute, locale)}
-              </p>
-            </div>
-          </div>
-        ) : null}
-
         <section className="mt-7">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xl font-black text-[#1D2117]">{primary(STRINGS.myCrops, locale)}</p>
               <p className="mt-1 text-sm font-medium text-[#5B6055]">{primary(STRINGS.chooseCrop, locale)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => changeViewMode("cards")} aria-pressed={viewMode === "cards"} className="inline-flex h-10 items-center gap-1 rounded-lg border bg-white px-2.5 text-xs font-bold"><Grid2X2 className="h-3.5 w-3.5" />{primary(STRINGS.cards, locale)}</button>
+              <button type="button" onClick={() => changeViewMode("list")} aria-pressed={viewMode === "list"} className="inline-flex h-10 items-center gap-1 rounded-lg border bg-white px-2.5 text-xs font-bold"><List className="h-3.5 w-3.5" />{primary(STRINGS.list, locale)}</button>
             </div>
             {farms.length > 1 ? (
               <select
@@ -173,8 +179,8 @@ export default function MyCropsPage() {
           {loading || farmsLoading ? (
             <CropListSkeleton />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {availableCrops.map((crop) => (
+            <div className={`grid gap-3 ${viewMode === "cards" ? "md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 max-w-2xl"}`}>
+              {attachedCrops.map((crop) => (
                 <CropCard
                   key={crop.crop_code}
                   crop={crop}
@@ -184,21 +190,25 @@ export default function MyCropsPage() {
                   onSelect={handleSelectCrop}
                 />
               ))}
-              <button
-                type="button"
-                onClick={() => {
-                  const next = crops.find((crop) => !farmCropByCode.has(crop.crop_code)) || crops[0];
-                  if (next) handleSelectCrop(next);
-                }}
-                className="flex min-h-[84px] items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#C9D8BD] bg-white text-[15px] font-black text-[#33492A] active:scale-[0.99]"
-              >
-                <Plus className="h-5 w-5" />
-                {primary(STRINGS.addNewCrop, locale)}
-              </button>
+              {otherCrops.length ? <p className="col-span-full mt-4 text-sm font-black uppercase tracking-wide text-[#5B6055]">{primary(STRINGS.otherCrops, locale)}</p> : null}
+              {otherCrops.map((crop) => (
+                <CropCard key={crop.crop_code} crop={crop} locale={locale} attached={false} disabled={busyCropCode === crop.crop_code} onSelect={() => setPendingCrop(crop)} />
+              ))}
             </div>
           )}
         </section>
       </div>
+      {pendingCrop ? (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <p className="text-lg font-black text-[#1D2117]">{primary(STRINGS.addCropConfirm, locale)}: {pendingCrop.name}?</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setPendingCrop(null)} className="h-11 flex-1 rounded-xl border border-[#E9E7DC] font-bold text-[#5B6055]">{primary(STRINGS.cancel, locale)}</button>
+              <button type="button" onClick={() => { const crop = pendingCrop; setPendingCrop(null); handleSelectCrop(crop); }} className="h-11 flex-1 rounded-xl bg-[#4B6B3A] font-bold text-white">{primary(STRINGS.addCrop, locale)}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

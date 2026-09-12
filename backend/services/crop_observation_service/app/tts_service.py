@@ -67,7 +67,11 @@ def upsert_profile(
         model_id=model_id or settings.cartesia_tts_model,
         voice_id=voice_id,
         voice_name=voice_name,
-        output_format={"container": settings.cartesia_tts_output_container},
+        output_format={
+            "container": settings.cartesia_tts_output_container,
+            "bit_rate": settings.cartesia_tts_mp3_bit_rate,
+            "sample_rate": settings.cartesia_tts_sample_rate,
+        },
         generation_config={
             "speed": speed if speed is not None else settings.cartesia_tts_speed,
             "volume": volume if volume is not None else settings.cartesia_tts_volume,
@@ -90,6 +94,13 @@ def list_voices(context: RequestContext, *, language: str) -> list[TtsVoiceOut]:
             )
         )
     return result
+
+
+def get_voice_preview(context: RequestContext, voice_id: str) -> tuple[bytes, str]:
+    _require_admin(context)
+    if not voice_id or len(voice_id) > 200:
+        raise CropObservationError("INVALID_VOICE_ID", "Invalid voice ID.", 422)
+    return cartesia_client.get_voice_preview(voice_id=voice_id)
 
 
 def _cache_key(*, transcript: str, locale: str, profile: dict, output_format: dict, generation_config: dict) -> str:
@@ -133,6 +144,13 @@ def generate_instruction_audio(
     stage = repo.get_stage(stage_id)
     if stage is None:
         raise CropObservationError("STAGE_NOT_FOUND", "This stage was not found.", 404)
+    config = repo.get_config_version(stage["config_version_id"])
+    if config is None or config["status"] != "DRAFT":
+        raise CropObservationError(
+            "CONFIGURATION_IMMUTABLE",
+            "Published configuration content cannot be changed.",
+            409,
+        )
 
     translations = repo.get_stage_translations(stage_id)
     transcript = next(
@@ -157,7 +175,10 @@ def generate_instruction_audio(
         raise CropObservationError("TTS_VOICE_ID_MISSING", "Set a voice ID for this locale before generating audio.", 422)
 
     generation_config = profile.get("generation_config") or {}
-    output_format = profile.get("output_format") or {"container": settings.cartesia_tts_output_container}
+    output_format = dict(profile.get("output_format") or {"container": settings.cartesia_tts_output_container})
+    if str(output_format.get("container", "")).lower() == "mp3":
+        output_format.setdefault("bit_rate", settings.cartesia_tts_mp3_bit_rate)
+        output_format.setdefault("sample_rate", settings.cartesia_tts_sample_rate)
     cache_key = _cache_key(
         transcript=transcript,
         locale=locale,
@@ -205,6 +226,7 @@ def generate_instruction_audio(
             speed=float(generation_config.get("speed", settings.cartesia_tts_speed)),
             volume=float(generation_config.get("volume", settings.cartesia_tts_volume)),
             container=container,
+            output_format=output_format,
         )
 
         # Normal generation is content addressed. Force creates a fresh

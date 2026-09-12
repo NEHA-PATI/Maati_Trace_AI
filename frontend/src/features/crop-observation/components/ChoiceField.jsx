@@ -1,4 +1,5 @@
 import { iconForOption } from "./fieldIcons";
+import { systemMediaUrl } from "@/features/crop-observation/api/cropObservationApi";
 
 function gridClass(count) {
   if (count >= 4) return "grid-cols-4 gap-2";
@@ -29,11 +30,11 @@ export default function ChoiceField({ field, value, onChange }) {
                 : "border-[#E9E7DC] text-[#1D2117] hover:border-[#C9D8BD]"
             }`}
           >
-            <Icon
-              className={`${compact ? "mb-1 h-4 w-4" : "mb-1.5 h-5 w-5"} ${
-                selected ? "text-[#33492A]" : "text-[#5B6055]"
-              }`}
-            />
+            {option.image_url ? (
+              <img src={systemMediaUrl(option.image_url)} alt="" className="mb-2 h-16 w-full rounded-lg object-cover" loading="lazy" />
+            ) : (
+              <Icon className={`${compact ? "mb-1 h-4 w-4" : "mb-1.5 h-5 w-5"} ${selected ? "text-[#33492A]" : "text-[#5B6055]"}`} />
+            )}
             <span className="max-w-full break-words">{option.label}</span>
           </button>
         );

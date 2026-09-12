@@ -82,6 +82,7 @@ export const getObservationDetail = (id) => req(`/observations/${id}`);
 // TTS
 export const getTtsStatus = () => req("/tts/status");
 export const listTtsVoices = (language) => req(`/tts/voices?language=${encodeURIComponent(language)}`);
+export const fetchTtsVoicePreview = (voiceId) => fetchAdminMediaBlob(`/v1/crop-observations/admin/tts/voices/${encodeURIComponent(voiceId)}/preview`);
 export const listTtsProfiles = () => req("/tts/profiles");
 export const upsertTtsProfile = (locale, payload) =>
   req(`/tts/profiles/${locale}`, { method: "PUT", body: payload });
@@ -118,6 +119,7 @@ export const listIssues = (params = {}) => {
   return req(`/issues${query ? `?${query}` : ""}`);
 };
 export const getCropObservationSystemStatus = () => req("/system/status");
+export const getCropObservationSystemDiagnostics = () => req("/system/diagnostics");
 
 export const listSystemMedia = (params = {}) => {
   const search = new URLSearchParams();

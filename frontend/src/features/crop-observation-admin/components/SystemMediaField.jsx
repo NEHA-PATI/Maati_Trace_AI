@@ -7,6 +7,7 @@ import {
   resolveCropObservationServiceUrl,
   uploadSystemMedia,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
+import { getAudioDuration } from "./mediaDuration";
 
 export default function SystemMediaField({
   targetType,
@@ -50,12 +51,14 @@ export default function SystemMediaField({
     setBusy(true);
     setError("");
     try {
+      const durationSeconds = assetRole === "INSTRUCTION_AUDIO" ? await getAudioDuration(file) : null;
       await uploadSystemMedia({
         file,
         targetType,
         targetId,
         assetRole,
         locale,
+        durationSeconds,
       });
       await load();
       onChanged?.();

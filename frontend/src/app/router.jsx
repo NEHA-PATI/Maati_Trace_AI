@@ -18,7 +18,7 @@ import {
   CropObservationAdminHubPage,
   CropConfigurationEditorPage,
   CropConfigurationPage,
-  FarmerObservationMonitorPage,
+  CropObservationRecordsPage,
 } from "@/features/crop-observation-admin";
 import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
     children: [
       { path: "/admin/crop-observation", element: <CropObservationAdminHubPage /> },
       { path: "/admin/crop-observation/config/:cropCode", element: <CropConfigurationEditorPage /> },
-      { path: "/admin/crop-observations", element: <FarmerObservationMonitorPage /> },
+      { path: "/admin/crop-observations", element: <CropObservationRecordsPage /> },
       { path: "/admin/crop-observations/config", element: <CropConfigurationPage /> },
       { path: "/admin/crop-observations/config/:cropCode", element: <CropConfigurationEditorPage /> },
     ],
@@ -88,4 +88,9 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="notifications" />, children: [{ path: "/notifications", element: <Notifications /> }] },
   { element: <ProtectedRoute permission="settings" />, children: [{ path: "/settings", element: <ProfileSettingsPage /> }] },
   { path: "*", element: <Navigate to="/" replace /> },
-]);
+], {
+  future: {
+    v7_relativeSplatPath: true,
+    v7_startTransition: true,
+  },
+});

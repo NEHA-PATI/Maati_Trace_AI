@@ -10,11 +10,21 @@
     { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "ripening", "file": "system/stages/kala_jeera/ripening/image.svg" },
     { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "harvesting", "file": "system/stages/kala_jeera/harvesting/image.svg" },
     { "asset_type": "STAGE_IMAGE", "crop_code": "kala_jeera", "stage_code": "post_harvest", "file": "system/stages/kala_jeera/post_harvest/image.svg" }
+    ,{ "asset_type": "CROP_CARD_IMAGE", "crop_code": "mango", "file": "system/crops/mango/card.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "vegetative_flush", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/vegetative_flush.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "flowering", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/flowering.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "fruit_set", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/fruit_set.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "fruit_development", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/fruit_development.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "harvesting", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/harvesting.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "mango", "stage_code": "post_harvest", "file": "system/stages/mango/default.svg", "object_key": "system/stages/mango/post_harvest.svg" }
+    ,{ "asset_type": "CROP_CARD_IMAGE", "crop_code": "coconut", "file": "system/crops/coconut/card.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "coconut", "stage_code": "establishment", "file": "system/stages/coconut/default.svg", "object_key": "system/stages/coconut/establishment.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "coconut", "stage_code": "vegetative", "file": "system/stages/coconut/default.svg", "object_key": "system/stages/coconut/vegetative.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "coconut", "stage_code": "flowering", "file": "system/stages/coconut/default.svg", "object_key": "system/stages/coconut/flowering.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "coconut", "stage_code": "nut_development", "file": "system/stages/coconut/default.svg", "object_key": "system/stages/coconut/nut_development.svg" }
+    ,{ "asset_type": "STAGE_IMAGE", "crop_code": "coconut", "stage_code": "harvesting", "file": "system/stages/coconut/default.svg", "object_key": "system/stages/coconut/harvesting.svg" }
   ],
   "_note": "STAGE_INSTRUCTION_AUDIO entries (en-IN/or-IN mp3 or webm, one per stage) are intentionally omitted here — they need a real recorded voice, not a generated placeholder. Record them with a phone or Windows Sound Recorder, drop the files under system/stages/kala_jeera/<stage>/, add en-IN/or-IN entries below with a locale + duration_seconds, and re-run sync_system_media.py:\n  { \"asset_type\": \"STAGE_INSTRUCTION_AUDIO\", \"crop_code\": \"kala_jeera\", \"stage_code\": \"seedling\", \"locale\": \"en-IN\", \"file\": \"system/stages/kala_jeera/seedling/en-IN.mp3\", \"duration_seconds\": 30 }"
 }
-
-
-
 
 

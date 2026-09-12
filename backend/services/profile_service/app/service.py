@@ -22,6 +22,7 @@ from services.profile_service.app.repository import (
     get_farmer_by_user_id,
     get_fpo_by_id,
     get_fpo_memberships,
+    list_fpos,
     list_fpo_farmers,
     record_profile_audit_event,
     update_farmer_profile,
@@ -1392,6 +1393,28 @@ def get_fpo_farmers_for_requester(
             )
             for profile in farmers
         ]
+
+
+def list_fpos_for_requester(
+    context: RequestContext,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    if context.principal.role != "admin":
+        raise ProfileError(
+            "FPO_LIST_FORBIDDEN",
+            "Only administrators can list FPO profiles.",
+            403,
+        )
+
+    with engine.connect() as conn:
+        profiles = list_fpos(conn, limit=limit, offset=offset)
+
+    return [
+        _public_fpo_profile(profile)
+        for profile in profiles
+    ]
 
 
 def validate_farmer_internal(

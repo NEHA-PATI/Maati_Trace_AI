@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import argparse
 from pathlib import Path
 
 from sqlalchemy import text
@@ -34,12 +35,15 @@ ROLE_MAP = {
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Bootstrap bundled demo media without overwriting admin-managed bindings.")
+    parser.add_argument("--force", action="store_true", help="Replace an existing active binding.")
+    args = parser.parse_args()
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
     with engine.begin() as conn:
         for item in manifest["assets"]:
-            object_key = item["file"]
-            actual_file = (MEDIA_ROOT / object_key).resolve()
+            object_key = item.get("object_key") or item["file"]
+            actual_file = (MEDIA_ROOT / item["file"]).resolve()
             if not actual_file.exists():
                 raise RuntimeError(f"Missing file declared in media_manifest.json: {actual_file}")
 
@@ -144,6 +148,26 @@ def main() -> None:
 
             target_type, asset_role = ROLE_MAP[item["asset_type"]]
             target_id = crop["crop_id"] if target_type == "CROP" else stage_id
+
+            active = conn.execute(
+                text(
+                    """
+                    SELECT asset_id FROM crop_observation.system_media_bindings
+                    WHERE target_type = :target_type AND target_id = :target_id
+                      AND asset_role = :asset_role
+                      AND COALESCE(locale, '') = COALESCE(:locale, '')
+                      AND is_active = true
+                    LIMIT 1
+                    """
+                ),
+                {"target_type": target_type, "target_id": target_id, "asset_role": asset_role, "locale": item.get("locale")},
+            ).mappings().first()
+            if active and not args.force:
+                if active["asset_id"] != asset_id:
+                    print(f"skipped  {item['asset_type']:<24} {object_key} (active admin binding; use --force to replace)")
+                else:
+                    print(f"present  {item['asset_type']:<24} {object_key}")
+                continue
 
             # Deactivate the previous logical use, then activate this asset.
             conn.execute(

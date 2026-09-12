@@ -208,7 +208,7 @@ export default function CropConfigurationEditorPage() {
       </div>
 
       {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-      {!crop?.is_active ? (
+      {crop && crop.is_active === false ? (
         <p className="mt-2 text-sm text-amber-600">This crop is inactive — farmers won't see it in the catalogue.</p>
       ) : null}
 

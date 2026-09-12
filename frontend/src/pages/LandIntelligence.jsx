@@ -6,7 +6,7 @@ import {
   Sparkles, Sprout, Sun, TrendingUp, Waves, X,
 } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
+import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
 import { getFarm } from "@/lib/api/farm";
 import {
@@ -26,6 +26,7 @@ import {
 import {
   getLatestAnalysisStatus,
   runLatestAnalysis as triggerLatestAnalysis,
+  ANALYSIS_PIPELINE_STEPS,
 } from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
@@ -34,13 +35,37 @@ const PARAMETERS = [
   ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
 ];
 
-const PIPELINE_STEPS = [
-  "Preparing farm metadata",
-  "Processing all environmental datasets (Sentinel-2 included)",
-  "Computing mandatory trends",
-  "Preparing display-grid geometry and crosswalk",
-  "Building crop features, H3 metrics and calculated-grid projection",
-];
+const PIPELINE_STEPS = ANALYSIS_PIPELINE_STEPS.map(([, label]) => label);
+
+function analysisProgress(status) {
+  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
+  if (terminal) {
+    const finalStep = ANALYSIS_PIPELINE_STEPS.length - 1;
+    return {
+      step: finalStep,
+      label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
+      details: [`Status: ${status.status}`],
+    };
+  }
+  const current = status?.current_stage;
+  const rows = Array.isArray(status?.stages) ? status.stages : [];
+  const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
+  let step = index >= 0 ? index : 0;
+  let label = PIPELINE_STEPS[step] || "Running analysis";
+  let details = current ? [`Status: ${status?.status || "running"}`] : [];
+  const environment = rows.find((row) => row.name === "environment_datasets");
+  const datasets = environment?.details?.datasets || [];
+  if (current === "environment_datasets" && datasets.length) {
+    const active = datasets.findIndex((row) => row.status === "running");
+    const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
+    const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
+    step = 1 + datasetIndex;
+    label = PIPELINE_STEPS[step] || label;
+    details = [`Datasets: ${completed}/${datasets.length} complete`];
+    if (active >= 0) details.push(`Current: ${datasets[active].dataset_key}`);
+  }
+  return { step, label, details };
+}
 
 const CALCULATED_METRIC_ICONS = {
   crop_condition: Sprout,
@@ -118,6 +143,7 @@ export default function LandIntelligence() {
   const [pipelineStage, setPipelineStage] = useState(0);
   const [pipelineStatus, setPipelineStatus] = useState("");
   const [pipelineFailure, setPipelineFailure] = useState("");
+  const [pipelineWarning, setPipelineWarning] = useState("");
   const [pipelineDetails, setPipelineDetails] = useState([]);
 
   function updatePipelineStage(stage, status, details = []) {
@@ -168,47 +194,23 @@ export default function LandIntelligence() {
   useEffect(() => {
     let cancelled = false;
     let timer;
-    const stageOrder = new Map([
-      ["farm_ready", 0],
-      ["environment_datasets", 1],
-      ["trends", 2],
-      ["grid_context", 3],
-      ["intelligence", 4],
-    ]);
     const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
 
     async function pollAnalysis() {
       const status = await getLatestAnalysisStatus(farmId).catch(() => null);
       if (cancelled || !status) return;
 
-      const stages = Array.isArray(status.stages) ? status.stages : [];
-      stages.forEach((stage) => {
-        const index = stageOrder.get(stage.name);
-        if (index === undefined) return;
-        updatePipelineStage(index, stage.name, [
-          `Status: ${stage.status}`,
-          ...(stage.details ? [JSON.stringify(stage.details)] : []),
-          ...(stage.message ? [stage.message] : []),
-        ]);
-      });
-      const currentIndex = stageOrder.get(status.current_stage);
-      if (currentIndex !== undefined) setPipelineStage(currentIndex);
+      const progress = analysisProgress(status);
+      updatePipelineStage(progress.step, progress.label, progress.details);
 
       if (terminalStatuses.has(status.status)) {
         setRefreshing(false);
-        if (status.status === "failed") {
-          setPipelineFailure(status.error_message || "The farm analysis pipeline failed.");
-          setPipelineStatus("Pipeline failed");
-          setPipelineOpen(true);
-        } else if (status.status === "completed_with_warnings") {
-          setPipelineFailure("Analysis completed with source-data warnings. See stage details.");
-          setPipelineStatus("Analysis completed with warnings");
-          setPipelineOpen(true);
-        } else {
-          setPipelineFailure("");
-          setPipelineStatus("Analysis complete");
-          setPipelineOpen(false);
-        }
+        // A saved terminal result must not reopen a modal when the farmer
+        // merely views the farm. The loader is reserved for an active job or
+        // an analysis explicitly started from this page.
+        setPipelineFailure("");
+        setPipelineWarning("");
+        setPipelineOpen(false);
         await loadLandIntelligence().catch(() => null);
         return;
       }
@@ -277,6 +279,7 @@ export default function LandIntelligence() {
     setRefreshing(true);
     setPipelineOpen(true);
     setPipelineFailure("");
+    setPipelineWarning("");
     setPipelineDetails([]);
     try {
       updatePipelineStage(0, "Repairing farm metadata", [
@@ -297,36 +300,23 @@ export default function LandIntelligence() {
 
       const queued = await triggerLatestAnalysis(farmId, payload);
       const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
-      const stageOrder = new Map([
-        ["farm_ready", 0],
-        ["environment_datasets", 1],
-        ["trends", 2],
-        ["grid_context", 3],
-        ["intelligence", 4],
-      ]);
       let status = queued;
       for (let attempt = 0; attempt < 300; attempt += 1) {
         status = await getLatestAnalysisStatus(farmId);
-        const stages = Array.isArray(status?.stages) ? status.stages : [];
-        stages.forEach((stage) => {
-          const index = stageOrder.get(stage.name);
-          if (index === undefined) return;
-          updatePipelineStage(index, stage.name, [
-            `Status: ${stage.status}`,
-            ...(stage.details ? [JSON.stringify(stage.details)] : []),
-            ...(stage.message ? [stage.message] : []),
-          ]);
-        });
+        const progress = analysisProgress(status);
+        updatePipelineStage(progress.step, progress.label, progress.details);
         if (terminalStatuses.has(status?.status)) break;
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
       }
 
       if (status?.status === "failed") {
+        setPipelineWarning("");
         setPipelineFailure(status.error_message || "The farm analysis pipeline failed.");
         setPipelineOpen(true);
         setPipelineStatus("Pipeline failed");
       } else if (status?.status === "completed_with_warnings") {
-        setPipelineFailure("Analysis completed with source-data warnings. See stage details.");
+        setPipelineFailure("");
+        setPipelineWarning("Analysis completed with source-data warnings. See stage details.");
         setPipelineOpen(true);
         setPipelineStatus("Analysis completed with warnings");
       } else if (status?.status === "completed") {
@@ -347,6 +337,7 @@ export default function LandIntelligence() {
     } catch (err) {
       const message = err?.payload?.detail?.message || err?.message || "Analysis failed.";
       setPipelineFailure(message);
+      setPipelineWarning("");
       setPipelineOpen(true);
       setPipelineStage(PIPELINE_STEPS.length - 1);
       setPipelineStatus("Pipeline failed");
@@ -454,15 +445,17 @@ export default function LandIntelligence() {
 
   return (
     <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-surface">
-      <PipelineGlassLoader
+      <HexagonPipelineLoader
         open={pipelineOpen}
         title="Land analysis pipeline"
+        steps={PIPELINE_STEPS}
         currentStep={pipelineStage}
         status={pipelineStatus}
         details={pipelineDetails}
         failure={pipelineFailure}
+        warning={pipelineWarning}
         actions={
-          pipelineFailure
+          pipelineFailure || pipelineWarning
             ? [
                 {
                   label: "Retry Analysis",

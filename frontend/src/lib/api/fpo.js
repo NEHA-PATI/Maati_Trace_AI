@@ -46,9 +46,8 @@ export async function getFpo(fpoId) {
   return unwrapFpoProfile(payload);
 }
 
-// Compatibility-only until profile_service exposes GET /v1/profiles/fpos.
 export const getFpos =
-  () => farmRegistryClient.request("/v1/fpos");
+  () => profileClient.request("/v1/profiles/fpos");
 
 export const getFpoSummary =
   (fpoId) =>

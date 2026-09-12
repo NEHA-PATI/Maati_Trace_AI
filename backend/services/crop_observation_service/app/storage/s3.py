@@ -112,6 +112,16 @@ def head_object(*, object_key: str) -> dict[str, object] | None:
             503,
             internal_message=str(exc),
         ) from exc
+
+
+def read_bytes(*, object_key: str) -> bytes:
+    try:
+        response = _client().get_object(Bucket=settings.crop_observation_s3_bucket, Key=object_key)
+        return response["Body"].read()
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            raise CropObservationError("MEDIA_FILE_MISSING", "Media file was not found.", 404) from exc
+        raise CropObservationError("MEDIA_STORAGE_UNAVAILABLE", "Media storage is temporarily unavailable.", 503, internal_message=str(exc)) from exc
     except BotoCoreError as exc:
         raise CropObservationError(
             "MEDIA_STORAGE_UNAVAILABLE",
