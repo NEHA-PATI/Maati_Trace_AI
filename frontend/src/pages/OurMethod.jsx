@@ -136,13 +136,13 @@ export default function OurMethod() {
     <div className="min-h-screen bg-background">
       <PublicNav />
 
-      <section className="py-20 px-4 md:px-6 pt-28 text-center bg-muted/30 topo-texture border-b border-border">
+      <section className="px-4 py-12 pt-24 text-center bg-muted/30 topo-texture border-b border-border md:px-6 md:py-20 md:pt-28">
         <span className="text-[10px] font-display uppercase tracking-[0.3em] text-muted-foreground">From Land to Intelligence</span>
-        <h1 className="text-3xl md:text-5xl font-display font-bold text-foreground mt-4 tracking-tight">The MaatiTrace Method</h1>
-        <p className="text-sm text-muted-foreground mt-4 max-w-xl mx-auto leading-relaxed">
+        <h1 className="mt-3 text-3xl font-display font-bold tracking-tight text-foreground md:mt-4 md:text-5xl">The MaatiTrace Method</h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground md:mt-4">
           Eight stages transform a piece of land into a living intelligence record. Each stage is verified. Each output is traceable. Nothing is assumed.
         </p>
-        <motion.div animate={{ y: [0, 8, 0] }} transition={{ repeat: Infinity, duration: 2 }} className="mt-8">
+        <motion.div animate={{ y: [0, 8, 0] }} transition={{ repeat: Infinity, duration: 2 }} className="mt-8 hidden md:block">
           <ArrowDown className="w-5 h-5 text-muted-foreground mx-auto" />
         </motion.div>
       </section>

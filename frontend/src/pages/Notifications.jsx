@@ -119,12 +119,12 @@ export default function Notifications() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5" style={{ fontFamily: "'Poppins', sans-serif" }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col items-start gap-3">
+        <div className="w-full text-center">
           <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Notifications</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Alerts, predictions and system updates</p>
+          <p className="mt-0.5 whitespace-nowrap text-xs leading-4 text-gray-400">Alerts, predictions and system updates</p>
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="flex w-full items-center justify-between gap-1 rounded-xl bg-gray-100 p-1">
           {["all", "high", "medium", "low"].map(f => (
             <button
               key={f}
