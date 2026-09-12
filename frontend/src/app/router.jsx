@@ -1,4 +1,6 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
+
+import ScrollToTop from "@/components/ScrollToTop";
 
 import ProtectedRoute from "@/features/auth/components/ProtectedRoute";
 import AcceptInvitationPage from "@/features/auth/pages/AcceptInvitationPage";
@@ -36,7 +38,17 @@ import Notifications from "@/pages/Notifications";
 import OurMethod from "@/pages/OurMethod";
 import UseCases from "@/pages/UseCases";
 
+function RouteLayout() {
+  return (
+    <>
+      <ScrollToTop />
+      <Outlet />
+    </>
+  );
+}
+
 export const router = createBrowserRouter([
+  { element: <RouteLayout />, children: [
   { path: "/", element: <Home /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
@@ -88,4 +100,5 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="notifications" />, children: [{ path: "/notifications", element: <Notifications /> }] },
   { element: <ProtectedRoute permission="settings" />, children: [{ path: "/settings", element: <ProfileSettingsPage /> }] },
   { path: "*", element: <Navigate to="/" replace /> },
+  ] },
 ]);
