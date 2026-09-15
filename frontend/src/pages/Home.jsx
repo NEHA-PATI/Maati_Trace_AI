@@ -11,6 +11,8 @@ import {
   ShieldCheck, TrendingUp, QrCode,
 } from "lucide-react";
 import PublicNav from "@/components/layout/PublicNav";
+import MobileTabBar from "@/components/layout/MobileTabBar";
+import { useAuth } from "@/features/auth/context/useAuth";
 
 // ── Imagery: hotlinked stock photos (Unsplash) chosen to match the reference ─
 const IMG = {
@@ -165,12 +167,13 @@ function SectionHead({ kicker, title, lead, dark = false, center = false }) {
 
 export default function Home() {
   const heroRef = useRef(null);
+  const { isAuthenticated } = useAuth();
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 80]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
 
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'Poppins', sans-serif" }}>
+    <div className="min-h-screen bg-white pb-[calc(72px+env(safe-area-inset-bottom,0px))] md:pb-0" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <PublicNav />
 
       {/* ── HERO (unchanged) ─────────────────────────────────────────────── */}
@@ -537,7 +540,7 @@ export default function Home() {
       </section>
 
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
-      <section id="demo" className="relative scroll-mt-24 overflow-hidden px-6 py-28 text-center text-white md:py-36">
+      {!isAuthenticated && <section id="demo" className="relative scroll-mt-24 overflow-hidden px-6 py-28 text-center text-white md:py-36">
         <img src={IMG.ctaBg} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full object-cover" loading="lazy" />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04261a]/95 to-[#04261a]/60" />
         <div className="relative mx-auto max-w-3xl">
@@ -564,7 +567,7 @@ export default function Home() {
             </div>
           </Reveal>
         </div>
-      </section>
+      </section>}
 
       {/* ── FOOTER (unchanged) ───────────────────────────────────────────── */}
       <footer className="border-t border-gray-100 py-10 px-6 bg-white">
@@ -587,6 +590,7 @@ export default function Home() {
           <p className="text-[10px] text-gray-300 w-full md:w-auto text-center md:text-right">© 2026 MaatiTrace. All rights reserved.</p>
         </div>
       </footer>
+      <MobileTabBar />
     </div>
   );
 }

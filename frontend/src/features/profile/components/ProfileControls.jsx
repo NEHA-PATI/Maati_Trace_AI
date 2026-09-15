@@ -41,7 +41,7 @@ export function ProfileControls({
         duration: 0.4,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 md:flex-row md:items-center md:justify-between"
+      className="relative z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 md:sticky md:bottom-4 md:flex-row md:items-center md:justify-between"
     >
       <div className="flex items-center gap-3">
         {justSaved ? (
@@ -70,12 +70,12 @@ export function ProfileControls({
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:flex-wrap">
         <button
           type="button"
           onClick={onExport}
           disabled={exporting}
-          className="relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+          className="relative inline-flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 md:w-auto"
         >
           {exporting ? (
             <span
@@ -91,7 +91,7 @@ export function ProfileControls({
         <button
           type="submit"
           disabled={saving}
-          className="relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-2xl bg-[color:var(--mt-forest-deep)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(16,185,129,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color:var(--mt-forest)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-70"
+          className="relative inline-flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-[color:var(--mt-forest-deep)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(16,185,129,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color:var(--mt-forest)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-70 md:w-auto"
         >
           {saving ? (
             <span

@@ -48,27 +48,27 @@ export function ProfileHeader({
         duration: 0.5,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/70 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur-xl"
+      className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.07)]"
     >
       <div
-        className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(16,185,129,0.12),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(20,184,166,0.1),transparent_45%)]"
+        className="absolute inset-x-0 top-0 h-1 bg-emerald-500"
         aria-hidden="true"
       />
       <div
-        className="mt-drift absolute -right-10 -top-10 h-48 w-48 rounded-full bg-emerald-200/25 blur-3xl"
+        className="absolute right-5 top-5 h-20 w-20 rounded-full bg-emerald-50"
         aria-hidden="true"
       />
       <div
-        className="absolute -bottom-16 -left-12 h-40 w-40 rounded-full bg-teal-200/20 blur-3xl"
+        className="absolute bottom-0 left-0 h-16 w-16 rounded-full bg-emerald-50"
         aria-hidden="true"
       />
       <div
-        className="absolute inset-0 opacity-[0.04] [background-image:radial-gradient(#059669_1px,transparent_1px)] [background-size:20px_20px]"
+        className="pointer-events-none absolute inset-0 opacity-0"
         aria-hidden="true"
       />
 
-      <div className="relative p-6">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+      <div className="relative p-5 sm:p-6">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
               <div
@@ -84,30 +84,30 @@ export function ProfileHeader({
                   stiffness: 300,
                   damping: 22,
                 }}
-                className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 shadow-[0_8px_24px_rgba(16,185,129,0.35)]"
+                className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-emerald-500 shadow-[0_10px_22px_rgba(16,185,129,0.25)]"
               >
                 <AvatarIcon className="h-8 w-8 text-white" />
               </Motion.div>
             </div>
             <div>
-              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-600">
+              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-700">
                 Profile settings
               </p>
-              <h1 className="mt-font-display text-2xl font-semibold leading-tight text-slate-900">
+              <h1 className="mt-font-display mt-0.5 text-[1.75rem] font-semibold leading-tight text-slate-950">
                 {title}
               </h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500/90">
                 {subtitle}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 border-t border-emerald-900/10 pt-4 md:border-t-0 md:pt-0">
             <GrowthRing
               value={completionPercentage}
             />
             <div
-              className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 ${
+              className={`flex min-h-11 items-center gap-2 rounded-2xl border px-4 py-2.5 shadow-sm ${
                 isCompleted
                   ? "border-emerald-100 bg-emerald-50/80"
                   : "border-amber-100 bg-amber-50/80"

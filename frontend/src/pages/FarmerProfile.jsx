@@ -299,11 +299,11 @@ export default function FarmerProfile() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col gap-4 rounded-[var(--mt-radius-lg)] border border-[var(--mt-line)] bg-white p-5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-5 md:p-6"
+        className="flex flex-col gap-5 rounded-[var(--mt-radius-lg)] border border-[var(--mt-line)] bg-white p-4 sm:p-5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-5 md:p-6"
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-3.5 sm:items-center sm:gap-4">
           <div className="relative shrink-0">
-            <div className="flex h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-full bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)] sm:h-[68px] sm:w-[68px]">
               {farmer.photo ? (
                 <img src={farmer.photo} alt={farmer.name} className="h-full w-full object-cover" />
               ) : (
@@ -321,16 +321,16 @@ export default function FarmerProfile() {
           </div>
 
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[19px] font-extrabold text-[var(--mt-ink)] sm:text-[21px]">{farmer.name}</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[18px] font-extrabold leading-tight text-[var(--mt-ink)] sm:text-[21px]">{farmer.name}</span>
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mt-leaf)] px-2.5 py-1 text-[11.5px] font-bold text-white">
                 <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2.6} />
                 Registered
               </span>
             </div>
-            <div className="mt-1.5 flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--mt-ink-soft)]">
+            <div className="mt-2 flex items-start gap-1.5 text-[13px] font-semibold leading-5 text-[var(--mt-ink-soft)]">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--mt-clay)]" strokeWidth={2.2} />
-              <span className="truncate">{[farmer.village, farmer.block, farmer.district].filter(Boolean).join(", ")}</span>
+              <span className="line-clamp-2">{[farmer.village, farmer.block, farmer.district].filter(Boolean).join(", ")}</span>
             </div>
             <span className="mt-2 inline-block rounded-full bg-[var(--mt-leaf-tint)] px-3 py-1 text-[12px] font-bold text-[var(--mt-leaf-deep)]">
               {farmer.fpoName}
@@ -355,7 +355,7 @@ export default function FarmerProfile() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 md:flex md:w-auto">
+        <div className="grid grid-cols-2 gap-2.5 border-t border-[var(--mt-line)] pt-4 md:flex md:w-auto md:border-0 md:pt-0">
           {callablePhoneHref ? (
             <a
               href={callablePhoneHref}
