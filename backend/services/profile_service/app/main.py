@@ -48,6 +48,7 @@ from services.profile_service.app.schemas import (
     FarmerProfileUpdate,
     FarmerValidationResponse,
     FpoProfileEnvelope,
+    FpoProfileResponse,
     FpoProfileSetupRequest,
     FpoProfileUpdate,
     FpoValidationResponse,
@@ -60,6 +61,7 @@ from services.profile_service.app.service import (
     get_farmer_for_requester,
     get_fpo_farmers_for_requester,
     get_fpo_for_requester,
+    list_fpos_for_requester,
     get_my_profile,
     setup_my_fpo_profile,
     update_my_farmer_profile,
@@ -410,6 +412,24 @@ def read_farmer_profile(
     return get_farmer_for_requester(
         context,
         farmer_id,
+    )
+
+
+@app.get(
+    "/v1/profiles/fpos",
+    response_model=list[FpoProfileResponse],
+)
+def list_fpo_profiles(
+    limit: int = 100,
+    offset: int = 0,
+    context: RequestContext = Depends(
+        get_request_context
+    ),
+):
+    return list_fpos_for_requester(
+        context,
+        limit=limit,
+        offset=offset,
     )
 
 

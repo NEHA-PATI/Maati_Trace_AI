@@ -80,10 +80,12 @@ class Settings(BaseSettings):
     cartesia_api_key: str = ""
     cartesia_api_base: str = "https://api.cartesia.ai"
     cartesia_api_version: str = "2026-08-14"
-    cartesia_tts_model: str = "sonic-3.6-2026-08-27"
+    cartesia_tts_model: str = "sonic-3.6"
     cartesia_odia_voice_id: str = ""
     cartesia_english_voice_id: str = ""
     cartesia_tts_output_container: str = "mp3"
+    cartesia_tts_mp3_bit_rate: int = 128000
+    cartesia_tts_sample_rate: int = 44100
     cartesia_tts_speed: float = 0.95
     cartesia_tts_volume: float = 1.0
     cartesia_connect_timeout_seconds: int = 5
@@ -134,6 +136,9 @@ class Settings(BaseSettings):
     # Multi-source catalog / remote access
     catalog_http_timeout_seconds: int = 120
     source_download_timeout_seconds: int = 600
+    stac_search_max_concurrency: int = 1
+    stac_search_retry_attempts: int = 3
+    stac_search_retry_base_seconds: float = 1.0
 
     # NASA Earthdata / CMR. Token must be supplied through .env when used.
     earthdata_token: str = ""
@@ -153,6 +158,8 @@ class Settings(BaseSettings):
     # Raster processing
     raster_http_timeout_seconds: int = 120
     raster_max_pixels_per_request: int = 250000
+    environment_pipeline_max_workers: int = 8
+    lakehouse_write_retry_attempts: int = 2
 
     model_config = SettingsConfigDict(
         env_file=".env",

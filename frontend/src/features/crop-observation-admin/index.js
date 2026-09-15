@@ -1,7 +1,6 @@
 export { default as CropObservationAdminHubPage } from "./pages/CropObservationAdminHubPage";
 export { default as CropConfigurationPage } from "./pages/CropConfigurationPage";
 export { default as CropConfigurationEditorPage } from "./pages/CropConfigurationEditorPage";
-export { default as FarmerObservationMonitorPage } from "./pages/FarmerObservationMonitorPage";
 export { default as CropObservationOverviewPage } from "./pages/CropObservationOverviewPage";
 export { default as CropObservationRecordsPage } from "./pages/CropObservationRecordsPage";
 export { default as CropObservationIssuesPage } from "./pages/CropObservationIssuesPage";

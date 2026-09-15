@@ -85,6 +85,34 @@ def list_all_crops() -> list[dict[str, Any]]:
     return rows
 
 
+def get_crop(crop_code: str) -> dict[str, Any] | None:
+    row = _run_one(
+        """
+        SELECT crop_id, crop_code, lifecycle_type, default_stage_strategy,
+               is_active, display_order
+        FROM crop_observation.crops
+        WHERE crop_code = :crop_code;
+        """,
+        {"crop_code": crop_code},
+    )
+    if row is None:
+        return None
+
+    row["translations"] = [
+        dict(item)
+        for item in _run(
+            """
+            SELECT crop_id, locale, display_name, short_description
+            FROM crop_observation.crop_translations
+            WHERE crop_id = :crop_id
+            ORDER BY locale;
+            """,
+            {"crop_id": row["crop_id"]},
+        )
+    ]
+    return row
+
+
 def create_crop(
     *, crop_code: str, lifecycle_type: str, default_stage_strategy: str, display_order: int
 ) -> dict[str, Any]:

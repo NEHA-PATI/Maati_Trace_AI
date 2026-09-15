@@ -18,6 +18,7 @@ from services.crop_observation_service.app.admin_extended_schemas import (
     AdminOverviewOut,
     AdminPracticeRecordOut,
     AdminRecordDetailOut,
+    AdminDiagnosticsOut,
     AdminSystemStatusOut,
     RecordReviewOut,
     RecordReviewUpdateRequest,
@@ -240,3 +241,8 @@ def generate_configuration_audio_endpoint(
 @router.get("/system/status", response_model=AdminSystemStatusOut)
 def system_status_endpoint(context: RequestContext = Depends(get_request_context)):
     return svc.get_system_status(context)
+
+
+@router.get("/system/diagnostics", response_model=AdminDiagnosticsOut)
+def system_diagnostics_endpoint(context: RequestContext = Depends(get_request_context)):
+    return svc.get_system_diagnostics(context)

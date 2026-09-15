@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 from uuid import UUID
 
@@ -12,11 +13,31 @@ class EnvironmentClientError(RuntimeError):
     pass
 
 
-def _post(url: str, body: dict[str, Any], timeout: int = 600) -> dict[str, Any]:
-    try:
-        response = requests.post(url, json=body, timeout=timeout)
-    except requests.RequestException as exc:
-        raise EnvironmentClientError(f"POST failed: {url}: {exc}") from exc
+def _post(
+    url: str,
+    body: dict[str, Any],
+    timeout: int = 600,
+    *,
+    retry_attempts: int = 0,
+) -> dict[str, Any]:
+    response = None
+    last_error: Exception | None = None
+    for attempt in range(max(1, retry_attempts + 1)):
+        try:
+            response = requests.post(url, json=body, timeout=timeout)
+            if response.status_code not in {429, 502, 503, 504}:
+                break
+            last_error = EnvironmentClientError(
+                f"transient HTTP {response.status_code}: {response.text[:500]}"
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+        if attempt < retry_attempts:
+            time.sleep(1.0 * (2**attempt))
+    if response is None:
+        raise EnvironmentClientError(f"POST failed: {url}: {last_error}") from last_error
+    if last_error is not None and response.status_code in {429, 502, 503, 504}:
+        raise EnvironmentClientError(f"POST failed: {url}: {last_error}") from last_error
     try:
         payload = response.json()
     except Exception:
@@ -105,4 +126,5 @@ def write_environment_to_lakehouse(
         f"{settings.lakehouse_writer_service_url}/v1/lakehouse/environment/write",
         body,
         timeout=600,
+        retry_attempts=settings.lakehouse_write_retry_attempts,
     )

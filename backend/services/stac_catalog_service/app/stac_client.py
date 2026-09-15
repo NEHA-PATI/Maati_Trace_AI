@@ -1,3 +1,5 @@
+import threading
+import time
 from typing import Any
 
 import planetary_computer
@@ -5,11 +7,23 @@ from pystac import Collection
 from pystac_client import Client
 from pystac_client.exceptions import APIError
 
+from shared.config.settings import settings
 from services.stac_catalog_service.app.providers import get_provider_url
 
 
 class StacCatalogError(RuntimeError):
     pass
+
+
+_PLANETARY_COMPUTER_SEARCH_LIMIT = threading.BoundedSemaphore(
+    max(1, int(settings.stac_search_max_concurrency))
+)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    status_code = getattr(exc, "status_code", None)
+    message = str(exc).lower()
+    return status_code == 429 or "rate limit" in message or "too many requests" in message
 
 
 def open_client(provider: str) -> Client:
@@ -161,19 +175,39 @@ def search_items(
 ) -> list[dict[str, Any]]:
     client = open_client(provider)
     query = build_query(max_cloud_cover)
-    try:
-        search = client.search(
-            collections=[collection_id],
-            bbox=bbox,
-            datetime=f"{start_date}/{end_date}",
-            query=query,
-            limit=limit,
-        )
-        items = list(search.items())
-    except APIError as exc:
-        raise StacCatalogError(f"STAC search failed: {exc}") from exc
-    except Exception as exc:
-        raise StacCatalogError(f"STAC search failed: {exc}") from exc
+    items = None
+    attempts = max(1, int(settings.stac_search_retry_attempts))
+    for attempt in range(attempts):
+        try:
+            # Planetary Computer rate-limits bursts. Keep searches bounded even
+            # when the hot-stream pipeline processes datasets concurrently.
+            semaphore = (
+                _PLANETARY_COMPUTER_SEARCH_LIMIT
+                if provider.strip().lower() == "planetary_computer"
+                else None
+            )
+            if semaphore is not None:
+                semaphore.acquire()
+            try:
+                search = client.search(
+                    collections=[collection_id],
+                    bbox=bbox,
+                    datetime=f"{start_date}/{end_date}",
+                    query=query,
+                    limit=limit,
+                )
+                items = list(search.items())
+            finally:
+                if semaphore is not None:
+                    semaphore.release()
+            break
+        except (APIError, Exception) as exc:
+            if not _is_rate_limit_error(exc) or attempt >= attempts - 1:
+                raise StacCatalogError(f"STAC search failed: {exc}") from exc
+            time.sleep(float(settings.stac_search_retry_base_seconds) * (2**attempt))
+
+    if items is None:
+        raise StacCatalogError("STAC search failed without a response")
 
     normalized_items = [
         normalize_item(item=item, provider=provider, collection_id=collection_id)

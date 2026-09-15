@@ -96,15 +96,20 @@ def read_asset_to_grid(
 ) -> np.ndarray:
     href = refresh_planetary_computer_href(href)
     try:
-        with rasterio.Env(
-            GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-            CPL_VSIL_CURL_USE_HEAD="NO",
-            GTIFF_SRS_SOURCE="EPSG",
-            VSI_CACHE="TRUE",
-            GDAL_HTTP_MAX_RETRY="3",
-            GDAL_HTTP_RETRY_DELAY="1",
-            GDAL_HTTP_TIMEOUT=str(settings.raster_http_timeout_seconds),
-        ):
+        env_options = {
+            "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
+            "CPL_VSIL_CURL_USE_HEAD": "NO",
+            "GTIFF_SRS_SOURCE": "EPSG",
+            "VSI_CACHE": "TRUE",
+            "GDAL_HTTP_MAX_RETRY": "3",
+            "GDAL_HTTP_RETRY_DELAY": "1",
+            "GDAL_HTTP_TIMEOUT": str(settings.raster_http_timeout_seconds),
+        }
+        if href.lower().startswith("s3://"):
+            # Landsat COGs are public. Do not let unrelated local AWS
+            # credentials turn a public read into a signed request failure.
+            env_options["AWS_NO_SIGN_REQUEST"] = "YES"
+        with rasterio.Env(**env_options):
             with rasterio.open(href) as src:
                 with WarpedVRT(
                     src,
@@ -178,15 +183,18 @@ def sample_native_window(
     Returns None if the point falls outside the raster's extent.
     """
     href = refresh_planetary_computer_href(href)
-    with rasterio.Env(
-        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-        CPL_VSIL_CURL_USE_HEAD="NO",
-        GTIFF_SRS_SOURCE="EPSG",
-        VSI_CACHE="TRUE",
-        GDAL_HTTP_MAX_RETRY="3",
-        GDAL_HTTP_RETRY_DELAY="1",
-        GDAL_HTTP_TIMEOUT=str(settings.raster_http_timeout_seconds),
-    ):
+    env_options = {
+        "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
+        "CPL_VSIL_CURL_USE_HEAD": "NO",
+        "GTIFF_SRS_SOURCE": "EPSG",
+        "VSI_CACHE": "TRUE",
+        "GDAL_HTTP_MAX_RETRY": "3",
+        "GDAL_HTTP_RETRY_DELAY": "1",
+        "GDAL_HTTP_TIMEOUT": str(settings.raster_http_timeout_seconds),
+    }
+    if href.lower().startswith("s3://"):
+        env_options["AWS_NO_SIGN_REQUEST"] = "YES"
+    with rasterio.Env(**env_options):
         with rasterio.open(href) as src:
             if src.crs is None:
                 raise MultiRasterIOError(f"Raster asset has no CRS: {href}")
