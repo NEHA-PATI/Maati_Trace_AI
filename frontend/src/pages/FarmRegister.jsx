@@ -465,7 +465,25 @@ export default function FarmRegister() {
         />
 
         {pageLoading ? (
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-sm">Loading registration lookup data...</div>
+          <div
+            className="space-y-5 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 animate-pulse rounded-2xl bg-emerald-100" />
+              <div className="h-5 w-40 animate-pulse rounded-lg bg-gray-200" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="space-y-1.5">
+                  <div className="h-3 w-16 animate-pulse rounded bg-gray-200" />
+                  <div className="h-11 w-full animate-pulse rounded-xl border border-gray-100 bg-gray-50" />
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500">Loading registration lookup data...</p>
+          </div>
         ) : (
           <AnimatePresence mode="wait">
             <MotionDiv
@@ -488,7 +506,7 @@ export default function FarmRegister() {
                       <Label className={labelClass}>State</Label>
                       <Select value={formData.state_name} onValueChange={(value) => update("state_name", value)}>
                         <SelectTrigger className={inputClass}><SelectValue placeholder="Select state" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectContent side="bottom" sideOffset={6} collisionPadding={12} className="max-h-[min(60vh,22rem)]">
                           {(states.length ? states : [{ state_name: "Odisha" }]).map((state) => (
                             <SelectItem key={state.state_name} value={state.state_name}>{state.state_name}</SelectItem>
                           ))}
@@ -499,7 +517,7 @@ export default function FarmRegister() {
                       <Label className={labelClass}>District</Label>
                       <Select value={formData.district_name} onValueChange={(value) => update("district_name", value)}>
                         <SelectTrigger className={inputClass}><SelectValue placeholder="Select district" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectContent side="bottom" sideOffset={6} collisionPadding={12} className="max-h-[min(60vh,22rem)]">
                           {districts.map((district) => (
                             <SelectItem key={`${district.district_code}-${district.district_name}`} value={district.district_name}>
                               {district.district_name}
@@ -523,7 +541,7 @@ export default function FarmRegister() {
                             {formData.block_name ? `${formData.block_name} (${formData.block_code})` : "Select block"}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent side="bottom" sideOffset={6} collisionPadding={12} className="max-h-[min(60vh,22rem)]">
                           {blocks.map((block) => (
                             <SelectItem key={block.block_code} value={String(block.block_code)}>
                               {block.block_name} ({block.block_code})
@@ -586,7 +604,7 @@ export default function FarmRegister() {
                           <SelectTrigger className={inputClass}>
                             <SelectValue placeholder={cropProfiles.length ? "Select configured crop" : "No active crop profiles"} />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent side="bottom" sideOffset={6} collisionPadding={12} className="max-h-[min(60vh,22rem)]">
                             {cropProfiles.map((crop) => (
                               <SelectItem key={`${crop.crop_code}-${crop.profile_version}`} value={crop.crop_code}>
                                 {crop.crop_name}

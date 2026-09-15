@@ -6,6 +6,7 @@ import { motion as Motion } from "framer-motion";
 import {
   Building2,
   Check,
+  ChevronLeft,
   Download,
   FileText,
   MapPin,
@@ -14,6 +15,7 @@ import {
   User,
   Wheat,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import "@/features/profile/profile-design.css";
 import { FarmerProfileForm } from "@/features/profile/components/FarmerProfileForm";
@@ -95,6 +97,7 @@ function ProfileMissingFields({
 }
 
 export function ProfileSettingsPage() {
+  const navigate = useNavigate();
   const {
     user,
     envelope,
@@ -176,6 +179,14 @@ export function ProfileSettingsPage() {
     <div className="mt-font-body min-h-screen px-4 py-6 text-slate-900 md:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="space-y-5">
+          <button
+            type="button"
+            onClick={() => navigate("/farmer/me")}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-600 shadow-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 md:hidden"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Back to dashboard
+          </button>
           <ProfileHeader
             user={user}
             profile={profile}
