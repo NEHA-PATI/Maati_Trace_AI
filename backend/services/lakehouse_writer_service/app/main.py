@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from threading import Lock
 
 from shared.config.settings import settings
 from shared.errors.api_errors import bad_request
@@ -26,6 +27,7 @@ SERVICE_NAME = "lakehouse_writer_service"
 configure_json_logging(SERVICE_NAME)
 
 app = FastAPI(title="Lakehouse Writer Service", version="2.0.0")
+_environment_write_lock = Lock()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins_list,
@@ -83,7 +85,11 @@ def write_sentinel2(payload: Sentinel2LakehouseWriteRequest):
 )
 def write_environment(payload: EnvironmentLakehouseWriteRequest):
     try:
-        result = write_environment_features(payload)
+        # Parquet/DB writes are idempotent but the local lakehouse backend is
+        # not designed for many simultaneous writers. Serialize this narrow
+        # critical section while keeping source downloads concurrent upstream.
+        with _environment_write_lock:
+            result = write_environment_features(payload)
         return EnvironmentLakehouseWriteResponse(
             **result,
             storage_mode=settings.storage_mode,

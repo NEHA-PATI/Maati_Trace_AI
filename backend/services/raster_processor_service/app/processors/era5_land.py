@@ -98,9 +98,10 @@ def process(payload: dict[str, Any]) -> dict[str, Any]:
     start = (item.get("start_datetime") or "")[:10]
     end = (item.get("end_datetime") or "")[:10]
     days = _date_range(start, end)
-    if len(days) > settings.era5_max_days_per_request:
+    monthly_days = _group_days(days)
+    if any(len(month_days) > settings.era5_max_days_per_request for month_days in monthly_days.values()):
         raise RuntimeError(
-            f"ERA5-Land request is limited to {settings.era5_max_days_per_request} days per materialization"
+            f"ERA5-Land request is limited to {settings.era5_max_days_per_request} days per month"
         )
 
     north = payload["bbox"][3]
@@ -112,7 +113,7 @@ def process(payload: dict[str, Any]) -> dict[str, Any]:
     datasets: list[xr.Dataset] = []
     temp_paths: list[str] = []
     try:
-        for (year, month), month_days in _group_days(days).items():
+        for (year, month), month_days in monthly_days.items():
             fd, path = tempfile.mkstemp(prefix="maatitrace_era5_", suffix=".nc")
             os.close(fd)
             temp_paths.append(path)

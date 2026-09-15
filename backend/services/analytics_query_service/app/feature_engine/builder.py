@@ -570,13 +570,18 @@ def build_feature_rows(
     results: list[dict[str, Any]] = []
 
     for anchor in anchors:
-        target = _date(anchor.get("snapshot_date"))
+        anchor_date = _date(anchor.get("snapshot_date"))
+        # The latest optical/radar scene can lag the request end date by a few
+        # days. For the farmer-visible latest snapshot, align coarse sources
+        # to the requested end date so recent GPM/SMAP/forecast observations
+        # are not incorrectly discarded as "future" data.
+        target = end_date if latest_only else anchor_date
         h3_index = int(anchor["h3_index"])
         if target is None:
             continue
 
         features = _temporal_features(anchor, anchor_by_h3.get(h3_index, []), profile)
-        features.update(_spatial_features(anchor, same_date_anchor.get(target, [])))
+        features.update(_spatial_features(anchor, same_date_anchor.get(anchor_date, [])))
 
         # Sentinel-1: compare closest prior ratio against prior history for this H3.
         s1_history = s1_by_h3.get(h3_index, [])

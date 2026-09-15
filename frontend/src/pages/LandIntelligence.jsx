@@ -16,6 +16,7 @@ import {
   getFarmH3Cells,
   getLatestFarmCalculations,
   getLatestGridCalculations,
+  getLatestGridValues,
   getMetricContent,
 } from "@/lib/api/analytics";
 import {
@@ -132,6 +133,7 @@ export default function LandIntelligence() {
   const [farm, setFarm] = useState(null);
   const [metricContent, setMetricContent] = useState([]);
   const [gridCells, setGridCells] = useState([]);
+  const [gridValues, setGridValues] = useState([]);
   const [gridCalculations, setGridCalculations] = useState([]);
   const [farmCalculations, setFarmCalculations] = useState([]);
   const [h3Cells, setH3Cells] = useState([]);
@@ -153,9 +155,10 @@ export default function LandIntelligence() {
   }
 
   async function loadLandIntelligence() {
-    const [farmPayload, gridCellsPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
+    const [farmPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
       getFarmGridCells(farmId).catch(() => []),
+      getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
       getLatestGridCalculations(farmId).catch(() => []),
       getLatestFarmCalculations(farmId).catch(() => []),
@@ -168,6 +171,7 @@ export default function LandIntelligence() {
     setFarm(farmPayload);
     setMetricContent(await getMetricContent(farmPayload?.crop_code || "").catch(() => []));
     setGridCells(normalizeList(gridCellsPayload));
+    setGridValues(normalizeList(gridValuesPayload));
     setGridCalculations(normalizeList(gridCalculationsPayload));
     setFarmCalculations(normalizeList(farmCalculationsPayload));
     setH3Cells(normalizeList(h3Payload));
@@ -257,22 +261,26 @@ export default function LandIntelligence() {
   );
 
   const mergedGridCells = useMemo(() => {
+    const valuesById = new Map(
+      (Array.isArray(gridValues) ? gridValues : []).map((value) => [String(value.grid_cell_id), value]),
+    );
     const calcById = new Map(
       (Array.isArray(gridCalculations) ? gridCalculations : []).map((value) => [String(value.grid_cell_id), value]),
     );
-    return gridCells.filter((cell) => calcById.has(String(cell.grid_cell_id))).map((cell) => ({
+    return gridCells.map((cell) => ({
       ...cell,
+      ...(valuesById.get(String(cell.grid_cell_id)) || {}),
       ...(calcById.get(String(cell.grid_cell_id)) || {}),
     }));
-  }, [gridCells, gridCalculations]);
+  }, [gridCells, gridValues, gridCalculations]);
 
-  // Farmer maps are backed only by calculated predictions. Raw grid values
-  // remain available to technical/admin APIs, never as a UI fallback.
+  // Grid geometry is always shown; calculated scores and raw sensor values are
+  // merged in when those endpoints have produced data for the cell.
   const displayCells = mergedGridCells;
   const displaySelected = selectedDetails?.grid_cell || selectedCell || null;
   const h3Enabled = showH3 && canViewTechnicalH3Layer(user);
   const latestSceneDate = farmCalculationList[0]?.result_date || farm?.updated_at;
-  const hasAnalysis = Boolean(farmCalculationList.length || gridCalculations.length);
+  const hasAnalysis = Boolean(farmCalculationList.length || gridCalculations.length || gridValues.length);
   const selectedParameterInfo = PARAMETERS.find((item) => item.key === selectedParameter);
 
   async function runLatestAnalysis() {

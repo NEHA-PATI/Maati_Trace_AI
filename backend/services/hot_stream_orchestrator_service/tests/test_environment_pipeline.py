@@ -94,7 +94,72 @@ def test_sentinel2_is_processed_inside_mandatory_environment_stage(monkeypatch):
     assert [item["dataset_key"] for item in result["datasets"]] == ["sentinel_2_l2a", "sentinel_1_rtc"]
     assert writes == ["sentinel2", "sentinel_1_rtc"]
     assert searches[0]["dataset_key"] == "sentinel_2_l2a"
+    assert searches[0]["limit"] == 5
     assert ("complete",) == tuple(event[:1] for event in events if event[0] == "complete")[0]
+
+
+def test_sentinel2_tries_next_candidate_until_valid_pixels(monkeypatch):
+    setup_common(monkeypatch)
+    scenes = [
+        {"scene_id": "s2-cloudy", "datetime": "2026-08-03"},
+        {"scene_id": "s2-valid", "datetime": "2026-08-02"},
+        {"scene_id": "s2-old", "datetime": "2026-08-01"},
+    ]
+    previewed = []
+    written = []
+
+    monkeypatch.setattr(
+        environment_service,
+        "search_catalog_dataset",
+        lambda **kwargs: {"provider": "test", "items": scenes},
+    )
+
+    def preview(**kwargs):
+        scene_id = kwargs["scene"]["scene_id"]
+        previewed.append(scene_id)
+        value = 0.42 if scene_id == "s2-valid" else None
+        valid_fraction = 1.0 if scene_id == "s2-valid" else 0.0
+        valid_pixel_count = 10 if scene_id == "s2-valid" else 0
+        return {
+            "scene_id": scene_id,
+            "h3_resolution": 12,
+            "features": [
+                {
+                    "h3_index": 101,
+                    "valid_fraction": valid_fraction,
+                    "valid_pixel_count": valid_pixel_count,
+                    "pixel_count": 10,
+                    "ndvi": value,
+                },
+                {
+                    "h3_index": 102,
+                    "valid_fraction": valid_fraction,
+                    "valid_pixel_count": valid_pixel_count,
+                    "pixel_count": 10,
+                    "ndvi": value,
+                },
+            ],
+        }
+
+    monkeypatch.setattr(environment_service, "run_raster_preview_for_scene", preview)
+    monkeypatch.setattr(
+        environment_service,
+        "write_sentinel2_to_lakehouse",
+        lambda farm_id, processed: written.append(processed["scene_id"]) or {"postgres_rows_written": 2},
+    )
+
+    result = environment_service.materialize_environment(FARM_ID, payload("sentinel_2_l2a"))
+    sentinel2 = result["datasets"][0]
+
+    assert result["status"] == "succeeded"
+    assert previewed == ["s2-cloudy", "s2-valid"]
+    assert written == ["s2-valid"]
+    assert sentinel2["source_items_found"] == 3
+    assert sentinel2["source_items_processed"] == 2
+    assert sentinel2["accepted_source_item"] == "s2-valid"
+    assert sentinel2["candidate_rejections"] == [
+        "s2-cloudy: no valid pixels after cloud/nodata masking"
+    ]
 
 
 def test_unavailable_environment_dataset_does_not_stop_sibling_processing(monkeypatch):
@@ -159,7 +224,7 @@ def test_canonical_analysis_has_one_ordered_pipeline(monkeypatch):
     monkeypatch.setattr(
         environment_service,
         "materialize_environment",
-        lambda farm_id, payload: operations.append("environment_datasets") or {"status": "succeeded", "datasets": []},
+        lambda farm_id, payload, **kwargs: operations.append("environment_datasets") or {"status": "succeeded", "datasets": []},
     )
     monkeypatch.setattr(
         "services.analytics_query_service.app.feature_engine.service.materialize_intelligence",
