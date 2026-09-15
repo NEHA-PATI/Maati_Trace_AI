@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import UUID, uuid4
 
 from services.crop_observation_service.app import observation_service, repository as repo
@@ -27,6 +28,28 @@ _EXTENSION_BY_MIME = {
 }
 
 
+def _canonical_mime_type(value: str) -> str:
+    """Drop browser codec parameters before applying media policy.
+
+    MediaRecorder commonly reports values such as
+    ``audio/webm;codecs=opus``. The container is still audio/webm, and the
+    codec parameter must not make an otherwise supported upload fail.
+    """
+    return str(value or "").split(";", 1)[0].strip().lower()
+
+
+def _compact_legacy_object_key(asset: dict) -> str:
+    mime_type = _canonical_mime_type(asset["mime_type"])
+    extension = _EXTENSION_BY_MIME.get(mime_type, "bin")
+    kind = "images" if asset["media_type"] == "IMAGE" else "audio"
+    created_at = asset.get("created_at")
+    date_segment = created_at.strftime("%Y%m%d") if created_at else datetime.utcnow().strftime("%Y%m%d")
+    return (
+        f"farmer/{asset['owner_user_id']}/legacy/{date_segment}/"
+        f"{kind}/{asset['media_asset_id']}.{extension}"
+    )
+
+
 def _resolve_owner_context(owner_type: str, owner_id: UUID) -> dict:
     """Resolve a media owner (a daily status row or a practice observation
     row) back to its crop_cycle -> farm_crop -> farm, so we can both
@@ -50,6 +73,8 @@ def _resolve_owner_context(owner_type: str, owner_id: UUID) -> dict:
 
 def _validate_media_limits(*, payload: MediaUploadRequest) -> None:
     from shared.config.settings import settings
+
+    payload.mime_type = _canonical_mime_type(payload.mime_type)
 
     if payload.media_type == "IMAGE":
         if payload.mime_type not in settings.allowed_image_mime_types_list:
@@ -167,15 +192,12 @@ def request_media_upload(
     media_uuid = uuid4()
     today = datetime.utcnow()
     kind = "images" if payload.media_type == "IMAGE" else "audio"
-    owner_segment = (
-        f"daily/{daily['daily_observation_id']}"
-        if payload.owner_type == "DAILY_STAGE"
-        else f"practice/{payload.owner_id}"
-    )
+    # Keep the object key compact. The full ownership relationship remains in
+    # the database, while a shorter key avoids Windows MAX_PATH failures for
+    # local development and is equally valid for S3.
     object_key = (
-        f"farmer/{farm_crop['farmer_user_id']}/farm/{farm_crop['farm_id']}/"
-        f"crop-cycle/{cycle['crop_cycle_id']}/{today:%Y/%m/%d}/{owner_segment}/"
-        f"{kind}/{media_uuid}.{extension}"
+        f"farmer/{farm_crop['farmer_user_id']}/cycle/{cycle['crop_cycle_id']}/"
+        f"{today:%Y%m%d}/{kind}/{media_uuid}.{extension}"
     )
 
     bucket_name = "local" if is_local() else settings.crop_observation_s3_bucket
@@ -220,8 +242,6 @@ def write_local_media_content(context: RequestContext, media_asset_id: UUID, dat
     here instead of straight to S3 — see storage/local.py create_upload_url).
     Validates ownership, size, MIME-declared type and, for images, that the
     bytes actually decode as an image before writing them to disk."""
-    from PIL import Image, UnidentifiedImageError
-
     from shared.config.settings import settings
 
     asset = repo.get_media_asset(media_asset_id)
@@ -236,15 +256,20 @@ def write_local_media_content(context: RequestContext, media_asset_id: UUID, dat
     if len(data) > max_bytes:
         raise CropObservationError("MEDIA_TOO_LARGE", "File exceeds the size limit.", 422)
 
+    from services.crop_observation_service.app.media_validation import validate_audio_bytes, validate_image_bytes
     if asset["media_type"] == "IMAGE":
-        import io
-
-        try:
-            Image.open(io.BytesIO(data)).verify()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise CropObservationError("INVALID_MEDIA_FILE", "This does not look like a valid image.", 422) from exc
+        validate_image_bytes(data, asset["mime_type"])
+    else:
+        validate_audio_bytes(data, asset["mime_type"])
 
     from services.crop_observation_service.app.storage import local as local_storage
+
+    # Tickets created before the compact-key fix can still be in a browser
+    # upload flow. Migrate their legacy Windows-hostile key before writing.
+    if "/farm/" in asset["object_key"] or len(str(local_storage.resolve(asset["object_key"]))) >= 240:
+        migrated_key = _compact_legacy_object_key(asset)
+        if repo.update_media_object_key(media_asset_id, migrated_key):
+            asset["object_key"] = migrated_key
 
     local_storage.write_bytes(object_key=asset["object_key"], data=data)
 
@@ -281,7 +306,22 @@ def complete_media_upload(context: RequestContext, media_asset_id: UUID) -> Medi
             422,
         )
 
-    row = repo.mark_media_ready(media_asset_id)
+    data = storage.read_bytes(object_key=asset["object_key"])
+    if len(data) != int(asset["byte_size"]):
+        raise CropObservationError("MEDIA_SIZE_MISMATCH", "The uploaded file size does not match what was declared.", 422)
+    from services.crop_observation_service.app.media_validation import validate_audio_bytes, validate_image_bytes
+    if asset["media_type"] == "IMAGE":
+        validate_image_bytes(data, asset["mime_type"])
+    else:
+        validate_audio_bytes(data, asset["mime_type"])
+
+    row = repo.mark_media_ready(media_asset_id, sha256(data).hexdigest())
+    repo.create_outbox_event(
+        aggregate_type="MEDIA_ASSET",
+        aggregate_id=media_asset_id,
+        event_type="crop_observation.media_ready",
+        payload={"media_type": asset["media_type"], "mime_type": asset["mime_type"]},
+    )
     return MediaAssetResponse(
         media_asset_id=row["media_asset_id"],
         media_type=row["media_type"],

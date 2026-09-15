@@ -136,6 +136,8 @@ export default function HexagonPipelineLoader({
   status = "",
   details = [],
   failure = null,
+  warning = null,
+  actions = [],
 }) {
   const hexRefs = React.useRef({});
   const positionsRef = React.useRef([]);
@@ -232,10 +234,12 @@ export default function HexagonPipelineLoader({
     };
   }, [open]);
 
-  const done = safeCurrentStep >= steps.length - 1 && !failure;
+  const done = safeCurrentStep >= steps.length - 1 && !failure && !warning;
   const stageLabel = failure
-    ? "Registration could not be completed"
-    : steps[visualStep] || status || "Processing land data";
+    ? "Pipeline could not be completed"
+    : warning
+      ? "Analysis completed with warnings"
+      : steps[visualStep] || status || "Processing land data";
   const completedSteps = steps.slice(0, visualStep).slice(-2);
   const progress = done
     ? 100
@@ -300,7 +304,9 @@ export default function HexagonPipelineLoader({
                       ? "text-[34px] font-semibold text-teal-700"
                       : failure
                         ? "text-[28px] font-semibold text-rose-700"
-                        : "text-[26px] font-medium text-slate-700"
+                        : warning
+                          ? "text-[28px] font-semibold text-amber-700"
+                          : "text-[26px] font-medium text-slate-700"
                   }`}
                 >
                   {done ? (
@@ -321,7 +327,10 @@ export default function HexagonPipelineLoader({
                 ) : null}
 
                 <p className="mt-3 text-[21px] tracking-wide text-slate-400">
-                  {done ? "Processing complete" : `${progress}% complete`}
+                  {warning ? "Completed with warnings" : done ? "Processing complete" : `${progress}% complete`}
+                </p>
+                <p className="mt-1 text-[15px] font-semibold tracking-wide text-slate-400">
+                  Task {done ? steps.length : Math.min(visualStep + 1, steps.length)} of {steps.length}
                 </p>
 
                 {details.length ? (
@@ -333,6 +342,15 @@ export default function HexagonPipelineLoader({
                       >
                         {detail}
                       </span>
+                    ))}
+                  </div>
+                ) : null}
+                {actions.length ? (
+                  <div className="pointer-events-auto mt-6 flex flex-wrap justify-center gap-2">
+                    {actions.map((action) => (
+                      <button key={action.label} type="button" onClick={action.onClick} className={`rounded-xl px-4 py-2 text-sm font-semibold ${action.variant === "primary" ? "bg-teal-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>
+                        {action.label}
+                      </button>
                     ))}
                   </div>
                 ) : null}

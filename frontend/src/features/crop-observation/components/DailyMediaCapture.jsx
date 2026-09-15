@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Loader2, Trash2 } from "lucide-react";
 
-import { uploadMedia } from "@/features/crop-observation/api/cropObservationApi";
+import { deleteMedia, fetchAuthedMediaBlob, listOwnerMedia, uploadMedia } from "@/features/crop-observation/api/cropObservationApi";
 import PhotoPicker from "@/features/crop-observation/components/PhotoPicker";
 import VoiceRecorder from "@/features/crop-observation/components/VoiceRecorder";
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
@@ -20,8 +20,18 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [existingMedia, setExistingMedia] = useState([]);
 
   const hasPending = photos.length > 0 || Boolean(voiceFile);
+
+  useEffect(() => {
+    if (!dailyObservationId) return undefined;
+    let cancelled = false;
+    listOwnerMedia("DAILY_STAGE", dailyObservationId)
+      .then((rows) => { if (!cancelled) setExistingMedia(rows || []); })
+      .catch(() => { if (!cancelled) setExistingMedia([]); });
+    return () => { cancelled = true; };
+  }, [dailyObservationId]);
 
   if (!dailyObservationId) return null;
 
@@ -64,6 +74,7 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
   return (
     <div className="mt-4 rounded-2xl border border-[#E9E7DC] bg-white p-4 shadow-sm">
       <div className="space-y-4">
+        {existingMedia.length ? <div className="grid grid-cols-2 gap-2">{existingMedia.map((media) => <ExistingMedia key={media.media_asset_id} media={media} onDelete={async (id) => { await deleteMedia(id); setExistingMedia((rows) => rows.filter((row) => row.media_asset_id !== id)); }} />)}</div> : null}
         <PhotoPicker value={photos} onChange={setPhotos} locale={locale} />
         <VoiceRecorder
           value={voiceFile}
@@ -94,4 +105,14 @@ export default function DailyMediaCapture({ dailyObservationId, locale }) {
       ) : null}
     </div>
   );
+}
+
+function ExistingMedia({ media, onDelete }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetchAuthedMediaBlob(media.content_url).then((blob) => { if (active) setUrl(URL.createObjectURL(blob)); }).catch(() => {});
+    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+  }, [media.content_url]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className="relative overflow-hidden rounded-xl border bg-[#F7F8F3] p-1">{url && media.media_type === "IMAGE" ? <img src={url} alt="" className="h-24 w-full object-cover" /> : null}{url && media.media_type === "AUDIO" ? <audio controls src={url} className="w-full" /> : null}<button type="button" onClick={() => onDelete(media.media_asset_id)} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-rose-600 shadow" aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></button></div>;
 }

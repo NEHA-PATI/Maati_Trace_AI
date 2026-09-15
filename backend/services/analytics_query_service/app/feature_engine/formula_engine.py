@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Any
 
 from services.analytics_query_service.app.feature_engine.component_catalog import (
+    SOURCE_REQUIREMENTS,
     ComponentResult,
     compute_component,
 )
@@ -120,6 +121,57 @@ def _evidence(components: dict[str, dict[str, Any]], direction: str) -> list[dic
     return evidence
 
 
+def _unavailable_reasons(
+    components: dict[str, ComponentResult],
+    quality: dict[str, Any],
+    features: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Explain why a formula could not produce a score.
+
+    This is persisted with each prediction so operators can distinguish an
+    unavailable source from a calculation bug or an insufficient time series.
+    """
+    source_quality = quality.get("source_quality") or {}
+    expected_features = {
+        "lst_stress": ["surface_temp_z"],
+        "air_temperature_stress": ["era5_temp_max_z"],
+        "thermal_stress": ["surface_temp_z", "era5_skin_temp_z"],
+        "growth_trend_condition": ["ndvi_slope", "evi_slope", "nirv_slope", "lai_slope"],
+        "growth_trajectory_condition": ["ndvi_trajectory_deviation"],
+        "growth_trajectory_anomaly": ["ndvi_trajectory_deviation"],
+        "temporal_anomaly": ["ndvi_z", "evi_z", "nirv_z", "ndmi_z", "ndre_z", "lai_z"],
+    }
+    reasons: list[dict[str, Any]] = []
+    for component_key, result in components.items():
+        if result.value is not None:
+            continue
+        details = result.details or {}
+        required_sources = list(SOURCE_REQUIREMENTS.get(component_key, ()))
+        missing_sources = [
+            source for source in required_sources
+            if finite_number(source_quality.get(source)) in (None, 0.0)
+        ]
+        reason = details.get("reason")
+        if missing_sources:
+            reason = f"Source data unavailable: {', '.join(missing_sources)}"
+        else:
+            missing_features = [key for key in expected_features.get(component_key, []) if features.get(key) is None]
+            if missing_features:
+                reason = f"Feature field missing: {', '.join(missing_features)}"
+            elif component_key in {"growth_trend_condition", "growth_trajectory_condition", "growth_trajectory_anomaly", "temporal_anomaly"}:
+                reason = "Not enough historical observations to calculate a trend or anomaly."
+            elif not reason:
+                reason = "Required engineered field(s) are missing or insufficient for this component."
+        reasons.append({
+            "component": component_key,
+            "reason": reason,
+            "required_sources": required_sources,
+            "missing_sources": missing_sources,
+            "details": details,
+        })
+    return reasons
+
+
 def calculate_h3_predictions(
     *,
     feature_rows: list[dict[str, Any]],
@@ -167,6 +219,7 @@ def calculate_h3_predictions(
                 key: _component_payload(result, float(weights.get(key) or 0.0))
                 for key, result in component_results.items()
             }
+            unavailable_reasons = _unavailable_reasons(component_results, quality, features)
 
             metadata: dict[str, Any] = {
                 "calculation_type": "deterministic_formula",
@@ -183,6 +236,7 @@ def calculate_h3_predictions(
                 )
             if formula.get("prediction_key") == "erosion_risk":
                 metadata["interpretation_note"] = "Relative erosion susceptibility proxy; not a full RUSLE soil-loss estimate."
+            metadata["unavailable_reasons"] = unavailable_reasons
 
             row = {
                 "farm_id": str(feature_row["farm_id"]),
@@ -238,6 +292,7 @@ def aggregate_farm_predictions(
         total_area = 0.0
         affected_area = 0.0
         component_aggregate: dict[str, list[tuple[float | None, float | None]]] = defaultdict(list)
+        unavailable_reasons: list[dict[str, Any]] = []
 
         affected_threshold = float((formula.get("thresholds") or {}).get(
             "affected_threshold", 60 if formula.get("score_direction") == "risk" else 40
@@ -257,6 +312,9 @@ def aggregate_farm_predictions(
                     affected_area += area
             for key, component in (row.get("components") or {}).items():
                 component_aggregate[key].append((component.get("value"), effective_area))
+            for reason in (row.get("metadata") or {}).get("unavailable_reasons") or []:
+                if reason not in unavailable_reasons:
+                    unavailable_reasons.append(reason)
 
         score = safe_weighted_mean(weighted_pairs)
         farm_confidence = safe_weighted_mean([
@@ -296,6 +354,7 @@ def aggregate_farm_predictions(
             "metadata": {
                 "calculation_type": "deterministic_formula_farm_aggregate",
                 "grid_semantics": "Farm score is aggregated from H3 formula results. The 10 m frontend grid is a display projection, not independent 10 m measurement.",
+                "unavailable_reasons": unavailable_reasons,
             },
         })
     return farm_rows

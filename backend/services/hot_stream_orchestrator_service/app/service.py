@@ -618,6 +618,10 @@ def _latest_analysis_stage_details(name: str, result: Any) -> dict[str, Any]:
                     "source_items_processed": row.get("source_items_processed", 0),
                     "postgres_rows_written": row.get("postgres_rows_written", 0),
                     "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
                     "message": row.get("message"),
                 }
                 for row in (result.get("datasets") or [])
@@ -750,6 +754,36 @@ def run_latest_analysis(
             checkpoint(name, "failed", error=exc)
             raise
 
+    def update_environment_progress(dataset_rows: list[dict[str, Any]], current_dataset: str | None) -> None:
+        environment_stage = next((item for item in stages if item["name"] == "environment_datasets"), None)
+        if environment_stage is None:
+            return
+        environment_stage["details"] = {
+            "datasets": [
+                {
+                    "dataset_key": row.get("dataset_key"),
+                    "status": row.get("status"),
+                    "source_items_found": row.get("source_items_found", 0),
+                    "source_items_processed": row.get("source_items_processed", 0),
+                    "postgres_rows_written": row.get("postgres_rows_written", 0),
+                    "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
+                    "message": row.get("message"),
+                }
+                for row in dataset_rows
+            ],
+            "current_dataset": current_dataset,
+        }
+        update_pipeline_job_stage(
+            job_id,
+            stage="environment_datasets",
+            status="running",
+            metadata={"request": request_metadata, "stages": stages, "analysis_status": "running"},
+        )
+
     try:
         run_required("farm_ready", lambda: ensure_farm_analysis_ready(farm_id))
 
@@ -763,12 +797,15 @@ def run_latest_analysis(
         )
         # One mandatory environmental-observation stage contains Sentinel-2
         # and all other registered datasets. No source is silently skipped.
-        run_required("environment_datasets", lambda: materialize_environment(farm_id, environment_payload))
+        run_required(
+            "environment_datasets",
+            lambda: materialize_environment(
+                farm_id,
+                environment_payload,
+                progress_callback=update_environment_progress,
+            ),
+        )
         run_required("trends", lambda: materialize_trends_for_farm(farm_id))
-        # Geometry/crosswalk is infrastructure for the calculated projection;
-        # the farmer-visible grid values are written later by the intelligence
-        # stage after H3 metric calculation.
-        run_required("grid_context", lambda: materialize_grid_for_farm(farm_id))
 
         update_pipeline_job_stage(
             job_id,
@@ -780,6 +817,21 @@ def run_latest_analysis(
                 "analysis_status": "running",
             },
         )
+        # Build the display grid/crosswalk before intelligence so H3 formula
+        # scores can be projected onto 10 m frontend cells in the same run.
+        # If grid materialization is unavailable, intelligence still runs and
+        # farm/H3 predictions are saved.
+        try:
+            grid_context = materialize_grid_for_farm(farm_id)
+            grid_status = (
+                "completed_with_warnings"
+                if isinstance(grid_context, dict) and grid_context.get("status") == "failed"
+                else "succeeded"
+            )
+            checkpoint("grid_context", grid_status, grid_context)
+        except Exception as exc:
+            checkpoint("grid_context", "completed_with_warnings", error=exc)
+
         try:
             intelligence = materialize_intelligence(
                 farm_id,

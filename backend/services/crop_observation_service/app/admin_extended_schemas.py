@@ -191,3 +191,15 @@ class AdminSystemStatusOut(BaseModel):
     tts_failed: int = 0
     outbox_pending: int = 0
     open_flags: int = 0
+
+
+class AdminDiagnosticCheckOut(BaseModel):
+    status: str
+    message: str
+
+
+class AdminDiagnosticsOut(BaseModel):
+    database: AdminDiagnosticCheckOut
+    storage: AdminDiagnosticCheckOut
+    cartesia: AdminDiagnosticCheckOut
+    farm_registry: AdminDiagnosticCheckOut

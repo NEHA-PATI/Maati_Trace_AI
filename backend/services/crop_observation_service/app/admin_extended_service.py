@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import requests
+from sqlalchemy import text
+
 from shared.config.settings import settings
+from shared.db.postgres import engine
 from services.crop_observation_service.app import (
     admin_extended_repository as xrepo,
     admin_service,
@@ -12,6 +17,8 @@ from services.crop_observation_service.app import (
     tts_service,
 )
 from services.crop_observation_service.app.admin_extended_schemas import (
+    AdminDiagnosticCheckOut,
+    AdminDiagnosticsOut,
     AdminOverviewOut,
     AdminPracticeRecordOut,
     AdminRecordDetailOut,
@@ -50,6 +57,11 @@ _EXTENSION_BY_MIME = {
     "audio/ogg": "ogg",
     "audio/mp4": "m4a",
 }
+
+
+def _canonical_mime_type(value: str) -> str:
+    """Ignore browser codec parameters when applying the media policy."""
+    return str(value or "").split(";", 1)[0].strip().lower()
 
 
 def _admin(context: RequestContext) -> None:
@@ -127,6 +139,7 @@ def list_issues(context: RequestContext, *, limit: int, offset: int) -> list[Adm
 
 
 def _validate_system_media(payload: SystemMediaUploadRequest) -> None:
+    payload.mime_type = _canonical_mime_type(payload.mime_type)
     expected_target = _ROLE_TARGET[payload.asset_role]
     if payload.target_type != expected_target:
         raise CropObservationError(
@@ -175,7 +188,7 @@ def request_system_media_upload(
     _admin(context)
     _validate_system_media(payload)
 
-    ext = _EXTENSION_BY_MIME.get(payload.mime_type)
+    ext = _EXTENSION_BY_MIME.get(_canonical_mime_type(payload.mime_type))
     if not ext:
         raise CropObservationError("UNSUPPORTED_MEDIA_TYPE", "Unsupported media type.", 422)
     token = uuid4()
@@ -250,13 +263,11 @@ def write_local_system_media(
         raise CropObservationError("MEDIA_SIZE_MISMATCH", "The file size does not match the upload request.", 422)
 
     if str(asset["mime_type"]).startswith("image/"):
-        import io
-        from PIL import Image, UnidentifiedImageError
-
-        try:
-            Image.open(io.BytesIO(data)).verify()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise CropObservationError("INVALID_MEDIA_FILE", "This does not look like a valid image.", 422) from exc
+        from services.crop_observation_service.app.media_validation import validate_image_bytes
+        validate_image_bytes(data, asset["mime_type"])
+    elif str(asset["mime_type"]).startswith("audio/"):
+        from services.crop_observation_service.app.media_validation import validate_audio_bytes
+        validate_audio_bytes(data, asset["mime_type"])
 
     backend_for("LOCAL").write_bytes(object_key=asset["object_key"], data=data)
 
@@ -323,7 +334,23 @@ def complete_system_media_upload(
     if content_type and str(content_type).split(";", 1)[0].lower() != str(asset["mime_type"]).lower():
         raise CropObservationError("MEDIA_TYPE_MISMATCH", "The uploaded file type does not match.", 422)
 
-    repo.mark_system_media_ready(asset_id)
+    data = storage.read_bytes(object_key=asset["object_key"])
+    if len(data) != int(asset["byte_size"]):
+        raise CropObservationError("MEDIA_SIZE_MISMATCH", "The uploaded file size does not match.", 422)
+    if str(asset["mime_type"]).startswith("image/"):
+        from services.crop_observation_service.app.media_validation import validate_image_bytes
+        validate_image_bytes(data, asset["mime_type"])
+    elif str(asset["mime_type"]).startswith("audio/"):
+        from services.crop_observation_service.app.media_validation import validate_audio_bytes
+        validate_audio_bytes(data, asset["mime_type"])
+
+    repo.mark_system_media_ready(asset_id, sha256(data).hexdigest())
+    repo.create_outbox_event(
+        aggregate_type="SYSTEM_MEDIA_ASSET",
+        aggregate_id=asset_id,
+        event_type="crop_observation.media_ready",
+        payload={"asset_role": asset_role, "target_type": target_type, "target_id": target_id},
+    )
     binding = repo.activate_system_media_binding(
         asset_id=asset_id,
         target_type=target_type,
@@ -480,4 +507,55 @@ def get_system_status(context: RequestContext) -> AdminSystemStatusOut:
         cartesia_key_configured=bool(settings.cartesia_api_key),
         tts_model=settings.cartesia_tts_model,
         **counts,
+    )
+
+
+def get_system_diagnostics(context: RequestContext) -> AdminDiagnosticsOut:
+    """Run safe, read-only connectivity checks without returning secrets."""
+    _admin(context)
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        database = AdminDiagnosticCheckOut(status="PASS", message="Database query succeeded.")
+    except Exception:
+        database = AdminDiagnosticCheckOut(status="FAIL", message="Database query failed.")
+
+    try:
+        if is_local():
+            from services.crop_observation_service.app.storage import local as local_storage
+            local_storage.system_media_root()
+        else:
+            if not settings.crop_observation_s3_bucket:
+                raise CropObservationError("MEDIA_STORAGE_NOT_CONFIGURED", "S3 bucket is not configured.", 503)
+            from services.crop_observation_service.app.storage import s3 as s3_storage
+            s3_storage._client().head_bucket(Bucket=settings.crop_observation_s3_bucket)
+        storage = AdminDiagnosticCheckOut(status="PASS", message="Media storage is reachable.")
+    except Exception:
+        storage = AdminDiagnosticCheckOut(status="FAIL", message="Media storage check failed.")
+
+    if not settings.cartesia_tts_enabled or not settings.cartesia_api_key:
+        cartesia = AdminDiagnosticCheckOut(status="SKIPPED", message="Cartesia is not enabled/configured.")
+    else:
+        try:
+            tts_service.list_voices(context, language="en")
+            cartesia = AdminDiagnosticCheckOut(status="PASS", message="Cartesia authentication succeeded.")
+        except Exception:
+            cartesia = AdminDiagnosticCheckOut(status="FAIL", message="Cartesia authentication or voice lookup failed.")
+
+    try:
+        response = requests.get(
+            f"{settings.farm_registry_service_url.rstrip('/')}/health/live",
+            timeout=3,
+        )
+        response.raise_for_status()
+        farm_registry = AdminDiagnosticCheckOut(status="PASS", message="Farm Registry is reachable.")
+    except Exception:
+        farm_registry = AdminDiagnosticCheckOut(status="FAIL", message="Farm Registry health check failed.")
+
+    return AdminDiagnosticsOut(
+        database=database,
+        storage=storage,
+        cartesia=cartesia,
+        farm_registry=farm_registry,
     )

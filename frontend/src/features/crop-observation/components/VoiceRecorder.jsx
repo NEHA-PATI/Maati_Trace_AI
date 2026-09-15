@@ -99,7 +99,7 @@ export default function VoiceRecorder({ value, onChange, locale, title, maxSecon
       }, 1000);
     } catch {
       setStatus("idle");
-      setError(locale === "or-IN" ? "Could not access the microphone." : "Could not access the microphone.");
+      setError(locale === "or-IN" ? "ମାଇକ୍ ବ୍ୟବହାର କରିହେଲା ନାହିଁ।" : "Could not access the microphone.");
     }
   }
 
@@ -182,7 +182,7 @@ export default function VoiceRecorder({ value, onChange, locale, title, maxSecon
               <Play className="h-4 w-4 fill-current" />
             </button>
             <span className="flex-1 text-sm font-semibold text-[#33492A]">
-              Saved · {formatSeconds(seconds || 0)}
+              {primary(STRINGS.saved, locale)} · {formatSeconds(seconds || 0)}
             </span>
             <button
               type="button"

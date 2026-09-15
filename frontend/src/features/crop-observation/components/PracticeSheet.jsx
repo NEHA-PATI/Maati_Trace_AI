@@ -3,6 +3,7 @@ import { Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
+  systemMediaUrl,
   getPracticeHistory,
   deleteMedia,
   fetchAuthedMediaBlob,
@@ -167,6 +168,7 @@ export default function PracticeSheet({
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {practice.guide_image_url ? <img src={systemMediaUrl(practice.guide_image_url)} alt="" className="w-full rounded-2xl object-cover" /> : null}
           {formError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {formError}

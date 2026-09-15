@@ -79,6 +79,39 @@ def list_voices(*, language: str) -> list[dict]:
     return []
 
 
+def get_voice_preview(*, voice_id: str) -> tuple[bytes, str]:
+    """Fetch a provider preview server-side; the provider URL requires auth."""
+    try:
+        voice_response = requests.get(
+            f"{settings.cartesia_api_base.rstrip('/')}/voices/{voice_id}",
+            headers=_headers(),
+            params={"expand[]": "preview_file_url"},
+            timeout=_request_timeout(),
+        )
+        voice_response.raise_for_status()
+        preview_url = voice_response.json().get("preview_file_url")
+        if not preview_url:
+            raise CropObservationError("TTS_PREVIEW_NOT_FOUND", "This voice has no preview.", 404)
+        preview_response = requests.get(
+            preview_url,
+            headers=_headers(),
+            timeout=_request_timeout(),
+        )
+        preview_response.raise_for_status()
+        if not preview_response.content:
+            raise CropObservationError("TTS_PREVIEW_NOT_FOUND", "This voice has no preview.", 404)
+        return preview_response.content, preview_response.headers.get("Content-Type", "audio/mpeg")
+    except CropObservationError:
+        raise
+    except (requests.RequestException, ValueError) as exc:
+        raise CropObservationError(
+            "TTS_PROVIDER_UNAVAILABLE",
+            "Cartesia voice preview is unavailable right now.",
+            503,
+            internal_message=str(exc),
+        ) from exc
+
+
 def generate_audio_bytes(
     *,
     transcript: str,
@@ -88,6 +121,7 @@ def generate_audio_bytes(
     speed: float,
     volume: float,
     container: str,
+    output_format: dict[str, Any] | None = None,
 ) -> bytes:
     """Generate one complete static instruction clip using Cartesia /tts/bytes.
 
@@ -97,11 +131,16 @@ def generate_audio_bytes(
     call this method; farmer browsers never receive the provider key.
     """
     url = f"{settings.cartesia_api_base.rstrip('/')}/tts/bytes"
+    resolved_output_format = dict(output_format or {"container": container})
+    if str(resolved_output_format.get("container", "")).lower() == "mp3":
+        resolved_output_format.setdefault("bit_rate", settings.cartesia_tts_mp3_bit_rate)
+        resolved_output_format.setdefault("sample_rate", settings.cartesia_tts_sample_rate)
+
     payload = {
         "model_id": model_id,
         "transcript": transcript,
         "voice": voice_id,
-        "output_format": {"container": container},
+        "output_format": resolved_output_format,
         "locale": locale,
         "generation_config": {"speed": speed, "volume": volume},
     }

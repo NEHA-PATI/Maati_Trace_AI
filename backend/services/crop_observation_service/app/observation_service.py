@@ -61,6 +61,26 @@ def save_daily_status(
         client_entry_id=payload.client_entry_id,
         captured_at_client=payload.captured_at_client,
     )
+    repo.create_outbox_event(
+        aggregate_type="DAILY_STAGE_OBSERVATION",
+        aggregate_id=row["daily_observation_id"],
+        event_type="crop_observation.daily_status_saved",
+        payload={"crop_cycle_id": crop_cycle_id, "stage_code": stage_code, "observed_on": observed_on, "crop_status": row["crop_status"]},
+    )
+
+    if cycle.get("current_stage_code") != stage_code:
+        repo.record_cycle_stage(
+            crop_cycle_id,
+            stage_code,
+            source="FARMER",
+            changed_by_user_id=context.principal.user_id,
+        )
+        repo.create_outbox_event(
+            aggregate_type="CROP_CYCLE",
+            aggregate_id=crop_cycle_id,
+            event_type="crop_observation.stage_changed",
+            payload={"stage_code": stage_code, "source": "FARMER"},
+        )
 
     if previous is not None and previous.get("crop_status") != row.get("crop_status"):
         repo.create_observation_revision(
@@ -141,6 +161,12 @@ def save_practice_observation(
         practice_code=practice_code,
         answers=validated_answers,
         client_entry_id=payload.client_entry_id,
+    )
+    repo.create_outbox_event(
+        aggregate_type="PRACTICE_OBSERVATION",
+        aggregate_id=row["practice_observation_id"],
+        event_type="crop_observation.practice_saved",
+        payload={"daily_observation_id": daily["daily_observation_id"], "practice_code": practice_code, "answers": validated_answers},
     )
 
     if previous_practice is not None and previous_practice.get("answers") != row.get("answers"):
