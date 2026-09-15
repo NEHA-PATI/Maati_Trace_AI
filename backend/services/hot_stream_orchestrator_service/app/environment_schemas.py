@@ -40,10 +40,14 @@ class DatasetStageResult(BaseModel):
     dataset_key: str
     status: str
     provider: str | None = None
+    reason_type: str | None = None
+    reason_code: str | None = None
     source_items_found: int = 0
     source_items_processed: int = 0
     postgres_rows_written: int = 0
     parquet_rows_written: int = 0
+    accepted_source_item: str | None = None
+    candidate_rejections: list[str] = Field(default_factory=list)
     message: str | None = None
 
 

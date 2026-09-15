@@ -618,6 +618,10 @@ def _latest_analysis_stage_details(name: str, result: Any) -> dict[str, Any]:
                     "source_items_processed": row.get("source_items_processed", 0),
                     "postgres_rows_written": row.get("postgres_rows_written", 0),
                     "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
                     "message": row.get("message"),
                 }
                 for row in (result.get("datasets") or [])
@@ -763,6 +767,10 @@ def run_latest_analysis(
                     "source_items_processed": row.get("source_items_processed", 0),
                     "postgres_rows_written": row.get("postgres_rows_written", 0),
                     "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
                     "message": row.get("message"),
                 }
                 for row in dataset_rows
@@ -798,10 +806,6 @@ def run_latest_analysis(
             ),
         )
         run_required("trends", lambda: materialize_trends_for_farm(farm_id))
-        # Geometry/crosswalk is infrastructure for the calculated projection;
-        # the farmer-visible grid values are written later by the intelligence
-        # stage after H3 metric calculation.
-        run_required("grid_context", lambda: materialize_grid_for_farm(farm_id))
 
         update_pipeline_job_stage(
             job_id,
@@ -813,6 +817,21 @@ def run_latest_analysis(
                 "analysis_status": "running",
             },
         )
+        # Build the display grid/crosswalk before intelligence so H3 formula
+        # scores can be projected onto 10 m frontend cells in the same run.
+        # If grid materialization is unavailable, intelligence still runs and
+        # farm/H3 predictions are saved.
+        try:
+            grid_context = materialize_grid_for_farm(farm_id)
+            grid_status = (
+                "completed_with_warnings"
+                if isinstance(grid_context, dict) and grid_context.get("status") == "failed"
+                else "succeeded"
+            )
+            checkpoint("grid_context", grid_status, grid_context)
+        except Exception as exc:
+            checkpoint("grid_context", "completed_with_warnings", error=exc)
+
         try:
             intelligence = materialize_intelligence(
                 farm_id,

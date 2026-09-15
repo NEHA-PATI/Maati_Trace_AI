@@ -136,6 +136,9 @@ class Settings(BaseSettings):
     # Multi-source catalog / remote access
     catalog_http_timeout_seconds: int = 120
     source_download_timeout_seconds: int = 600
+    stac_search_max_concurrency: int = 1
+    stac_search_retry_attempts: int = 3
+    stac_search_retry_base_seconds: float = 1.0
 
     # NASA Earthdata / CMR. Token must be supplied through .env when used.
     earthdata_token: str = ""
@@ -155,6 +158,8 @@ class Settings(BaseSettings):
     # Raster processing
     raster_http_timeout_seconds: int = 120
     raster_max_pixels_per_request: int = 250000
+    environment_pipeline_max_workers: int = 8
+    lakehouse_write_retry_attempts: int = 2
 
     model_config = SettingsConfigDict(
         env_file=".env",
