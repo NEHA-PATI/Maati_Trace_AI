@@ -23,7 +23,7 @@ export const authApi = Object.freeze({
     method: "POST",
     body: { id_token: idToken },
   }),
-  refresh: () => refreshAccessSession(),
+  refresh: (options) => refreshAccessSession(options),
   logout: () => apiClient.request("/v1/auth/logout", { method: "POST", csrf: true }),
   logoutAll: () => apiClient.request("/v1/auth/logout-all", {
     method: "POST",

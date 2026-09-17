@@ -227,6 +227,11 @@ def test_canonical_analysis_has_one_ordered_pipeline(monkeypatch):
         lambda farm_id, payload, **kwargs: operations.append("environment_datasets") or {"status": "succeeded", "datasets": []},
     )
     monkeypatch.setattr(
+        orchestrator_service,
+        "ensure_sentinel2_history_for_intelligence",
+        lambda farm_id, payload: operations.append("sentinel2_history_backfill") or {"status": "cached"},
+    )
+    monkeypatch.setattr(
         "services.analytics_query_service.app.feature_engine.service.materialize_intelligence",
         lambda *args, **kwargs: operations.append("intelligence") or {
             "status": "succeeded",
@@ -253,4 +258,11 @@ def test_canonical_analysis_has_one_ordered_pipeline(monkeypatch):
     )
 
     assert result["status"] == "completed"
-    assert operations == ["farm_ready", "environment_datasets", "trends", "grid_context", "intelligence"]
+    assert operations == [
+        "farm_ready",
+        "environment_datasets",
+        "sentinel2_history_backfill",
+        "trends",
+        "grid_context",
+        "intelligence",
+    ]

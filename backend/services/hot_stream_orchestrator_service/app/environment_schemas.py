@@ -42,6 +42,11 @@ class DatasetStageResult(BaseModel):
     provider: str | None = None
     reason_type: str | None = None
     reason_code: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_seconds: float | None = None
     source_items_found: int = 0
     source_items_processed: int = 0
     postgres_rows_written: int = 0

@@ -26,7 +26,6 @@ import {
 } from "@/lib/api/location";
 import {
   runLatestAnalysis,
-  getLatestAnalysisStatus,
   ANALYSIS_PIPELINE_STEPS,
 } from "@/lib/api/hotStream";
 import { getStoredUser } from "@/features/auth/session";
@@ -75,34 +74,6 @@ const PIPELINE_STEPS = [
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
 }
-
-function getAnalysisProgress(status, offset) {
-  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
-  if (terminal) {
-    const finalStep = REGISTRATION_PIPELINE_STEPS.length + ANALYSIS_PIPELINE_STEPS.length - 1;
-    return {
-      step: finalStep,
-      label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
-      status: status.status,
-    };
-  }
-  const rows = Array.isArray(status?.stages) ? status.stages : [];
-  const current = status?.current_stage;
-  const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
-  let step = index >= 0 ? index : 0;
-  let label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || "Running analysis";
-  const environment = rows.find((row) => row.name === "environment_datasets");
-  const datasets = environment?.details?.datasets || [];
-  if (current === "environment_datasets" && datasets.length) {
-    const active = datasets.findIndex((row) => row.status === "running");
-    const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
-    const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
-    step = 1 + datasetIndex;
-    label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || label;
-  }
-  return { step: offset + step, label, status: status?.status || "running" };
-}
-
 
 export default function FarmRegister() {
   const navigate = useNavigate();
@@ -324,7 +295,6 @@ export default function FarmRegister() {
   }, []);
 
   async function handleRegister() {
-    let keepPipelineOpen = false;
     setLoading(true);
     setError("");
     setBackendErrorDetail("");
@@ -397,7 +367,10 @@ export default function FarmRegister() {
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
-      setPipelineStatus("Starting complete farm analysis...");
+      // Registration is complete once the farm row exists and the canonical
+      // analysis job has been queued.  Analysis continues on Land Intelligence
+      // so a slow/unavailable provider cannot make registration appear stuck.
+      setPipelineStatus("Preparing farm intelligence...");
       setPipelineStage(4);
       const endDate = new Date();
       const startDate = new Date(endDate);
@@ -409,25 +382,10 @@ export default function FarmRegister() {
         provider: "planetary_computer",
         collection_id: "sentinel-2-l2a",
       });
-
-      let status = null;
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        status = await getLatestAnalysisStatus(farmPayload.farm_id);
-        const progress = getAnalysisProgress(status, REGISTRATION_PIPELINE_STEPS.length);
-        setPipelineStage(progress.step);
-        setPipelineStatus(`${progress.label} · ${status.status || "running"}`);
-        if (["completed", "completed_with_warnings", "failed"].includes(status.status)) break;
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      }
-      if (status?.status === "failed") {
-        throw new Error(status.error_message || "Farm analysis failed.");
-      }
-
-      setPipelineStatus("Registered. Redirecting to land intelligence...");
+      setPipelineStatus("Farm registered. Opening Land Intelligence...");
       setPipelineStage(PIPELINE_STEPS.length - 1);
-      keepPipelineOpen = true;
       localStorage.removeItem(FARM_DRAFT_KEY);
-      setTimeout(() => navigate(`/land/${farmPayload.farm_id}`), 800);
+      navigate(`/land/${farmPayload.farm_id}`);
     } catch (err) {
       setBackendErrorDetail(JSON.stringify({
         status: err?.response?.status || null,
@@ -443,7 +401,7 @@ export default function FarmRegister() {
       setPipelineStage(-1);
     } finally {
       setLoading(false);
-      if (!keepPipelineOpen) setPipelineOpen(false);
+      setPipelineOpen(false);
     }
   }
 

@@ -174,7 +174,7 @@ async function execute(path, options = {}) {
   }
 }
 
-async function performRefresh() {
+async function performRefresh({ timeoutMs = environment.requestTimeoutMs } = {}) {
   const requestCorrelationId = correlationId();
   const headers = buildHeaders({
     headers: {},
@@ -184,7 +184,7 @@ async function performRefresh() {
     body: null,
   });
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), environment.requestTimeoutMs);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(joinUrl(serviceBaseUrl("auth"), servicePath("/v1/auth/refresh")), {
@@ -221,9 +221,9 @@ async function performRefresh() {
   }
 }
 
-export function refreshAccessSession() {
+export function refreshAccessSession(options = {}) {
   if (!refreshPromise) {
-    refreshPromise = performRefresh().finally(() => {
+    refreshPromise = performRefresh(options).finally(() => {
       refreshPromise = null;
     });
   }

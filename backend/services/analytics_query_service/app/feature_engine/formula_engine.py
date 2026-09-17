@@ -182,6 +182,18 @@ def calculate_h3_predictions(
     formulas = sorted(formulas, key=lambda f: (int(f.get("execution_order") or 100), f.get("prediction_key") or ""))
 
     for feature_row in feature_rows:
+        feature_profile_version = feature_row.get("crop_profile_version")
+        for formula in formulas:
+            formula_profile_version = formula.get("crop_profile_version")
+            if (
+                feature_profile_version
+                and formula_profile_version
+                and str(feature_profile_version) != str(formula_profile_version)
+            ):
+                raise FormulaEngineError(
+                    "Formula/profile version mismatch: "
+                    f"feature={feature_profile_version}, formula={formula_profile_version}"
+                )
         features = feature_row.get("features") or {}
         quality = feature_row.get("quality") or {}
         calculated: dict[str, dict[str, Any]] = {}
@@ -322,7 +334,11 @@ def aggregate_farm_predictions(
         ]) or 0.0
         components = {}
         for key, pairs in component_aggregate.items():
-            components[key] = {"value": safe_weighted_mean(pairs)}
+            components[key] = {
+                "value": safe_weighted_mean(pairs),
+                "quality": 1.0,
+                "weight": float((formula.get("component_weights") or {}).get(key) or 0.0),
+            }
         affected = (100.0 * affected_area / total_area) if total_area > 0 else None
         first = rows[0]
         farm_rows.append({
@@ -345,7 +361,7 @@ def aggregate_farm_predictions(
             "crop_profile_version": first["crop_profile_version"],
             "feature_version": first["feature_version"],
             "components": components,
-            "evidence": _evidence(first.get("components") or {}, formula["score_direction"]),
+            "evidence": _evidence(components, formula["score_direction"]),
             "quality": {
                 "aggregation": "area_x_h3_formula_confidence",
                 "h3_count": len(rows),

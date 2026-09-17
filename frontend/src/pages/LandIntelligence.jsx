@@ -39,7 +39,7 @@ const PARAMETERS = [
 const PIPELINE_STEPS = ANALYSIS_PIPELINE_STEPS.map(([, label]) => label);
 
 function analysisProgress(status) {
-  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
+  const terminal = ["completed", "completed_with_warnings", "succeeded", "failed"].includes(status?.status);
   if (terminal) {
     const finalStep = ANALYSIS_PIPELINE_STEPS.length - 1;
     return {
@@ -198,7 +198,7 @@ export default function LandIntelligence() {
   useEffect(() => {
     let cancelled = false;
     let timer;
-    const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+    const terminalStatuses = new Set(["completed", "completed_with_warnings", "succeeded", "failed"]);
 
     async function pollAnalysis() {
       const status = await getLatestAnalysisStatus(farmId).catch(() => null);
@@ -307,7 +307,7 @@ export default function LandIntelligence() {
       };
 
       const queued = await triggerLatestAnalysis(farmId, payload);
-      const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+      const terminalStatuses = new Set(["completed", "completed_with_warnings", "succeeded", "failed"]);
       let status = queued;
       for (let attempt = 0; attempt < 300; attempt += 1) {
         status = await getLatestAnalysisStatus(farmId);
@@ -327,7 +327,7 @@ export default function LandIntelligence() {
         setPipelineWarning("Analysis completed with source-data warnings. See stage details.");
         setPipelineOpen(true);
         setPipelineStatus("Analysis completed with warnings");
-      } else if (status?.status === "completed") {
+      } else if (status?.status === "completed" || status?.status === "succeeded") {
         setPipelineStatus("Analysis complete");
         setPipelineOpen(false);
       } else {

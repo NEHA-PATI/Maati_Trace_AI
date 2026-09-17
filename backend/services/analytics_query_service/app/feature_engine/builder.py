@@ -57,6 +57,10 @@ DEFAULT_FRESHNESS_HALF_LIFE_DAYS: dict[str, float] = {
     "soilgrids": 3650,
 }
 
+SENTINEL2_FEATURE_MAX_AGE_DAYS = 120
+SENTINEL1_FEATURE_MAX_AGE_DAYS = 60
+LANDSAT_FEATURE_MAX_AGE_DAYS = 90
+
 
 def _date(value: Any) -> date | None:
     try:
@@ -106,6 +110,41 @@ def _by_h3(rows: Iterable[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
     for values in out.values():
         values.sort(key=lambda row: _date(row.get("snapshot_date")) or date.min)
     return out
+
+
+def _has_positive_valid_fraction(row: dict[str, Any]) -> bool:
+    return (_num(row.get("valid_fraction")) or 0.0) > 0.0
+
+
+def _has_any_value(row: dict[str, Any], keys: Iterable[str]) -> bool:
+    return any(_num(row.get(key)) is not None for key in keys)
+
+
+def _usable_sentinel2_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if _has_positive_valid_fraction(row)
+        and _has_any_value(row, S2_TEMPORAL_FIELDS)
+    ]
+
+
+def _usable_sentinel1_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if _has_positive_valid_fraction(row)
+        and _has_any_value(row, ("vh_vv_ratio", "rvi", "mean_vv", "mean_vh"))
+    ]
+
+
+def _usable_landsat_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if _has_positive_valid_fraction(row)
+        and _has_any_value(row, ("surface_temp_c", "ndvi", "ndmi"))
+    ]
 
 
 def _nearest_before(
@@ -510,9 +549,9 @@ def build_feature_rows(
     if not crop_code:
         raise ValueError("Farm crop_code is required before feature engineering")
 
-    s2_rows = _dedupe_h3_daily(bundle.get("sentinel2") or [])
-    s1_rows = _dedupe_h3_daily(bundle.get("sentinel1") or [])
-    landsat_rows = _dedupe_h3_daily(bundle.get("landsat") or [])
+    s2_rows = _usable_sentinel2_rows(_dedupe_h3_daily(bundle.get("sentinel2") or []))
+    s1_rows = _usable_sentinel1_rows(_dedupe_h3_daily(bundle.get("sentinel1") or []))
+    landsat_rows = _usable_landsat_rows(_dedupe_h3_daily(bundle.get("landsat") or []))
 
     # Select the first successful H3 source that has data in the requested
     # window. A source may exist in the historical bundle but still be absent
@@ -585,7 +624,12 @@ def build_feature_rows(
 
         # Sentinel-1: compare closest prior ratio against prior history for this H3.
         s1_history = s1_by_h3.get(h3_index, [])
-        s1_current = _nearest_before(s1_history, target, date_key="snapshot_date", max_age_days=35)
+        s1_current = _nearest_before(
+            s1_history,
+            target,
+            date_key="snapshot_date",
+            max_age_days=SENTINEL1_FEATURE_MAX_AGE_DAYS,
+        )
         if s1_current:
             current_ratio = _num(s1_current.get("vh_vv_ratio"))
             prior_ratios = [
@@ -604,7 +648,12 @@ def build_feature_rows(
 
         # Landsat thermal and corroborating optical observations.
         landsat_history = landsat_by_h3.get(h3_index, [])
-        landsat_current = _nearest_before(landsat_history, target, date_key="snapshot_date", max_age_days=45)
+        landsat_current = _nearest_before(
+            landsat_history,
+            target,
+            date_key="snapshot_date",
+            max_age_days=LANDSAT_FEATURE_MAX_AGE_DAYS,
+        )
         if landsat_current:
             lst = _num(landsat_current.get("surface_temp_c"))
             prior_lst = [
@@ -667,7 +716,10 @@ def build_feature_rows(
 
         anchor_valid = _num(anchor.get("valid_fraction")) or 0.0
         s2_current = _nearest_before(
-            s2_by_h3.get(h3_index, []), target, date_key="snapshot_date", max_age_days=35
+            s2_by_h3.get(h3_index, []),
+            target,
+            date_key="snapshot_date",
+            max_age_days=SENTINEL2_FEATURE_MAX_AGE_DAYS,
         )
         source_quality = {
             "sentinel2": _source_quality(

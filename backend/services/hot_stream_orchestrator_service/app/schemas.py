@@ -23,6 +23,8 @@ class FarmAnalysisMaterializeRequest(BaseModel):
 
     provider: str = "planetary_computer"
     collection_id: str = "sentinel-2-l2a"
+    sentinel2_history_min_dates: int = Field(default=3, ge=0, le=20)
+    sentinel2_history_max_scenes: int = Field(default=20, ge=1, le=100)
 
     # The legacy Sentinel-2 endpoint may still opt into a tiny preview, but the
     # canonical latest-analysis workflow always overrides this to false so all
@@ -55,6 +57,8 @@ class LatestAnalysisRequest(BaseModel):
     max_candidate_scenes: int = Field(default=10, ge=1, le=50)
     provider: str = "planetary_computer"
     collection_id: str = "sentinel-2-l2a"
+    sentinel2_history_min_dates: int = Field(default=3, ge=0, le=20)
+    sentinel2_history_max_scenes: int = Field(default=20, ge=1, le=100)
     force_refresh: bool = False
 
     @model_validator(mode="after")

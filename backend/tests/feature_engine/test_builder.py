@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from services.analytics_query_service.app.feature_engine.builder import build_feature_rows
 
 
@@ -50,3 +52,31 @@ def test_feature_builder_falls_back_to_successful_h3_environment_source():
     assert rows[0]["quality"]["source_quality"]["sentinel2"] == 0.0
     assert rows[0]["quality"]["source_quality"]["sentinel1"] > 0.0
 
+
+def test_feature_builder_never_uses_observation_after_feature_date():
+    rows = build_feature_rows(
+        farm=_farm(),
+        profile=_profile(),
+        bundle={
+            "sentinel2": [
+                {
+                    "h3_index": 1,
+                    "snapshot_date": date(2026, 8, 10),
+                    "valid_fraction": 1.0,
+                    "ndvi": 0.4,
+                },
+                {
+                    "h3_index": 1,
+                    "snapshot_date": date(2026, 8, 11),
+                    "valid_fraction": 1.0,
+                    "ndvi": 0.95,
+                },
+            ]
+        },
+        start_date=date(2026, 8, 10),
+        end_date=date(2026, 8, 10),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["feature_date"] == date(2026, 8, 10)
+    assert rows[0]["features"]["ndvi"] == pytest.approx(0.4)

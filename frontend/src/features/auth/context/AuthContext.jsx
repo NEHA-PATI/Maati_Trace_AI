@@ -17,7 +17,7 @@ let bootstrapPromise = null;
 
 function bootstrapSession() {
   if (!bootstrapPromise) {
-    bootstrapPromise = authApi.refresh().finally(() => {
+    bootstrapPromise = authApi.refresh({ timeoutMs: 8000 }).finally(() => {
       bootstrapPromise = null;
     });
   }

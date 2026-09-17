@@ -34,6 +34,7 @@ from services.hot_stream_orchestrator_service.app.history_backfill import (
     backfill_sentinel2_history,
 )
 from services.hot_stream_orchestrator_service.app.repository import (
+    get_farm_dataset_states,
     get_or_create_active_latest_analysis_job,
     get_latest_pipeline_job,
 )
@@ -270,12 +271,15 @@ def latest_analysis_status_endpoint(farm_id: UUID):
             "status": "not_started",
             "current_stage": None,
             "stages": [],
+            "dataset_states": get_farm_dataset_states(farm_id),
         }
     metadata = job.get("metadata") or {}
     job_status = job.get("status")
     analysis_status = metadata.get("analysis_status") or job_status
     if job_status == "failed":
         analysis_status = "failed"
+    elif job_status == "succeeded" and analysis_status == "succeeded":
+        analysis_status = "completed"
     elif job_status in {"pending", "running"} and analysis_status == "queued":
         analysis_status = "running"
     return {
@@ -290,6 +294,7 @@ def latest_analysis_status_endpoint(farm_id: UUID):
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
         "updated_at": job.get("updated_at"),
+        "dataset_states": get_farm_dataset_states(farm_id),
     }
 
 
@@ -311,6 +316,8 @@ def full_refresh_farm_endpoint(
             max_candidate_scenes=payload.max_candidate_scenes,
             provider=payload.provider,
             collection_id=payload.collection_id,
+            sentinel2_history_min_dates=payload.sentinel2_history_min_dates,
+            sentinel2_history_max_scenes=payload.sentinel2_history_max_scenes,
             force_refresh=payload.force_refresh,
         )
     return run_latest_analysis(farm_id, canonical)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from time import perf_counter
 from typing import Any, Callable
 from uuid import UUID
 
@@ -27,6 +29,7 @@ from services.hot_stream_orchestrator_service.app.repository import (
     complete_pipeline_job,
     create_pipeline_job,
     fail_pipeline_job,
+    upsert_farm_dataset_state,
     update_pipeline_job_stage,
 )
 from services.hot_stream_orchestrator_service.app.service import (
@@ -42,6 +45,48 @@ class EnvironmentRefreshError(RuntimeError):
 
 
 SENTINEL2_CANDIDATE_LIMIT = 5
+ERA5_LAND_AVAILABILITY_LAG_DAYS = 5
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _dataset_search_window(
+    dataset_key: str,
+    payload: EnvironmentRefreshRequest,
+    dataset_options: dict[str, Any],
+) -> tuple[str, str]:
+    """Return the provider search/process date window for one dataset.
+
+    Latest analysis uses a long feature/history window so formulas can look
+    back, but ERA5-Land is a synchronous CDS download. Sending that full
+    one-year window to ERA5 creates 12 monthly CDS jobs and can exceed the
+    raster timeout. By default, fetch only the requested latest/end day for
+    ERA5; callers that intentionally backfill ERA5 can opt into the full
+    window or provide an explicit date range in dataset_options.
+    """
+    if dataset_key != "era5_land":
+        return payload.start_date, payload.end_date
+
+    if dataset_options.get("use_full_window"):
+        return payload.start_date, payload.end_date
+
+    explicit_start = dataset_options.get("start_date")
+    explicit_end = dataset_options.get("end_date")
+    if explicit_start or explicit_end:
+        return str(explicit_start or explicit_end), str(explicit_end or explicit_start)
+
+    requested_end_date = datetime.fromisoformat(payload.end_date).date()
+    safe_end_date = requested_end_date - timedelta(days=ERA5_LAND_AVAILABILITY_LAG_DAYS)
+
+    days = int(dataset_options.get("days", 1) or 1)
+    if days <= 1:
+        safe = safe_end_date.isoformat()
+        return safe, safe
+
+    start_date = safe_end_date.fromordinal(safe_end_date.toordinal() - days + 1)
+    return start_date.isoformat(), safe_end_date.isoformat()
 
 
 def _has_usable_records(dataset_key: str, records: list[dict[str, Any]]) -> bool:
@@ -97,6 +142,46 @@ def _source_item_label(source_item: dict[str, Any]) -> str:
     )
 
 
+def _persist_dataset_state(farm_id: UUID, result: dict[str, Any]) -> None:
+    """Persist source readiness without turning observability into a blocker."""
+    status = result.get("status")
+    if status == "running":
+        state = "running"
+    elif status == "queued":
+        state = "queued"
+    elif status in {"succeeded", "cached"}:
+        state = "ready"
+    elif result.get("reason_type") == "provider_unavailable":
+        state = "stale"
+    elif status == "unavailable":
+        state = "failed"
+    else:
+        state = "failed"
+    try:
+        upsert_farm_dataset_state(
+            farm_id,
+            str(result.get("dataset_key")),
+            status=state,
+            spatial_level=result.get("spatial_level"),
+            native_resolution_m=result.get("native_resolution_m"),
+            provider=result.get("provider"),
+            processing_version=result.get("processing_version"),
+            history_start=result.get("start_date"),
+            history_end=result.get("end_date"),
+            latest_observation_at=result.get("latest_observation_at"),
+            row_count=int(result.get("postgres_rows_written") or 0),
+            retryable=result.get("reason_type") == "provider_unavailable",
+            error_code=result.get("reason_code"),
+            error_message=result.get("message"),
+            metadata=result,
+        )
+    except Exception:
+        # Source readiness is an observability aid. The source result and
+        # pipeline status remain authoritative if an older database has not
+        # applied the stabilization migration yet.
+        return
+
+
 def _process_dataset(
     *,
     farm_id: UUID,
@@ -117,13 +202,23 @@ def _process_dataset(
         "status": "running",
         "reason_type": None,
         "reason_code": None,
+        "started_at": _utc_now_iso(),
         "source_items_found": 0,
         "source_items_processed": 0,
         "postgres_rows_written": 0,
         "parquet_rows_written": 0,
     }
+    started = perf_counter()
+    _persist_dataset_state(farm_id, current)
     try:
         dataset_options = payload.dataset_options.get(dataset_key) or {}
+        search_start_date, search_end_date = _dataset_search_window(
+            dataset_key,
+            payload,
+            dataset_options,
+        )
+        current["start_date"] = search_start_date
+        current["end_date"] = search_end_date
         if dataset_key in STATIC_TABLES and not payload.force_refresh:
             expected_rows = expected_static_rows(dataset_key, len(h3_cells), dataset_options)
             if static_dataset_is_cached(farm_id, dataset_key, expected_rows):
@@ -133,6 +228,7 @@ def _process_dataset(
                     "reason_code": "STATIC_DATASET_CACHED",
                     "message": f"Static dataset already materialized ({expected_rows} expected rows).",
                 })
+                _persist_dataset_state(farm_id, current)
                 return current
 
         candidate_limit = (
@@ -143,8 +239,8 @@ def _process_dataset(
         search = search_catalog_dataset(
             dataset_key=dataset_key,
             bbox=bbox,
-            start_date=payload.start_date,
-            end_date=payload.end_date,
+            start_date=search_start_date,
+            end_date=search_end_date,
             limit=candidate_limit,
             max_cloud_cover=payload.max_cloud_cover,
         )
@@ -159,6 +255,7 @@ def _process_dataset(
                 "reason_code": reason_code,
                 "message": "; ".join(search.get("errors") or []) or "No source item found for the requested location/date range.",
             })
+            _persist_dataset_state(farm_id, current)
             return current
 
         sentinel2_rejections: list[str] = []
@@ -202,6 +299,10 @@ def _process_dataset(
                 sentinel2_accepted = True
                 current["accepted_source_item"] = label
                 current["candidate_rejections"] = sentinel2_rejections
+                current["spatial_level"] = "h3"
+                current["native_resolution_m"] = 10.0
+                current["processing_version"] = (features[0].get("processing_version") if features else None)
+                current["latest_observation_at"] = source_item.get("datetime")
             else:
                 processed = process_environment_dataset(
                     dataset_key=dataset_key,
@@ -220,11 +321,19 @@ def _process_dataset(
                         "reason_code": "NO_VALID_PIXELS",
                         "message": "Scene found, but no valid pixels remained after cloud/nodata masking.",
                     })
+                    _persist_dataset_state(farm_id, current)
                     return current
                 written = write_environment_to_lakehouse(
                     farm_id=farm_id,
                     process_result=processed,
                 )
+                current["spatial_level"] = processed.get("spatial_level")
+                current["native_resolution_m"] = processed.get("native_resolution_m") or (
+                    (processed.get("records") or [{}])[0].get("native_resolution_m")
+                    or (processed.get("records") or [{}])[0].get("source_resolution_m")
+                )
+                current["processing_version"] = processed.get("processing_version")
+                current["latest_observation_at"] = processed.get("source_datetime") or source_item.get("datetime")
                 current["source_items_processed"] += 1
             current["postgres_rows_written"] += int(written.get("postgres_rows_written") or 0)
             current["parquet_rows_written"] += int(written.get("parquet_rows_written") or 0)
@@ -242,6 +351,7 @@ def _process_dataset(
                 "message": message,
                 "candidate_rejections": sentinel2_rejections,
             })
+            _persist_dataset_state(farm_id, current)
             return current
 
         current.update({
@@ -256,6 +366,10 @@ def _process_dataset(
             "reason_code": "DATASET_PROCESSING_ERROR",
             "message": str(exc),
         })
+    finally:
+        current["finished_at"] = _utc_now_iso()
+        current["duration_seconds"] = round(perf_counter() - started, 3)
+        _persist_dataset_state(farm_id, current)
     return current
 
 

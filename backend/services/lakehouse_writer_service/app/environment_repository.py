@@ -22,7 +22,7 @@ class TableSpec:
 
 COMMON = (
     "farm_id", "farmer_id", "fpo_id", "state_name", "district_name",
-    "district_code", "block_name", "block_code",
+    "district_code", "block_name", "block_code", "spatial_level",
 )
 PROVENANCE = (
     "source_provider", "source_collection", "source_item_id", "source_datetime",
@@ -56,7 +56,7 @@ TABLE_SPECS: dict[str, TableSpec] = {
     "gpm_imerg": TableSpec(
         table="farm_weather_observations",
         columns=COMMON + (
-            "observation_date", "precipitation_mm", "source_unit", "source_resolution_m",
+            "observation_date", "precipitation_mm", "source_unit", "source_resolution_m", "native_resolution_m",
             "aggregation_method", "source_dataset", "source_product_version", "source_item_ids",
         ) + PROVENANCE,
         conflict_columns=("farm_id", "observation_date", "source_dataset", "processing_version"),
@@ -99,7 +99,7 @@ TABLE_SPECS: dict[str, TableSpec] = {
             "observation_date", "dataset_key", "temperature_mean_c", "temperature_min_c",
             "temperature_max_c", "dewpoint_mean_c", "skin_temperature_mean_c",
             "soil_water_0_7", "soil_water_7_28", "soil_water_28_100", "soil_water_100_289",
-            "source_resolution_m", "aggregation_method", "source_version",
+            "source_resolution_m", "native_resolution_m", "aggregation_method", "source_version",
         ) + PROVENANCE,
         conflict_columns=("farm_id", "observation_date", "dataset_key", "processing_version"),
     ),
@@ -119,7 +119,7 @@ TABLE_SPECS: dict[str, TableSpec] = {
         table="farm_smap_observations",
         columns=COMMON + (
             "observed_at", "surface_soil_moisture", "root_zone_soil_moisture",
-            "source_dataset", "source_version", "source_resolution_m", "aggregation_method",
+            "source_dataset", "source_version", "source_resolution_m", "native_resolution_m", "aggregation_method",
             "source_granule_id",
         ) + PROVENANCE,
         conflict_columns=("farm_id", "observed_at", "source_dataset", "processing_version"),
@@ -147,7 +147,7 @@ TABLE_SPECS: dict[str, TableSpec] = {
         columns=COMMON + (
             "provider", "model", "issued_at", "valid_at", "temperature_2m_c",
             "relative_humidity_2m", "precipitation_mm", "wind_speed_10m", "wind_direction_10m",
-            "shortwave_radiation", "et0_mm", "vapour_pressure_deficit", "source_resolution_m",
+            "shortwave_radiation", "et0_mm", "vapour_pressure_deficit", "source_resolution_m", "native_resolution_m",
             "aggregation_method",
         ) + PROVENANCE,
         conflict_columns=("farm_id", "provider", "issued_at", "valid_at", "processing_version"),

@@ -60,6 +60,7 @@ def _feature_to_row(
         "district_code": farm_context.get("district_code"),
         "block_name": farm_context.get("block_name"),
         "block_code": farm_context.get("block_code"),
+        "spatial_level": "h3",
 
         "snapshot_date": snapshot_date,
         "scene_id": payload.scene_id,
@@ -124,6 +125,7 @@ def _feature_to_row(
             "rededge_swir_resolution_m",
             20,
         ),
+        "native_resolution_m": feature.get("native_resolution_m", 10),
         "processing_version": feature.get(
             "processing_version",
             "s2_zonal_v1",
