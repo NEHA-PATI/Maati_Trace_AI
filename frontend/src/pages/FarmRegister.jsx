@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FarmCard from "@/components/ui-custom/FarmCard";
-import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import { getMyFarmerProfile } from "@/lib/api/farmer";
 import { previewH3, registerFarm } from "@/lib/api/farm";
 import { getCropProfiles } from "@/lib/api/analytics";
@@ -24,10 +23,7 @@ import {
   normalizeStates,
   validateLocation,
 } from "@/lib/api/location";
-import {
-  runLatestAnalysis,
-  ANALYSIS_PIPELINE_STEPS,
-} from "@/lib/api/hotStream";
+import { runLatestAnalysis } from "@/lib/api/hotStream";
 import { getStoredUser } from "@/features/auth/session";
 import FarmBoundaryStep from "@/features/farm-registration/boundary/FarmBoundaryStep";
 import { resolveFarmLocation } from "@/features/farm-registration/boundary/locationGeocoder";
@@ -59,18 +55,6 @@ const EMPTY_FORM = {
 };
 const FARM_DRAFT_KEY = "maatitrace:farm-registration:draft:v1";
 const MotionDiv = motion.div;
-const REGISTRATION_PIPELINE_STEPS = [
-  "Validate farmer, crop and boundary",
-  "Validate farm location",
-  "Generate H3 hexagons",
-  "Save farm record and polygon",
-  "Start complete analysis",
-];
-const PIPELINE_STEPS = [
-  ...REGISTRATION_PIPELINE_STEPS,
-  ...ANALYSIS_PIPELINE_STEPS.map(([, label]) => label),
-];
-
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
 }
@@ -99,8 +83,6 @@ export default function FarmRegister() {
   const [boundaryConfirmed, setBoundaryConfirmed] = useState(false);
   const [h3Preview, setH3Preview] = useState(null);
   const [validationWarning, setValidationWarning] = useState("");
-  const [pipelineStage, setPipelineStage] = useState(0);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
   const [backendErrorDetail, setBackendErrorDetail] = useState("");
 
   const update = (field, value) => {
@@ -299,16 +281,12 @@ export default function FarmRegister() {
     setError("");
     setBackendErrorDetail("");
     setValidationWarning("");
-    setPipelineOpen(true);
-    setPipelineStage(0);
     setPipelineStatus("Validating location...");
     try {
       if (!boundarySummary.valid || !farmGeometry || !boundaryConfirmed) {
         throw new Error("Complete and confirm the farm boundary before registration.");
       }
-      setPipelineStage(0);
       setPipelineStatus("Validating farm location...");
-      setPipelineStage(1);
       const validated = await validateLocation({
         state_name: formData.state_name,
         district_name: formData.district_name,
@@ -332,7 +310,6 @@ export default function FarmRegister() {
       }
 
       setPipelineStatus("Generating H3 preview...");
-      setPipelineStage(2);
       try {
         const preview = await previewH3({
           polygon: farmGeometry,
@@ -363,7 +340,6 @@ export default function FarmRegister() {
       };
 
       setPipelineStatus("Saving farm record and polygon...");
-      setPipelineStage(3);
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
@@ -371,11 +347,11 @@ export default function FarmRegister() {
       // analysis job has been queued.  Analysis continues on Land Intelligence
       // so a slow/unavailable provider cannot make registration appear stuck.
       setPipelineStatus("Preparing farm intelligence...");
-      setPipelineStage(4);
       const endDate = new Date();
       const startDate = new Date(endDate);
       startDate.setDate(startDate.getDate() - 365);
       await runLatestAnalysis(farmPayload.farm_id, {
+        analysis_mode: "bootstrap",
         start_date: startDate.toISOString().slice(0, 10),
         end_date: endDate.toISOString().slice(0, 10),
         max_cloud_cover: 40,
@@ -383,9 +359,11 @@ export default function FarmRegister() {
         collection_id: "sentinel-2-l2a",
       });
       setPipelineStatus("Farm registered. Opening Land Intelligence...");
-      setPipelineStage(PIPELINE_STEPS.length - 1);
       localStorage.removeItem(FARM_DRAFT_KEY);
-      navigate(`/land/${farmPayload.farm_id}`);
+      navigate(`/land/${farmPayload.farm_id}`, {
+        replace: true,
+        state: { pipelineMode: "bootstrap" },
+      });
     } catch (err) {
       setBackendErrorDetail(JSON.stringify({
         status: err?.response?.status || null,
@@ -398,10 +376,8 @@ export default function FarmRegister() {
           ? detail
           : detail?.message || err?.response?.data?.message || err?.message;
       setError(backendMessage || "Unable to register farm.");
-      setPipelineStage(-1);
     } finally {
       setLoading(false);
-      setPipelineOpen(false);
     }
   }
 
@@ -452,21 +428,6 @@ export default function FarmRegister() {
         )}
         {validationWarning && <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">{validationWarning}</div>}
         {pipelineStatus && <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">{pipelineStatus}</div>}
-        <HexagonPipelineLoader
-          open={pipelineOpen}
-          title="Land registration pipeline"
-          status={pipelineStatus}
-          currentStep={Math.max(0, pipelineStage)}
-          steps={PIPELINE_STEPS}
-          details={[
-            `State: ${formData.state_name || "â€”"}`,
-            `District: ${formData.district_name || "â€”"}`,
-            `Block: ${formData.block_name || "â€”"}`,
-            `Boundary: ${boundarySummary.valid ? `${boundarySummary.pointCount} corners` : "not completed"}`,
-          ]}
-          failure={error || null}
-        />
-
         {pageLoading ? (
           <div
             className="space-y-5 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"

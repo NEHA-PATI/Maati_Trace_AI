@@ -60,6 +60,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             district_code,
             block_name,
             block_code,
+            spatial_level,
 
             snapshot_date,
             scene_id,

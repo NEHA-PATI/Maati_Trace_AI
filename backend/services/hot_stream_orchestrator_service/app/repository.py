@@ -233,6 +233,12 @@ def update_pipeline_job_stage(job_id: UUID | str, stage: str, status: str | None
     if row is None:
         raise HotStreamRepositoryError(f"Pipeline job not found: {job_id}")
 
+    try:
+        upsert_pipeline_job_step(job_id, stage=stage, status=status, metadata=metadata)
+    except HotStreamRepositoryError:
+        # Step observability must not break older installations.
+        pass
+
 
 def complete_pipeline_job(
     job_id: UUID | str,
@@ -299,12 +305,6 @@ def fail_pipeline_job(job_id: UUID | str, error_code: str | None = None, error_m
 
     if row is None:
         raise HotStreamRepositoryError(f"Pipeline job not found: {job_id}")
-    upsert_pipeline_job_step(
-        job_id,
-        stage=stage,
-        status=status,
-        metadata=metadata,
-    )
 
 
 def get_latest_pipeline_job(

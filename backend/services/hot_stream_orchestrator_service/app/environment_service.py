@@ -29,6 +29,7 @@ from services.hot_stream_orchestrator_service.app.repository import (
     complete_pipeline_job,
     create_pipeline_job,
     fail_pipeline_job,
+    get_farm_dataset_states,
     upsert_farm_dataset_state,
     update_pipeline_job_stage,
 )
@@ -47,9 +48,97 @@ class EnvironmentRefreshError(RuntimeError):
 SENTINEL2_CANDIDATE_LIMIT = 5
 ERA5_LAND_AVAILABILITY_LAG_DAYS = 5
 
+INCREMENTAL_DATASET_MAX_AGE_DAYS = {
+    "sentinel_2_l2a": 14,
+    "sentinel_1_rtc": 30,
+    "landsat_c2_l2": 60,
+    "gpm_imerg": 2,
+    "era5_land": 2,
+    "smap_l4_sm": 5,
+    "modis_et": 16,
+    "modis_lai_fpar": 16,
+    "weather_forecast": 2,
+}
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _fresh_cached_dataset_result(
+    farm_id: UUID,
+    dataset_key: str,
+    payload: EnvironmentRefreshRequest,
+    dataset_states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Return a fresh-cache or retry-deferred result for incremental runs."""
+    if getattr(payload, "analysis_mode", "manual") != "incremental_latest" or payload.force_refresh:
+        return None
+    max_age = INCREMENTAL_DATASET_MAX_AGE_DAYS.get(dataset_key)
+    if max_age is None:
+        return None
+    if dataset_states is None:
+        try:
+            states = get_farm_dataset_states(farm_id)
+        except Exception:
+            # Older installations may not have the readiness migration yet.
+            return None
+        dataset_states = {str(row.get("dataset_key")): row for row in states}
+    state = dataset_states.get(dataset_key)
+    if not state:
+        return None
+
+    raw_retry = state.get("next_retry_at")
+    if state.get("status") in {"failed", "stale"} and raw_retry:
+        try:
+            retry_at = raw_retry if isinstance(raw_retry, datetime) else datetime.fromisoformat(str(raw_retry).replace("Z", "+00:00"))
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            if retry_at > datetime.now(timezone.utc):
+                return {
+                    "dataset_key": dataset_key,
+                    "status": "unavailable",
+                    "reason_type": "provider_unavailable",
+                    "reason_code": "SOURCE_RETRY_DEFERRED",
+                    "message": f"Deferred {dataset_key} retry until {retry_at.isoformat()}.",
+                    "source_items_found": 0,
+                    "source_items_processed": 0,
+                    "postgres_rows_written": int(state.get("row_count") or 0),
+                    "parquet_rows_written": 0,
+                    "latest_observation_at": str(state.get("latest_observation_at")) if state.get("latest_observation_at") else None,
+                    "start_date": str(state.get("history_start")) if state.get("history_start") else None,
+                    "end_date": str(state.get("history_end")) if state.get("history_end") else None,
+                    "retry_deferred": True,
+                }
+        except Exception:
+            pass
+
+    if state.get("status") != "ready" or not state.get("latest_observation_at"):
+        return None
+    raw = state["latest_observation_at"]
+    try:
+        observed = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+        target = datetime.fromisoformat(f"{payload.end_date}T23:59:59+00:00")
+        age = (target - observed).total_seconds() / 86400
+    except Exception:
+        return None
+    if age < 0 or age > max_age:
+        return None
+    return {
+        "dataset_key": dataset_key,
+        "status": "cached",
+        "reason_type": "cached",
+        "reason_code": "DATASET_FRESH_CACHE",
+        "message": f"Reused fresh {dataset_key} data ({age:.1f} days old).",
+        "source_items_found": 0,
+        "source_items_processed": 0,
+        "postgres_rows_written": 0,
+        "parquet_rows_written": 0,
+        "latest_observation_at": str(raw),
+        "cache_age_days": round(age, 2),
+    }
 
 
 def _dataset_search_window(
@@ -191,6 +280,7 @@ def _process_dataset(
     polygon: dict[str, Any],
     h3_cells: list[int],
     h3_resolution: int,
+    dataset_states: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Process one environmental source.
 
@@ -208,6 +298,10 @@ def _process_dataset(
         "postgres_rows_written": 0,
         "parquet_rows_written": 0,
     }
+    cached = _fresh_cached_dataset_result(farm_id, dataset_key, payload, dataset_states)
+    if cached is not None:
+        _persist_dataset_state(farm_id, cached)
+        return cached
     started = perf_counter()
     _persist_dataset_state(farm_id, current)
     try:
@@ -425,6 +519,14 @@ def materialize_environment(
             progress_callback([], "parallel")
 
         futures = {}
+        try:
+            dataset_states = {
+                str(row.get("dataset_key")): row
+                for row in get_farm_dataset_states(farm_id)
+            }
+        except Exception:
+            # Older installations may not have the readiness migration yet.
+            dataset_states = {}
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="env-dataset") as executor:
             for dataset_key in payload.dataset_keys:
                 futures[executor.submit(
@@ -436,6 +538,7 @@ def materialize_environment(
                     polygon=polygon,
                     h3_cells=h3_cells,
                     h3_resolution=h3_resolution,
+                    dataset_states=dataset_states,
                 )] = dataset_key
 
             for future in as_completed(futures):

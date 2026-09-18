@@ -33,6 +33,7 @@ class FarmAnalysisMaterializeRequest(BaseModel):
     tiny_bbox_size_deg: float = Field(default=0.00020, gt=0, le=0.01)
 
     force_refresh: bool = False
+    analysis_mode: Literal["bootstrap", "incremental_latest", "manual"] = "manual"
 
 
 class LatestAnalysisRequest(BaseModel):
@@ -60,6 +61,7 @@ class LatestAnalysisRequest(BaseModel):
     sentinel2_history_min_dates: int = Field(default=3, ge=0, le=20)
     sentinel2_history_max_scenes: int = Field(default=20, ge=1, le=100)
     force_refresh: bool = False
+    analysis_mode: Literal["bootstrap", "incremental_latest"] = "incremental_latest"
 
     @model_validator(mode="after")
     def validate_dates(self):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -63,6 +63,15 @@ def _make_tiny_bbox_from_farm_bbox(
         center_lon + half,
         center_lat + half,
     ]
+
+
+def _environment_refresh_start_date(payload: Any) -> str:
+    """Limit repeat source acquisition without shrinking history calculation."""
+    if getattr(payload, "analysis_mode", "incremental_latest") == "bootstrap":
+        return payload.start_date
+    requested_start = date.fromisoformat(payload.start_date)
+    requested_end = date.fromisoformat(payload.end_date)
+    return max(requested_start, requested_end - timedelta(days=120)).isoformat()
 
 
 def _normalize_bbox(raw_bbox: Any) -> list[float] | None:
@@ -802,6 +811,7 @@ def run_latest_analysis(
             farm_id=farm_id,
             metadata={
                 "request": payload.model_dump() if hasattr(payload, "model_dump") else {},
+                "analysis_mode": getattr(payload, "analysis_mode", "incremental_latest"),
                 "analysis_status": "queued",
             },
         )
@@ -817,6 +827,7 @@ def run_latest_analysis(
     job_id = str(job_id)
     stages: list[dict[str, Any]] = []
     request_metadata = payload.model_dump() if hasattr(payload, "model_dump") else {}
+    request_metadata.setdefault("analysis_mode", getattr(payload, "analysis_mode", "incremental_latest"))
 
     def checkpoint(name: str, status: str, result: Any = None, error: Exception | None = None) -> None:
         row: dict[str, Any] = {
@@ -901,12 +912,13 @@ def run_latest_analysis(
         run_required("farm_ready", lambda: ensure_farm_analysis_ready(farm_id))
 
         environment_payload = EnvironmentRefreshRequest(
-            start_date=payload.start_date,
+            start_date=_environment_refresh_start_date(payload),
             end_date=payload.end_date,
             dataset_keys=list(DEFAULT_ENVIRONMENT_DATASETS),
             max_items_per_dataset=payload.max_items_per_dataset,
             max_cloud_cover=payload.max_cloud_cover,
             force_refresh=payload.force_refresh,
+            analysis_mode=getattr(payload, "analysis_mode", "incremental_latest"),
         )
         # One mandatory environmental-observation stage contains Sentinel-2
         # and all other registered datasets. No source is silently skipped.

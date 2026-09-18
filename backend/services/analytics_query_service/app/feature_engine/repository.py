@@ -476,12 +476,14 @@ def upsert_engineered_features(rows: list[dict[str, Any]]) -> int:
         """
     )
     try:
+        prepared = []
+        for row in rows:
+            payload = dict(row)
+            for key in ["features", "quality", "source_dates", "source_versions"]:
+                payload[key] = _json(payload.get(key))
+            prepared.append(payload)
         with engine.begin() as conn:
-            for row in rows:
-                payload = dict(row)
-                for key in ["features", "quality", "source_dates", "source_versions"]:
-                    payload[key] = _json(payload.get(key))
-                conn.execute(query, payload)
+            conn.execute(query, prepared)
     except SQLAlchemyError as exc:
         raise FeatureEngineRepositoryError(f"Failed to persist engineered features: {exc}") from exc
     return len(rows)
@@ -577,12 +579,18 @@ def upsert_prediction_rows(rows: list[dict[str, Any]]) -> int:
         """
     )
     try:
+        h3_prepared = []
+        farm_prepared = []
+        for row in rows:
+            payload = dict(row)
+            for key in ["components", "evidence", "quality", "metadata"]:
+                payload[key] = _json(payload.get(key))
+            (h3_prepared if row.get("result_scope") == "h3" else farm_prepared).append(payload)
         with engine.begin() as conn:
-            for row in rows:
-                payload = dict(row)
-                for key in ["components", "evidence", "quality", "metadata"]:
-                    payload[key] = _json(payload.get(key))
-                conn.execute(h3_query if row.get("result_scope") == "h3" else farm_query, payload)
+            if h3_prepared:
+                conn.execute(h3_query, h3_prepared)
+            if farm_prepared:
+                conn.execute(farm_query, farm_prepared)
     except SQLAlchemyError as exc:
         raise FeatureEngineRepositoryError(f"Failed to persist calculated predictions: {exc}") from exc
     return len(rows)
@@ -665,12 +673,14 @@ def upsert_grid_prediction_rows(rows: list[dict[str, Any]]) -> int:
         """
     )
     try:
+        prepared = []
+        for row in rows:
+            payload = dict(row)
+            payload["components"] = _json(payload.get("components"))
+            payload["evidence"] = _json(payload.get("evidence"))
+            prepared.append(payload)
         with engine.begin() as conn:
-            for row in rows:
-                payload = dict(row)
-                payload["components"] = _json(payload.get("components"))
-                payload["evidence"] = _json(payload.get("evidence"))
-                conn.execute(query, payload)
+            conn.execute(query, prepared)
     except SQLAlchemyError as exc:
         raise FeatureEngineRepositoryError(f"Failed to persist grid calculations: {exc}") from exc
     return len(rows)

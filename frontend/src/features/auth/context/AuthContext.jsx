@@ -4,6 +4,7 @@ import { authApi } from "@/features/auth/api/authApi";
 import {
   clearSession,
   getSessionSnapshot,
+  isAccessTokenFresh,
   setSession,
   subscribeSession,
 } from "@/features/auth/session";
@@ -32,6 +33,16 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+
+    // Login/signup can populate the in-memory session while the app is
+    // bootstrapping. Avoid an unnecessary second refresh in that case.
+    if (isAccessTokenFresh()) {
+      setInitialising(false);
+      return () => {
+        active = false;
+      };
+    }
+
     bootstrapSession()
       .catch((error) => {
         clearSession();

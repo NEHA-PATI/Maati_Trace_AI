@@ -33,6 +33,7 @@ class EnvironmentRefreshRequest(BaseModel):
     max_items_per_dataset: int = Field(default=1, ge=1, le=31)
     max_cloud_cover: float | None = Field(default=40, ge=0, le=100)
     force_refresh: bool = False
+    analysis_mode: str = "manual"
     dataset_options: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 

@@ -16,6 +16,7 @@ import {
   getFarmerFarms,
   getFarmerSummary,
   getMyFarmerProfile,
+  hasCachedFarmerProfile,
 } from "@/lib/api/farmer";
 import { getStoredUser } from "@/features/auth/session";
 
@@ -127,6 +128,75 @@ function PhotoModal({ onClose, onSave }) {
   );
 }
 
+function SkeletonBlock({ className = "" }) {
+  return <div className={`animate-[pulse_0.9s_ease-in-out_infinite] rounded-xl bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 bg-[length:200%_100%] shadow-inner ${className}`} aria-hidden="true" />;
+}
+
+function FarmerDashboardSkeleton() {
+  return (
+    <div className="mt-surface mt-skeleton-enter mx-auto max-w-[1180px] space-y-4 p-4 md:p-6" role="status" aria-label="Loading dashboard">
+      <span className="sr-only">Loading your dashboard</span>
+
+      <div className="space-y-2">
+        <SkeletonBlock className="h-7 w-64 rounded-lg" />
+        <SkeletonBlock className="h-4 w-80 rounded-lg" />
+      </div>
+
+      <section className="flex flex-col gap-5 rounded-[var(--mt-radius-lg)] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:flex-row md:items-center md:justify-between md:p-6">
+        <div className="flex items-center gap-4">
+          <SkeletonBlock className="h-16 w-16 shrink-0 rounded-full sm:h-[68px] sm:w-[68px]" />
+          <div className="space-y-2.5">
+            <SkeletonBlock className="h-5 w-44 rounded-lg" />
+            <SkeletonBlock className="h-3.5 w-56 rounded-lg" />
+            <SkeletonBlock className="h-6 w-32 rounded-full" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-5 sm:flex sm:gap-8">
+          <div className="space-y-2"><SkeletonBlock className="h-3 w-12" /><SkeletonBlock className="h-5 w-24" /></div>
+          <div className="space-y-2"><SkeletonBlock className="h-3 w-12" /><SkeletonBlock className="h-5 w-20" /></div>
+        </div>
+        <div className="flex gap-2.5"><SkeletonBlock className="h-11 w-28 rounded-full" /><SkeletonBlock className="h-11 w-32 rounded-full" /></div>
+      </section>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {["a", "b", "c", "d"].map((key) => (
+          <div key={key} className="rounded-[var(--mt-radius-md)] border border-slate-200 bg-white p-4 shadow-sm">
+            <SkeletonBlock className="h-3 w-20" /><SkeletonBlock className="mt-3 h-7 w-24 rounded-lg" />
+          </div>
+        ))}
+      </div>
+
+      <section className="overflow-hidden rounded-[var(--mt-radius-md)] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between"><SkeletonBlock className="h-5 w-36" /><SkeletonBlock className="h-4 w-16" /></div>
+        <div className="relative mt-4 h-[280px] overflow-hidden rounded-2xl bg-slate-100 p-4 md:h-[420px]">
+          <SkeletonBlock className="absolute left-5 top-5 h-8 w-28 rounded-lg" />
+          <SkeletonBlock className="absolute right-5 top-5 h-8 w-24 rounded-lg" />
+          <SkeletonBlock className="absolute left-[18%] top-[28%] h-5 w-5 rounded-full" />
+          <SkeletonBlock className="absolute left-[55%] top-[42%] h-6 w-6 rounded-full" />
+          <SkeletonBlock className="absolute right-[18%] bottom-[24%] h-5 w-5 rounded-full" />
+          <SkeletonBlock className="absolute bottom-5 left-5 h-3 w-44" />
+          <SkeletonBlock className="absolute bottom-5 right-5 h-3 w-28" />
+          <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(45deg,transparent_48%,#cbd5e1_49%,#cbd5e1_51%,transparent_52%),linear-gradient(-45deg,transparent_48%,#cbd5e1_49%,#cbd5e1_51%,transparent_52%)] [background-size:42px_42px]" />
+        </div>
+      </section>
+
+      <div className="flex items-center justify-between"><SkeletonBlock className="h-6 w-32" /><SkeletonBlock className="h-11 w-28 rounded-full" /></div>
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
+        {["a", "b", "c"].map((key) => (
+          <div key={key} className="rounded-[var(--mt-radius-md)] bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <div className="flex items-center justify-between"><SkeletonBlock className="h-5 w-32" /><SkeletonBlock className="h-7 w-7 rounded-full" /></div>
+            <SkeletonBlock className="mt-4 h-3 w-4/5" /><SkeletonBlock className="mt-2 h-3 w-3/5" />
+            <div className="mt-6 grid grid-cols-2 gap-3"><SkeletonBlock className="h-10" /><SkeletonBlock className="h-10" /></div>
+            <SkeletonBlock className="mt-4 h-3 w-full" />
+          </div>
+        ))}
+      </div>
+      <section className="rounded-[var(--mt-radius-md)] border border-slate-200 bg-white p-5 shadow-sm"><SkeletonBlock className="h-4 w-36" /><SkeletonBlock className="mt-5 h-3 w-full" /><SkeletonBlock className="mt-6 h-3 w-4/5" /></section>
+      <section className="rounded-[var(--mt-radius-md)] border border-slate-200 bg-white p-5 shadow-sm"><SkeletonBlock className="h-5 w-40" /><SkeletonBlock className="mt-4 h-16 w-full" /></section>
+    </div>
+  );
+}
+
 export default function FarmerProfile() {
   const { farmerId } = useParams();
   const location = useLocation();
@@ -136,7 +206,7 @@ export default function FarmerProfile() {
   const [farmer, setFarmer] = useState(DEFAULT_FARMER);
   const [farms, setFarms] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !isSelfRoute || !hasCachedFarmerProfile());
   const [error, setError] = useState("");
   const [showPhotoModal, setShowPhotoModal] = useState(false);
 
@@ -268,6 +338,12 @@ export default function FarmerProfile() {
     return normalised ? `tel:${normalised}` : null;
   }, [farmer.phone]);
 
+  // Keep this after every hook so the hook order is identical on every
+  // render, including the initial loading render.
+  if (loading) {
+    return <FarmerDashboardSkeleton />;
+  }
+
   return (
     <div className="mt-surface mx-auto max-w-[1180px] space-y-4 p-4 md:p-6">
       <AnimatePresence>
@@ -282,12 +358,6 @@ export default function FarmerProfile() {
           Here&rsquo;s how your farms are doing today
         </p>
       </div>
-
-      {loading && (
-        <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
-          Loading your profile…
-        </div>
-      )}
 
       {!loading && error && (
         <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-clay)]/30 bg-[var(--mt-clay-tint)] p-6 text-sm font-semibold text-[var(--mt-clay-text)]">

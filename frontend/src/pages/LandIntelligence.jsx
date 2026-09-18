@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Activity, ArrowLeft, CalendarDays, ChevronRight,
   Droplets, Layers, Leaf, MapPin, Mountain, RefreshCw,
@@ -36,12 +36,20 @@ const PARAMETERS = [
   ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
 ];
 
-const PIPELINE_STEPS = ANALYSIS_PIPELINE_STEPS.map(([, label]) => label);
+const REGISTRATION_PIPELINE_STEPS = [
+  "Validate farmer, crop and boundary",
+  "Validate farm location",
+  "Generate H3 hexagons",
+  "Save farm record and polygon",
+  "Start complete analysis",
+];
+const ANALYSIS_STEPS = ANALYSIS_PIPELINE_STEPS.map(([, label]) => label);
+const BOOTSTRAP_STEPS = [...REGISTRATION_PIPELINE_STEPS, ...ANALYSIS_STEPS];
 
-function analysisProgress(status) {
+function analysisProgress(status, offset = 0) {
   const terminal = ["completed", "completed_with_warnings", "succeeded", "failed"].includes(status?.status);
   if (terminal) {
-    const finalStep = ANALYSIS_PIPELINE_STEPS.length - 1;
+    const finalStep = offset + ANALYSIS_PIPELINE_STEPS.length - 1;
     return {
       step: finalStep,
       label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
@@ -51,8 +59,8 @@ function analysisProgress(status) {
   const current = status?.current_stage;
   const rows = Array.isArray(status?.stages) ? status.stages : [];
   const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
-  let step = index >= 0 ? index : 0;
-  let label = PIPELINE_STEPS[step] || "Running analysis";
+  let step = offset + (index >= 0 ? index : 0);
+  let label = (offset ? BOOTSTRAP_STEPS : ANALYSIS_STEPS)[step] || "Running analysis";
   let details = current ? [`Status: ${status?.status || "running"}`] : [];
   const environment = rows.find((row) => row.name === "environment_datasets");
   const datasets = environment?.details?.datasets || [];
@@ -60,8 +68,8 @@ function analysisProgress(status) {
     const active = datasets.findIndex((row) => row.status === "running");
     const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
     const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
-    step = 1 + datasetIndex;
-    label = PIPELINE_STEPS[step] || label;
+    step = offset + 1 + datasetIndex;
+    label = (offset ? BOOTSTRAP_STEPS : ANALYSIS_STEPS)[step] || label;
     details = [`Datasets: ${completed}/${datasets.length} complete`];
     if (active >= 0) details.push(`Current: ${datasets[active].dataset_key}`);
   }
@@ -125,8 +133,15 @@ function StatusBadge({ result, short = false, className = "" }) {
 
 export default function LandIntelligence() {
   const { farmId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const user = getStoredUser();
+  const enteredFromBootstrap = location.state?.pipelineMode === "bootstrap";
+  const [pipelineMode, setPipelineMode] = useState(
+    enteredFromBootstrap ? "bootstrap" : "incremental_latest",
+  );
+  const pipelineOffset = pipelineMode === "bootstrap" ? REGISTRATION_PIPELINE_STEPS.length : 0;
+  const pipelineSteps = pipelineMode === "bootstrap" ? BOOTSTRAP_STEPS : ANALYSIS_STEPS;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -141,12 +156,13 @@ export default function LandIntelligence() {
   const [selectedCell, setSelectedCell] = useState(null);
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [showH3, setShowH3] = useState(false);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
-  const [pipelineStage, setPipelineStage] = useState(0);
+  const [pipelineOpen, setPipelineOpen] = useState(enteredFromBootstrap);
+  const [pipelineStage, setPipelineStage] = useState(pipelineOffset);
   const [pipelineStatus, setPipelineStatus] = useState("");
   const [pipelineFailure, setPipelineFailure] = useState("");
   const [pipelineWarning, setPipelineWarning] = useState("");
   const [pipelineDetails, setPipelineDetails] = useState([]);
+  const manualRunRef = useRef(false);
 
   function updatePipelineStage(stage, status, details = []) {
     setPipelineStage(stage);
@@ -198,13 +214,15 @@ export default function LandIntelligence() {
   useEffect(() => {
     let cancelled = false;
     let timer;
+    if (manualRunRef.current) return undefined;
     const terminalStatuses = new Set(["completed", "completed_with_warnings", "succeeded", "failed"]);
 
     async function pollAnalysis() {
+      if (manualRunRef.current) return;
       const status = await getLatestAnalysisStatus(farmId).catch(() => null);
-      if (cancelled || !status) return;
+      if (cancelled || manualRunRef.current || !status) return;
 
-      const progress = analysisProgress(status);
+      const progress = analysisProgress(status, pipelineMode === "bootstrap" ? REGISTRATION_PIPELINE_STEPS.length : 0);
       updatePipelineStage(progress.step, progress.label, progress.details);
 
       if (terminalStatuses.has(status.status)) {
@@ -232,7 +250,7 @@ export default function LandIntelligence() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [farmId]);
+  }, [farmId, pipelineMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -284,6 +302,8 @@ export default function LandIntelligence() {
   const selectedParameterInfo = PARAMETERS.find((item) => item.key === selectedParameter);
 
   async function runLatestAnalysis() {
+    manualRunRef.current = true;
+    setPipelineMode("incremental_latest");
     setRefreshing(true);
     setPipelineOpen(true);
     setPipelineFailure("");
@@ -295,6 +315,7 @@ export default function LandIntelligence() {
       ]);
 
       const payload = {
+        analysis_mode: "incremental_latest",
         start_date: (() => {
           const value = new Date();
           value.setDate(value.getDate() - 365);
@@ -311,7 +332,7 @@ export default function LandIntelligence() {
       let status = queued;
       for (let attempt = 0; attempt < 300; attempt += 1) {
         status = await getLatestAnalysisStatus(farmId);
-        const progress = analysisProgress(status);
+        const progress = analysisProgress(status, 0);
         updatePipelineStage(progress.step, progress.label, progress.details);
         if (terminalStatuses.has(status?.status)) break;
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
@@ -347,9 +368,10 @@ export default function LandIntelligence() {
       setPipelineFailure(message);
       setPipelineWarning("");
       setPipelineOpen(true);
-      setPipelineStage(PIPELINE_STEPS.length - 1);
+      setPipelineStage(ANALYSIS_STEPS.length - 1);
       setPipelineStatus("Pipeline failed");
     } finally {
+      manualRunRef.current = false;
       setRefreshing(false);
     }
   }
@@ -456,7 +478,7 @@ export default function LandIntelligence() {
       <HexagonPipelineLoader
         open={pipelineOpen}
         title="Land analysis pipeline"
-        steps={PIPELINE_STEPS}
+        steps={pipelineSteps}
         currentStep={pipelineStage}
         status={pipelineStatus}
         details={pipelineDetails}

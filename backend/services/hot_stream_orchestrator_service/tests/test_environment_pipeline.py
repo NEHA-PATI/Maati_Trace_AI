@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -92,9 +93,12 @@ def test_sentinel2_is_processed_inside_mandatory_environment_stage(monkeypatch):
 
     assert result["status"] == "succeeded"
     assert [item["dataset_key"] for item in result["datasets"]] == ["sentinel_2_l2a", "sentinel_1_rtc"]
-    assert writes == ["sentinel2", "sentinel_1_rtc"]
-    assert searches[0]["dataset_key"] == "sentinel_2_l2a"
-    assert searches[0]["limit"] == 5
+    # Dataset workers run concurrently; completion order is intentionally not
+    # part of the pipeline contract.
+    assert set(writes) == {"sentinel2", "sentinel_1_rtc"}
+    assert {item["dataset_key"] for item in searches} == {"sentinel_2_l2a", "sentinel_1_rtc"}
+    s2_search = next(item for item in searches if item["dataset_key"] == "sentinel_2_l2a")
+    assert s2_search["limit"] == 5
     assert ("complete",) == tuple(event[:1] for event in events if event[0] == "complete")[0]
 
 
@@ -266,3 +270,61 @@ def test_canonical_analysis_has_one_ordered_pipeline(monkeypatch):
         "grid_context",
         "intelligence",
     ]
+
+
+def test_incremental_run_defers_provider_retry_until_backoff_expires(monkeypatch):
+    request = SimpleNamespace(
+        analysis_mode="incremental_latest",
+        force_refresh=False,
+        end_date="2026-09-01",
+    )
+    retry_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    states = {
+        "sentinel_1_rtc": {
+            "dataset_key": "sentinel_1_rtc",
+            "status": "stale",
+            "next_retry_at": retry_at,
+            "row_count": 12,
+            "latest_observation_at": datetime(2026, 8, 20, tzinfo=timezone.utc),
+            "history_start": "2026-01-01",
+            "history_end": "2026-08-20",
+        }
+    }
+
+    result = environment_service._fresh_cached_dataset_result(
+        FARM_ID, "sentinel_1_rtc", request, states
+    )
+
+    assert result is not None
+    assert result["status"] == "unavailable"
+    assert result["reason_code"] == "SOURCE_RETRY_DEFERRED"
+    assert result["retry_deferred"] is True
+    assert result["postgres_rows_written"] == 12
+
+
+def test_incremental_run_uses_ready_dataset_state_without_requerying_state_table(monkeypatch):
+    request = SimpleNamespace(
+        analysis_mode="incremental_latest",
+        force_refresh=False,
+        end_date="2026-09-01",
+    )
+    states = {
+        "gpm_imerg": {
+            "dataset_key": "gpm_imerg",
+            "status": "ready",
+            "latest_observation_at": datetime(2026, 9, 1, tzinfo=timezone.utc),
+        }
+    }
+    monkeypatch.setattr(
+        environment_service,
+        "get_farm_dataset_states",
+        lambda farm_id: (_ for _ in ()).throw(AssertionError("state table should not be queried")),
+    )
+
+    result = environment_service._fresh_cached_dataset_result(
+        FARM_ID, "gpm_imerg", request, states
+    )
+
+    assert result is not None
+    assert result["status"] == "cached"
+    assert result["reason_code"] == "DATASET_FRESH_CACHE"

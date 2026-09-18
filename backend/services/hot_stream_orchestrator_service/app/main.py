@@ -319,6 +319,7 @@ def full_refresh_farm_endpoint(
             sentinel2_history_min_dates=payload.sentinel2_history_min_dates,
             sentinel2_history_max_scenes=payload.sentinel2_history_max_scenes,
             force_refresh=payload.force_refresh,
+            analysis_mode="bootstrap",
         )
     return run_latest_analysis(farm_id, canonical)
 

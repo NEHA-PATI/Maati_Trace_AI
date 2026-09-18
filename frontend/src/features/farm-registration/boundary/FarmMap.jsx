@@ -50,10 +50,10 @@ export default function FarmMap({ geometry, onGeometryChange, resolvedLocation, 
   return (
     <div className="relative">
       <div className="h-[calc(100dvh-175px)] min-h-[500px] overflow-hidden bg-slate-100 md:h-[68vh] md:min-h-[600px] md:rounded-3xl">
-        <MapContainer center={[MAP_CONFIG.defaultCenter.lat, MAP_CONFIG.defaultCenter.lng]} zoom={MAP_CONFIG.zoom.default} maxZoom={MAP_CONFIG.zoom.maximum} zoomControl={false} attributionControl className="h-full w-full">
+        <MapContainer center={[MAP_CONFIG.defaultCenter.lat, MAP_CONFIG.defaultCenter.lng]} zoom={MAP_CONFIG.zoom.default} maxZoom={MAP_CONFIG.zoom.maximum} maxNativeZoom={23} zoomControl={false} attributionControl className="h-full w-full">
           <EsriBasemap onError={setMapMessage} />
           <ZoomControl position="bottomright" />
-          <MapCamera target={cameraTarget} bounds={resolvedLocation?.extent ? [[resolvedLocation.extent.ymin, resolvedLocation.extent.xmin], [resolvedLocation.extent.ymax, resolvedLocation.extent.xmax]] : null} polygonBounds={geometry ? polygonBounds : null} />
+          <MapCamera target={cameraTarget} bounds={resolvedLocation?.extent ? [[resolvedLocation.extent.ymin, resolvedLocation.extent.xmin], [resolvedLocation.extent.ymax, resolvedLocation.extent.xmax]] : null} polygonBounds={geometry ? polygonBounds : null} isEditing={drawing} />
           <BoundaryDrawingController geometry={geometry} command={command} onGeometryChange={handleGeometryChange} onDrawingChange={setDrawing} onError={setMapMessage} />
           {gps.location ? <Circle center={[gps.location.latitude, gps.location.longitude]} radius={Math.max(gps.location.accuracy, 3)} pathOptions={{ color: "#2563eb", fillColor: "#60a5fa", fillOpacity: 0.17, weight: 2 }} /> : null}
         </MapContainer>
