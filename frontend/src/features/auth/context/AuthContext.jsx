@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 
 import { authApi } from "@/features/auth/api/authApi";
+import { cancelRefreshAccessSession } from "@/shared/api/apiClient";
 import {
   clearSession,
   getSessionSnapshot,
@@ -70,6 +71,7 @@ export function AuthProvider({ children }) {
   const refreshSession = useCallback(async () => adoptAuthResponse(await authApi.refresh()), [adoptAuthResponse]);
 
   const logout = useCallback(async () => {
+    cancelRefreshAccessSession();
     try {
       await authApi.logout();
       clearSession();
@@ -84,6 +86,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logoutAll = useCallback(async () => {
+    cancelRefreshAccessSession();
     try {
       await authApi.logoutAll();
       clearSession();
