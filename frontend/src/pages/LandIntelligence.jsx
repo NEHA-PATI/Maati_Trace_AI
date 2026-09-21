@@ -1,153 +1,151 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Cloud, Hexagon, Leaf, RefreshCw, Thermometer, Waves, Mountain, Droplets } from "lucide-react";
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import PipelineStepper from "@/components/ui-custom/PipelineStepper";
-import VerificationStamp from "@/components/ui-custom/VerificationStamp";
-import StatStrip from "@/components/ui-custom/StatStrip";
-import PipelineGlassLoader from "@/components/ui-custom/PipelineGlassLoader";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  Activity, ArrowLeft, CalendarDays, ChevronRight,
+  Droplets, Layers, Leaf, MapPin, Mountain, RefreshCw,
+  Sparkles, Sprout, Sun, TrendingUp, Waves, X,
+} from "lucide-react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
 import { getFarm } from "@/lib/api/farm";
 import {
   getFarmGridCellDetails,
+  getGridCellCalculations,
   getFarmGridCells,
   getFarmH3Cells,
-  getFarmSummary,
-  getFarmTrends,
+  getLatestFarmCalculations,
+  getLatestGridCalculations,
   getLatestGridValues,
-  getLatestSentinel2,
-  getSentinel2History,
+  getMetricContent,
 } from "@/lib/api/analytics";
-import { fullRefreshFarm } from "@/lib/api/hotStream";
+import {
+  buildCalculatedFieldInterpretation,
+  CALCULATED_METRICS,
+  interpretCalculatedMetric,
+} from "@/features/land-intelligence/calculatedMetrics";
+import {
+  getLatestAnalysisStatus,
+  runLatestAnalysis as triggerLatestAnalysis,
+  ANALYSIS_PIPELINE_STEPS,
+} from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
 
 const PARAMETERS = [
-  { key: "ndvi", label: "NDVI" },
-  { key: "evi", label: "EVI" },
-  { key: "savi", label: "SAVI" },
-  { key: "ndre", label: "NDRE" },
-  { key: "ndmi", label: "NDMI" },
-  { key: "ndwi", label: "NDWI" },
-  { key: "msi", label: "MSI" },
-  { key: "bsi", label: "BSI" },
-  { key: "temperature", label: "Surface Temp" },
-  { key: "cloud", label: "Cloud" },
-  { key: "valid_pixels", label: "Valid Pixels" },
+  ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
 ];
 
-const PIPELINE_STEPS = [
-  "Repairing farm metadata",
-  "Computing H3 cells",
-  "Searching latest satellite scene",
-  "Computing per-H3 satellite indices",
-  "Writing H3 analytics",
-  "Computing trends",
-  "Building 10m grid",
-  "Computing H3-to-grid coverage %",
-  "Computing weighted grid values",
-  "Refreshing land intelligence",
-];
+const PIPELINE_STEPS = ANALYSIS_PIPELINE_STEPS.map(([, label]) => label);
+
+function analysisProgress(status) {
+  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
+  if (terminal) {
+    const finalStep = ANALYSIS_PIPELINE_STEPS.length - 1;
+    return {
+      step: finalStep,
+      label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
+      details: [`Status: ${status.status}`],
+    };
+  }
+  const current = status?.current_stage;
+  const rows = Array.isArray(status?.stages) ? status.stages : [];
+  const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
+  let step = index >= 0 ? index : 0;
+  let label = PIPELINE_STEPS[step] || "Running analysis";
+  let details = current ? [`Status: ${status?.status || "running"}`] : [];
+  const environment = rows.find((row) => row.name === "environment_datasets");
+  const datasets = environment?.details?.datasets || [];
+  if (current === "environment_datasets" && datasets.length) {
+    const active = datasets.findIndex((row) => row.status === "running");
+    const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
+    const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
+    step = 1 + datasetIndex;
+    label = PIPELINE_STEPS[step] || label;
+    details = [`Datasets: ${completed}/${datasets.length} complete`];
+    if (active >= 0) details.push(`Current: ${datasets[active].dataset_key}`);
+  }
+  return { step, label, details };
+}
+
+const CALCULATED_METRIC_ICONS = {
+  crop_condition: Sprout,
+  water_stress: Droplets,
+  moisture_condition: Waves,
+  growth_condition: TrendingUp,
+  growth_anomaly: Activity,
+  heat_stress: Sun,
+  waterlogging_risk: Waves,
+  soil_condition: Mountain,
+  nutrient_stress_risk: Leaf,
+  erosion_risk: Mountain,
+};
 
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload;
   return payload?.items || payload?.data || payload?.grid_cells || payload?.grid_values || payload?.h3_cells || [];
 }
 
-function pretty(value, digits = 2) {
-  if (value === null || value === undefined || value === "") return "â€”";
-  const num = Number(value);
-  if (Number.isNaN(num)) return String(value);
-  return num.toFixed(digits);
-}
-
 function formatDate(value) {
-  if (!value) return "â€”";
+  if (!value) return "--";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function pickTrend(summary, trends, key) {
-  return trends?.[0]?.[key] || summary?.[key] || "stable";
+function metricDisplayName(metric, content) {
+  const configured = Array.isArray(content)
+    ? content.find((item) => item.metric_key === metric.key)
+    : null;
+  return configured?.display_name || configured?.displayName || metric.name;
 }
 
-function valueFor(cell, param) {
-  const fallback = (a, b, c) => a ?? b ?? c ?? null;
-  switch (param) {
-    case "ndvi":
-      return fallback(cell.ndvi, cell.weighted_ndvi);
-    case "evi":
-      return fallback(cell.evi, cell.weighted_evi);
-    case "savi":
-      return fallback(cell.savi, cell.weighted_savi);
-    case "ndre":
-      return fallback(cell.ndre, cell.weighted_ndre);
-    case "ndmi":
-      return fallback(cell.ndmi, cell.weighted_ndmi);
-    case "ndwi":
-      return fallback(cell.ndwi, cell.weighted_ndwi);
-    case "msi":
-      return fallback(cell.msi, cell.weighted_msi);
-    case "bsi":
-      return fallback(cell.bsi, cell.weighted_bsi);
-    case "temperature":
-      return fallback(cell.surface_temp_c, cell.weighted_surface_temp_c);
-    case "cloud":
-      return fallback(cell.cloud_percentage, cell.avg_cloud_percentage);
-    case "valid_pixels":
-      return fallback(cell.valid_pixel_percentage);
-    default:
-      return null;
-  }
+function Reveal({ children, delay = 0, className = "" }) {
+  return (
+    <Motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </Motion.div>
+  );
 }
 
-function tone(value, param) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return "text-gray-500";
-  if (param === "cloud") return num > 40 ? "text-slate-500" : "text-emerald-700";
-  if (param === "temperature") return num > 35 ? "text-rose-600" : "text-amber-700";
-  if (param === "bsi") return num > 0.15 ? "text-amber-700" : "text-emerald-700";
-  return num >= 0.45 ? "text-emerald-700" : num >= 0.25 ? "text-lime-700" : "text-amber-700";
-}
-
-function recommendationFor(cell = {}) {
-  const notes = [];
-  if (Number(cell.ndvi ?? cell.weighted_ndvi ?? 0) < 0.25) notes.push("Vegetation stress detected");
-  if (Number(cell.ndmi ?? cell.weighted_ndmi ?? 0) < 0.05 || Number(cell.ndwi ?? cell.weighted_ndwi ?? 0) < 0.05) notes.push("Moisture stress possible");
-  if (Number(cell.bsi ?? cell.weighted_bsi ?? 0) > 0.15) notes.push("Bare soil exposure is high");
-  if (Number(cell.cloud_percentage ?? cell.avg_cloud_percentage ?? 0) > 40) notes.push("Satellite data quality reduced by cloud");
-  return notes.length ? notes.join(". ") : "Conditions look stable";
+function StatusBadge({ result, short = false, className = "" }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${result.badgeClass} ${className}`}>
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: result.color }} />
+      {short ? result.shortLabel : result.label}
+    </span>
+  );
 }
 
 export default function LandIntelligence() {
   const { farmId } = useParams();
+  const navigate = useNavigate();
   const user = getStoredUser();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [farm, setFarm] = useState(null);
-  const [summary, setSummary] = useState(null);
-  const [latestSentinel, setLatestSentinel] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [trends, setTrends] = useState([]);
+  const [metricContent, setMetricContent] = useState([]);
   const [gridCells, setGridCells] = useState([]);
   const [gridValues, setGridValues] = useState([]);
+  const [gridCalculations, setGridCalculations] = useState([]);
+  const [farmCalculations, setFarmCalculations] = useState([]);
   const [h3Cells, setH3Cells] = useState([]);
-  const [selectedParameter, setSelectedParameter] = useState("ndvi");
+  const [selectedParameter, setSelectedParameter] = useState("crop_condition");
   const [selectedCell, setSelectedCell] = useState(null);
   const [selectedDetails, setSelectedDetails] = useState(null);
-  const [hoveredCell, setHoveredCell] = useState(null);
   const [showH3, setShowH3] = useState(false);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [pipelineStage, setPipelineStage] = useState(0);
   const [pipelineStatus, setPipelineStatus] = useState("");
   const [pipelineFailure, setPipelineFailure] = useState("");
+  const [pipelineWarning, setPipelineWarning] = useState("");
   const [pipelineDetails, setPipelineDetails] = useState([]);
 
   function updatePipelineStage(stage, status, details = []) {
@@ -157,31 +155,25 @@ export default function LandIntelligence() {
   }
 
   async function loadLandIntelligence() {
-    const [farmPayload, summaryPayload, latestPayload, historyPayload, trendsPayload, gridCellsPayload, gridValuesPayload, h3Payload] = await Promise.all([
+    const [farmPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
-      getFarmSummary(farmId).catch(() => null),
-      getLatestSentinel2(farmId).catch(() => null),
-      getSentinel2History(farmId, 10).catch(() => []),
-      getFarmTrends(farmId).catch(() => []),
       getFarmGridCells(farmId).catch(() => []),
       getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
+      getLatestGridCalculations(farmId).catch(() => []),
+      getLatestFarmCalculations(farmId).catch(() => []),
     ]);
 
     console.log("FARM", farmPayload);
-    console.log("SUMMARY", summaryPayload);
-    console.log("LATEST_SENTINEL", latestPayload);
     console.log("GRID_CELLS", gridCellsPayload);
-    console.log("GRID_VALUES", gridValuesPayload);
     console.log("H3_CELLS", h3Payload);
 
     setFarm(farmPayload);
-    setSummary(summaryPayload);
-    setLatestSentinel(latestPayload);
-    setHistory(normalizeList(historyPayload));
-    setTrends(normalizeList(trendsPayload));
+    setMetricContent(await getMetricContent(farmPayload?.crop_code || "").catch(() => []));
     setGridCells(normalizeList(gridCellsPayload));
     setGridValues(normalizeList(gridValuesPayload));
+    setGridCalculations(normalizeList(gridCalculationsPayload));
+    setFarmCalculations(normalizeList(farmCalculationsPayload));
     setH3Cells(normalizeList(h3Payload));
   }
 
@@ -200,6 +192,48 @@ export default function LandIntelligence() {
     };
   }, [farmId]);
 
+  // Registration queues the same canonical workflow before navigating here.
+  // Pick that job up on first load so the page does not require a second manual
+  // click to show progress or refresh the intelligence result.
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+    const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+
+    async function pollAnalysis() {
+      const status = await getLatestAnalysisStatus(farmId).catch(() => null);
+      if (cancelled || !status) return;
+
+      const progress = analysisProgress(status);
+      updatePipelineStage(progress.step, progress.label, progress.details);
+
+      if (terminalStatuses.has(status.status)) {
+        setRefreshing(false);
+        // A saved terminal result must not reopen a modal when the farmer
+        // merely views the farm. The loader is reserved for an active job or
+        // an analysis explicitly started from this page.
+        setPipelineFailure("");
+        setPipelineWarning("");
+        setPipelineOpen(false);
+        await loadLandIntelligence().catch(() => null);
+        return;
+      }
+
+      if (status.status === "running" || status.status === "queued") {
+        setRefreshing(true);
+        setPipelineOpen(true);
+        setPipelineStatus(`Analysis ${status.status}`);
+        timer = window.setTimeout(pollAnalysis, 2000);
+      }
+    }
+
+    pollAnalysis();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [farmId]);
+
   useEffect(() => {
     let cancelled = false;
     async function loadDetails() {
@@ -207,8 +241,13 @@ export default function LandIntelligence() {
         setSelectedDetails(null);
         return;
       }
-      const details = await getFarmGridCellDetails(farmId, selectedCell.grid_cell_id).catch(() => null);
-      if (!cancelled) setSelectedDetails(details);
+      const [details, calculations] = await Promise.all([
+        getFarmGridCellDetails(farmId, selectedCell.grid_cell_id).catch(() => null),
+        getGridCellCalculations(farmId, selectedCell.grid_cell_id).catch(() => []),
+      ]);
+      if (!cancelled) {
+        setSelectedDetails(details ? { ...details, calculated_metrics: calculations } : { calculated_metrics: calculations });
+      }
     }
     loadDetails();
     return () => {
@@ -216,34 +255,39 @@ export default function LandIntelligence() {
     };
   }, [farmId, selectedCell?.grid_cell_id]);
 
+  const farmCalculationList = useMemo(
+    () => (Array.isArray(farmCalculations) ? farmCalculations : []),
+    [farmCalculations],
+  );
+
   const mergedGridCells = useMemo(() => {
-    const byId = new Map(gridValues.map((value) => [String(value.grid_cell_id), value]));
+    const valuesById = new Map(
+      (Array.isArray(gridValues) ? gridValues : []).map((value) => [String(value.grid_cell_id), value]),
+    );
+    const calcById = new Map(
+      (Array.isArray(gridCalculations) ? gridCalculations : []).map((value) => [String(value.grid_cell_id), value]),
+    );
     return gridCells.map((cell) => ({
       ...cell,
-      ...(byId.get(String(cell.grid_cell_id)) || {}),
+      ...(valuesById.get(String(cell.grid_cell_id)) || {}),
+      ...(calcById.get(String(cell.grid_cell_id)) || {}),
     }));
-  }, [gridCells, gridValues]);
+  }, [gridCells, gridValues, gridCalculations]);
 
-  const displayCells = mergedGridCells.length ? mergedGridCells : gridValues;
+  // Grid geometry is always shown; calculated scores and raw sensor values are
+  // merged in when those endpoints have produced data for the cell.
+  const displayCells = mergedGridCells;
   const displaySelected = selectedDetails?.grid_cell || selectedCell || null;
-  const latestSummary = summary || {};
   const h3Enabled = showH3 && canViewTechnicalH3Layer(user);
-  const latestSceneDate = latestSentinel?.scene_datetime || latestSentinel?.observation_date || latestSummary.latest_snapshot_date;
-  const latestSceneId = latestSentinel?.scene_id || latestSummary.latest_scene_id;
-  const hasAnalysis = Boolean(latestSummary.has_analysis || latestSummary.latest_snapshot_date || latestSentinel?.scene_id);
-  const stats = [
-    { label: "Farm area", value: farm?.area_acres ? pretty(farm.area_acres, 2) : "â€”", unit: "ac" },
-    { label: "Grid cells", value: displayCells.length || "â€”", unit: "" },
-    { label: "H3 cells", value: summary?.total_farm_h3_cells ?? farm?.h3_cell_count ?? h3Cells.length ?? "â€”", unit: "" },
-    { label: "Latest scene", value: latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet", unit: "" },
-    { label: "Cloud cover", value: latestSentinel?.cloud_percentage ?? latestSummary.avg_cloud_percentage ?? "â€”", unit: "%" },
-    { label: "Valid pixels", value: latestSummary.valid_pixel_percentage ?? latestSentinel?.valid_pixels_pct ?? "â€”", unit: "%" },
-  ];
+  const latestSceneDate = farmCalculationList[0]?.result_date || farm?.updated_at;
+  const hasAnalysis = Boolean(farmCalculationList.length || gridCalculations.length || gridValues.length);
+  const selectedParameterInfo = PARAMETERS.find((item) => item.key === selectedParameter);
 
   async function runLatestAnalysis() {
     setRefreshing(true);
     setPipelineOpen(true);
     setPipelineFailure("");
+    setPipelineWarning("");
     setPipelineDetails([]);
     try {
       updatePipelineStage(0, "Repairing farm metadata", [
@@ -251,33 +295,45 @@ export default function LandIntelligence() {
       ]);
 
       const payload = {
-        start_date: "2025-12-01",
-        end_date: "2025-12-31",
-        max_cloud_cover: 30,
-        h3_resolution: 12,
+        start_date: (() => {
+          const value = new Date();
+          value.setDate(value.getDate() - 365);
+          return value.toISOString().slice(0, 10);
+        })(),
+        end_date: new Date().toISOString().slice(0, 10),
+        max_cloud_cover: 40,
         provider: "planetary_computer",
         collection_id: "sentinel-2-l2a",
-        use_tiny_preview_bbox: true,
-        tiny_bbox_size_deg: 0.0002,
       };
 
-      const refresh = await fullRefreshFarm(farmId, payload);
-      const stages = Array.isArray(refresh?.stages) ? refresh.stages : [];
-      stages.forEach((stage, index) => {
-        updatePipelineStage(index, stage.name || `Stage ${index + 1}`, [
-          `Status: ${stage.status}`,
-          ...(stage.details ? [JSON.stringify(stage.details)] : []),
-          ...(stage.message ? [stage.message] : []),
-        ]);
-      });
+      const queued = await triggerLatestAnalysis(farmId, payload);
+      const terminalStatuses = new Set(["completed", "completed_with_warnings", "failed"]);
+      let status = queued;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        status = await getLatestAnalysisStatus(farmId);
+        const progress = analysisProgress(status);
+        updatePipelineStage(progress.step, progress.label, progress.details);
+        if (terminalStatuses.has(status?.status)) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
 
-      if (refresh?.status !== "succeeded") {
-        setPipelineFailure(`Pipeline completed with status: ${refresh?.status}`);
+      if (status?.status === "failed") {
+        setPipelineWarning("");
+        setPipelineFailure(status.error_message || "The farm analysis pipeline failed.");
         setPipelineOpen(true);
-        setPipelineStatus("Pipeline partial");
-      } else {
+        setPipelineStatus("Pipeline failed");
+      } else if (status?.status === "completed_with_warnings") {
+        setPipelineFailure("");
+        setPipelineWarning("Analysis completed with source-data warnings. See stage details.");
+        setPipelineOpen(true);
+        setPipelineStatus("Analysis completed with warnings");
+      } else if (status?.status === "completed") {
         setPipelineStatus("Analysis complete");
         setPipelineOpen(false);
+      } else {
+        setPipelineFailure("Analysis is still running. Reopen this farm to check its status.");
+        setPipelineOpen(true);
+        setPipelineStatus("Analysis still running");
       }
 
       try {
@@ -289,6 +345,7 @@ export default function LandIntelligence() {
     } catch (err) {
       const message = err?.payload?.detail?.message || err?.message || "Analysis failed.";
       setPipelineFailure(message);
+      setPipelineWarning("");
       setPipelineOpen(true);
       setPipelineStage(PIPELINE_STEPS.length - 1);
       setPipelineStatus("Pipeline failed");
@@ -297,17 +354,116 @@ export default function LandIntelligence() {
     }
   }
 
+  // ---- derived, presentation-only ------------------------------------------
+  const locationLine = [farm?.village_name, farm?.block_name, farm?.district_name].filter(Boolean).join(", ") || "Location pending";
+  const selectedIndex = displaySelected
+    ? displayCells.findIndex((cell) => String(cell.grid_cell_id) === String(displaySelected.grid_cell_id))
+    : -1;
+
+  const selectedCalculatedReadings = CALCULATED_METRICS.map((metric) => {
+    const detailRow = (selectedDetails?.calculated_metrics || []).find((row) => row.prediction_key === metric.key);
+    const gridRow = displaySelected?.calculations?.[metric.key];
+    const row = detailRow || gridRow;
+    return {
+      metric,
+      row,
+      result: interpretCalculatedMetric(metric.key, row?.score, metricContent),
+    };
+  });
+  const farmCalculatedReadings = CALCULATED_METRICS.map((metric) => {
+    const row = farmCalculationList.find((item) => item.prediction_key === metric.key);
+    return { metric, row, result: interpretCalculatedMetric(metric.key, row?.score, metricContent) };
+  });
+  const calculatedReadingsForInterpretation = displaySelected ? selectedCalculatedReadings : farmCalculatedReadings;
+  const signalReadings = calculatedReadingsForInterpretation.map(({ metric, result }) => ({ metric, result }));
+  const calculatedFieldInterpretationText = buildCalculatedFieldInterpretation(calculatedReadingsForInterpretation, {
+    cropName: farm?.crop_name || farm?.crop_code || "Your crop",
+    contentOverrides: { fieldInterpretation: metricContent.find((item) => item.metric_key === "crop_condition")?.field_interpretation || {} },
+  });
+  const calculatedLegend = [
+    { label: "Good", color: "#16a34a" },
+    { label: "Watch", color: "#84cc16" },
+    { label: "Attention", color: "#eab308" },
+    { label: "High", color: "#f97316" },
+    { label: "Critical", color: "#dc2626" },
+  ];
+
+  // Shared body of the selected-cell / farm-summary panel (desktop aside + mobile sheet).
+  const panelBody = () => (
+    <>
+      <div className="text-[10.5px] font-extrabold uppercase tracking-[0.08em] text-[var(--mt-leaf-deep)]">
+        {displaySelected ? "Selected land cell" : "Calculated crop intelligence"}
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <div className="text-[18px] font-extrabold text-[var(--mt-ink)]">
+          {displaySelected
+            ? (selectedIndex >= 0 ? `Cell ${selectedIndex + 1} of ${displayCells.length}` : "This cell")
+            : "Whole farm"}
+        </div>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--mt-leaf-deep)] text-white">
+          <Activity className="h-4 w-4" strokeWidth={2.2} />
+        </span>
+      </div>
+      {displaySelected && (
+        <button
+          type="button"
+          onClick={() => setSelectedCell(null)}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--mt-leaf-deep)]"
+        >
+          <ChevronRight className="h-3.5 w-3.5 rotate-180" strokeWidth={2.6} />
+          Show whole farm
+        </button>
+      )}
+
+      {calculatedReadingsForInterpretation.length > 0 && (
+        <div className="mt-4 rounded-[var(--mt-radius-md)] border border-emerald-100 bg-emerald-50/40 p-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-800">
+            Calculated crop intelligence
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {calculatedReadingsForInterpretation.map(({ metric, result }) => (
+              <div key={metric.key} className="rounded-xl border border-emerald-100 bg-white p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${result.className}`}>{result.label}</span>
+                </div>
+                <div className={`mt-1 text-[10px] font-bold ${result.textClass}`}>{result.headline}</div>
+                <div className="mt-1 text-[10px] leading-snug text-slate-500">{result.paragraph || result.signalMeaning}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-[var(--mt-radius-md)] bg-[var(--mt-leaf-tint)] p-4">
+        <div className="flex items-center gap-2 text-[12.5px] font-extrabold text-[var(--mt-leaf-deep)]">
+          <Sparkles className="h-4 w-4" strokeWidth={2.2} />
+          Field interpretation
+        </div>
+        <p className="mt-1.5 text-[12.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">{calculatedFieldInterpretationText}</p>
+      </div>
+
+      {!hasAnalysis && (
+        <div className="mt-3 rounded-[12px] bg-[var(--mt-gold-tint)] p-3 text-[12px] font-semibold text-[var(--mt-gold-text)]">
+          This field has not been checked yet. Tap &ldquo;Check Again&rdquo; to run the first check.
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-      <PipelineGlassLoader
+    <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-surface">
+      <HexagonPipelineLoader
         open={pipelineOpen}
         title="Land analysis pipeline"
+        steps={PIPELINE_STEPS}
         currentStep={pipelineStage}
         status={pipelineStatus}
         details={pipelineDetails}
         failure={pipelineFailure}
+        warning={pipelineWarning}
         actions={
-          pipelineFailure
+          pipelineFailure || pipelineWarning
             ? [
                 {
                   label: "Retry Analysis",
@@ -326,213 +482,263 @@ export default function LandIntelligence() {
         }
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-emerald-600">Land Intelligence</p>
-          <h1 className="mt-1 text-2xl font-black text-gray-900">
-            {farm?.farm_name || "Farm"}
-            {farm?.survey_number ? ` Â· ${farm.survey_number}` : ""}
-          </h1>
-          <p className="text-sm text-gray-500">
-            {farm?.village_name || "Village"}, {farm?.block_name || "Block"}, {farm?.district_name || "District"}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene date: {latestSceneDate ? formatDate(latestSceneDate) : "No scene processed yet"}</span>
-            <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600">Scene ID: {latestSceneId || "No scene processed yet"}</span>
+      {/* ── page header ─────────────────────────────────────────────────── */}
+      <header className="sticky top-16 z-20 flex items-center gap-3 border-b border-[var(--mt-line)] bg-white/95 px-4 py-3 backdrop-blur-md md:px-6">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex h-11 items-center gap-1.5 rounded-full bg-[var(--mt-paper-warm)] px-3 text-[13px] font-bold text-[var(--mt-ink)]"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={2.4} />
+          Back
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[16px] font-extrabold text-[var(--mt-ink)]">{farm?.farm_name || "Your farm"}</div>
+          <div className="truncate text-[12px] font-semibold text-[var(--mt-ink-soft)]">{locationLine}</div>
+        </div>
+        <span className="inline-block max-w-[120px] truncate rounded-full border border-[var(--mt-leaf)]/30 bg-[var(--mt-leaf-tint)] px-2.5 py-1.5 text-[11px] font-extrabold text-[var(--mt-leaf-deep)] sm:max-w-[180px] sm:px-3 sm:text-[12px]">
+          {farm?.crop_name || farm?.crop_code || "Crop not configured"}
+        </span>
+        <button
+          type="button"
+          onClick={runLatestAnalysis}
+          disabled={refreshing}
+          className="flex h-11 items-center gap-2 rounded-full bg-[var(--mt-leaf)] px-4 text-[13px] font-bold text-white disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} strokeWidth={2.4} />
+          <span className="hidden sm:inline">Check Again</span>
+        </button>
+      </header>
+
+      <div className="mx-auto max-w-[1320px] space-y-4 p-4 md:p-6">
+
+        {loading && (
+          <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
+            Checking your field…
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {canViewTechnicalH3Layer(user) && (
-            <Button variant="outline" className="rounded-xl" onClick={() => setShowH3((v) => !v)}>
-              <Hexagon className="mr-1 h-4 w-4" />
-              {showH3 ? "Hide H3" : "Show H3"}
-            </Button>
-          )}
-          <Button onClick={runLatestAnalysis} disabled={refreshing} className="rounded-xl bg-emerald-600 text-white">
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            Run Latest Analysis
-          </Button>
-        </div>
-      </div>
+        )}
+        {error && (
+          <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-clay)]/30 bg-[var(--mt-clay-tint)] p-4 text-sm font-semibold text-[var(--mt-clay-text)]">
+            {error}
+          </div>
+        )}
 
-      {loading && <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">Loading land intelligence...</div>}
-      {error && <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
-
-      <StatStrip items={stats.map((item) => ({ ...item, icon: item.label === "Cloud cover" ? Cloud : item.label === "Valid pixels" ? Waves : item.label === "Farm area" ? Mountain : item.label === "H3 cells" ? Hexagon : item.label === "Latest scene" ? RefreshCw : Leaf }))} />
-
-      <PipelineStepper steps={["Location", "Farmer", "Boundary", "Grid", "Satellite", "Raster", "Intelligence"]} currentStep={7} />
-
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-              <div className="flex flex-wrap gap-2">
-                {PARAMETERS.map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setSelectedParameter(item.key)}
-                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${selectedParameter === item.key ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+        {/* ── hero ─────────────────────────────────────────────────────── */}
+        <Reveal>
+          <section
+            className="relative overflow-hidden rounded-[var(--mt-radius-lg)] p-5 md:p-7"
+            style={{ background: "linear-gradient(135deg,#EAF3DD,#DCEDCB)" }}
+          >
+            <div className="relative z-10">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 text-[11.5px] font-extrabold text-[var(--mt-leaf-deep)]">
+                <MapPin className="h-3.5 w-3.5" strokeWidth={2.4} />
+                Field Check
+              </span>
+              <h1 className="mt-3 text-[24px] font-extrabold text-[var(--mt-ink)] md:text-[27px]">{farm?.farm_name || "Your farm"}</h1>
+              <div className="mt-1 flex items-center gap-1.5 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]">
+                <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
+                <span className="truncate">{locationLine}</span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Visual grid default</span>
-                <span className={`rounded-full px-3 py-1 font-semibold ${h3Enabled ? "bg-violet-50 text-violet-700" : "bg-gray-100 text-gray-500"}`}>
-                  {h3Enabled ? "H3 technical layer on" : "H3 technical layer off"}
+              <div className="mt-3.5 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-[var(--mt-ink)]">
+                  <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  {latestSceneDate ? `Checked ${formatDate(latestSceneDate)}` : "Not checked yet"}
                 </span>
               </div>
             </div>
-            <div className="p-4">
+            <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-90" viewBox="0 0 1000 70" preserveAspectRatio="none" aria-hidden>
+              <path d="M0 70V35 Q150 12 350 30 T700 20 T1000 35V70Z" fill="#CFE3B8" />
+              <path d="M0 70V50 Q250 35 500 50 T1000 46V70Z" fill="#B7D89D" />
+            </svg>
+          </section>
+        </Reveal>
+
+        {/* ── priority banner ──────────────────────────────────────────── */}
+        <Reveal delay={0.08}>
+          <section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Calculated crop intelligence</p>
+                <h2 className="mt-1 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
+                  {farm?.crop_name || farm?.crop_code || "Configured crop"}
+                </h2>
+              </div>
+              {latestSceneDate && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold text-emerald-700">Latest {formatDate(latestSceneDate)}</span>}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {farmCalculatedReadings.map(({ metric, result }) => {
+                const Icon = CALCULATED_METRIC_ICONS[metric.key] || Activity;
+                return (
+                  <button
+                    key={metric.key}
+                    type="button"
+                    onClick={() => setSelectedParameter(metric.key)}
+                    className={`min-h-[132px] rounded-2xl border p-3 text-left transition ${result.surfaceClass} ${selectedParameter === metric.key ? "ring-2 ring-emerald-300" : "hover:brightness-95"}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/80">
+                        <Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</p>
+                        <StatusBadge result={result} short className="mt-1" />
+                      </div>
+                    </div>
+                    <p className={`mt-3 line-clamp-3 text-[11px] font-bold leading-snug ${result.textClass}`}>{result.paragraph || result.headline}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Field interpretation</p>
+              <p className="mt-1 text-[13px] font-semibold leading-relaxed text-slate-800">{calculatedFieldInterpretationText}</p>
+            </div>
+          </section>
+        </Reveal>
+
+        {/* ── crop-specific calculated intelligence ────────────────────── */}
+        {/* ── map + selected cell ──────────────────────────────────────── */}
+        <h2 className="flex items-center gap-2 pt-2 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
+          <Layers className="h-[18px] w-[18px]" strokeWidth={2.1} />
+          Land Health Map
+        </h2>
+
+        <div className="grid gap-4 xl:grid-cols-[1fr_380px] xl:items-start">
+          {/* map card */}
+          <Reveal className="overflow-hidden rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 md:px-5">
+              <p className="text-[12.5px] font-semibold text-[var(--mt-ink-soft)]">
+                Viewing: <b className="text-[var(--mt-ink)]">{selectedParameterInfo?.name || selectedParameter}</b>
+              </p>
+              {canViewTechnicalH3Layer(user) && (
+                <button
+                  type="button"
+                  onClick={() => setShowH3((value) => !value)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-bold ${
+                    h3Enabled ? "bg-[var(--mt-sky-tint)] text-[var(--mt-sky-text)]" : "bg-[var(--mt-paper-warm)] text-[var(--mt-ink-soft)]"
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  Detailed grid {h3Enabled ? "on" : "off"}
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-hide md:px-5">
+              {PARAMETERS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setSelectedParameter(item.key)}
+                  className={`shrink-0 rounded-[var(--mt-radius-sm)] border px-3.5 py-2 text-[12px] font-bold transition ${
+                    selectedParameter === item.key
+                      ? "border-[var(--mt-leaf-deep)] bg-[var(--mt-leaf-deep)] text-white"
+                      : "border-[var(--mt-line)] bg-white text-[var(--mt-ink)]"
+                  }`}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-3 pb-3 md:px-4">
               <LandGridMap
                 farm={farm}
                 gridCells={displayCells}
-                gridValues={gridValues}
                 h3Cells={h3Enabled ? h3Cells : []}
                 selectedParameter={selectedParameter}
                 onGridCellClick={setSelectedCell}
                 selectedGridCellId={displaySelected?.grid_cell_id}
                 showH3Layer={h3Enabled}
                 userRole={user?.role}
-                onGridCellHover={setSelectedCell}
               />
             </div>
-          </div>
 
-          <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <p className="text-sm font-bold text-gray-900">Grid Cells</p>
-              <p className="text-xs text-gray-500">{displayCells.length || 0} cells</p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--mt-line)] px-4 py-3.5 md:px-5">
+              {calculatedLegend.map((status) => (
+                <span key={status.label} className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--mt-ink)]">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color }} />
+                  {status.label}
+                </span>
+              ))}
             </div>
-            <div className="max-h-80 overflow-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-gray-50">
-                  <tr className="text-gray-500">
-                    <th className="px-3 py-2">Cell</th>
-                    <th className="px-3 py-2">NDVI</th>
-                    <th className="px-3 py-2">NDMI</th>
-                    <th className="px-3 py-2">BSI</th>
-                    <th className="px-3 py-2">Temp</th>
-                    <th className="px-3 py-2">Cloud</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayCells.map((cell, index) => (
-                    <tr key={cell.grid_cell_id || index} onClick={() => setSelectedCell(cell)} className={`cursor-pointer border-t border-gray-100 hover:bg-emerald-50 ${displaySelected?.grid_cell_id === cell.grid_cell_id ? "bg-emerald-50" : ""}`}>
-                      <td className="px-3 py-2 font-semibold">{String(index + 1).padStart(2, "0")}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "ndvi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "ndmi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "bsi"), 3)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "temperature"), 1)}</td>
-                      <td className="px-3 py-2">{pretty(valueFor(cell, "cloud"), 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          </Reveal>
+
+          {/* selected cell / farm summary — desktop aside */}
+          <Reveal delay={0.05} className="hidden rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-4 md:p-5 xl:sticky xl:top-32 xl:block">
+            {panelBody()}
+          </Reveal>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">{displaySelected ? "Grid cell details" : "Farm summary"}</p>
-            {displaySelected ? (
-              <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-400">Cell ID</span><span className="font-mono text-[11px]">{displaySelected.grid_cell_id}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Row / Col</span><span>{displaySelected.grid_row ?? "â€”"} / {displaySelected.grid_col ?? "â€”"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Coverage</span><span>{pretty(selectedDetails?.grid_cell?.coverage_ratio ?? displaySelected.coverage_ratio, 2)}</span></div>
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  {[
-                    ["NDVI", selectedDetails?.weighted_average?.ndvi ?? displaySelected.ndvi],
-                    ["NDMI", selectedDetails?.weighted_average?.ndmi ?? displaySelected.ndmi],
-                    ["NDWI", selectedDetails?.weighted_average?.ndwi ?? displaySelected.ndwi],
-                    ["EVI", selectedDetails?.weighted_average?.evi ?? displaySelected.evi],
-                    ["SAVI", selectedDetails?.weighted_average?.savi ?? displaySelected.savi],
-                    ["MSI", selectedDetails?.weighted_average?.msi ?? displaySelected.msi],
-                    ["NBR", selectedDetails?.weighted_average?.nbr ?? displaySelected.nbr],
-                    ["NDRE", selectedDetails?.weighted_average?.ndre ?? displaySelected.ndre],
-                    ["BSI", selectedDetails?.weighted_average?.bsi ?? displaySelected.bsi],
-                    ["Temp", selectedDetails?.weighted_average?.surface_temp_c ?? displaySelected.surface_temp_c],
-                    ["Cloud", selectedDetails?.weighted_average?.cloud_percentage ?? displaySelected.cloud_percentage],
-                    ["Valid", selectedDetails?.weighted_average?.valid_pixel_percentage ?? displaySelected.valid_pixel_percentage],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-2xl border border-gray-100 bg-gray-50 p-2">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</div>
-                      <div className={`text-sm font-semibold ${tone(value, label.toLowerCase())}`}>{pretty(value, 3)}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">{recommendationFor(selectedDetails?.latest_values || displaySelected)}</div>
-                <div className="rounded-2xl border border-gray-100 bg-white p-3">
-                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">H3 contributions</div>
-                  <div className="space-y-2">
-                    {(selectedDetails?.h3_contributions || []).slice(0, 6).map((row) => (
-                      <div key={row.h3_index} className="rounded-xl border border-gray-100 p-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono">{String(row.h3_index)}</span>
-                          <span className="font-semibold">{row.overlap_percentage}%</span>
-                        </div>
-                        <div className="mt-1 text-gray-500">NDVI {pretty(row.ndvi, 3)} Â· NDMI {pretty(row.ndmi, 3)} Â· BSI {pretty(row.bsi, 3)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <div><span className="block text-gray-400">Weighted NDVI</span><span className={`font-semibold ${tone(latestSummary.weighted_ndvi ?? latestSummary.avg_ndvi, "ndvi")}`}>{pretty(latestSummary.weighted_ndvi ?? latestSummary.avg_ndvi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDMI</span><span className={`font-semibold ${tone(latestSummary.weighted_ndmi ?? latestSummary.avg_ndmi, "ndmi")}`}>{pretty(latestSummary.weighted_ndmi ?? latestSummary.avg_ndmi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDWI</span><span className="font-semibold">{pretty(latestSummary.weighted_ndwi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted BSI</span><span className={`font-semibold ${tone(latestSummary.weighted_bsi ?? latestSummary.avg_bsi, "bsi")}`}>{pretty(latestSummary.weighted_bsi ?? latestSummary.avg_bsi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted EVI</span><span className="font-semibold">{pretty(latestSummary.weighted_evi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted SAVI</span><span className="font-semibold">{pretty(latestSummary.weighted_savi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted MSI</span><span className="font-semibold">{pretty(latestSummary.weighted_msi, 3)}</span></div>
-                <div><span className="block text-gray-400">Weighted NDRE</span><span className="font-semibold">{pretty(latestSummary.weighted_ndre, 3)}</span></div>
-                <div><span className="block text-gray-400">Cloud</span><span className="font-semibold">{pretty(latestSummary.avg_cloud_percentage, 0)}</span></div>
-                <div><span className="block text-gray-400">Valid pixels</span><span className="font-semibold">{pretty(latestSummary.valid_pixel_percentage, 0)}</span></div>
-                <div><span className="block text-gray-400">Farm H3 cells</span><span className="font-semibold">{latestSummary.total_farm_h3_cells ?? latestSummary.total_h3_cells ?? h3Cells.length ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Processed H3 cells</span><span className="font-semibold">{latestSummary.processed_h3_cells ?? latestSummary.latest_processed_h3_cells ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Grid cells</span><span className="font-semibold">{latestSummary.total_grid_cells ?? displayCells.length ?? "â€”"}</span></div>
-                <div><span className="block text-gray-400">Grid cells with values</span><span className="font-semibold">{latestSummary.grid_cells_with_values ?? displayCells.length ?? "â€”"}</span></div>
-                <div className="col-span-2 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">Vegetation: {pickTrend(latestSummary, trends, "vegetation_trend")} Â· Moisture: {pickTrend(latestSummary, trends, "moisture_trend")} Â· Soil: {pickTrend(latestSummary, trends, "soil_exposure_trend")}</div>
-                {!hasAnalysis && (
-                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    Analysis not yet computed for this farm. Click Run Latest Analysis.
-                  </div>
-                )}
-                {Number(latestSummary.total_grid_cells || displayCells.length || 0) > 0 && Number(latestSummary.grid_cells_with_values || 0) === 0 && (
-                  <div className="col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    Grid geometry exists, but weighted satellite values are not computed yet.
-                  </div>
-                )}
-                {!latestSummary.latest_snapshot_date && (
-                  <div className="col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                    No scene processed yet.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        {/* mobile — farm summary stays inline; a picked cell opens as a sheet */}
+        {!displaySelected && (
+          <Reveal delay={0.05} className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-4 xl:hidden">
+            {panelBody()}
+          </Reveal>
+        )}
 
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Trend summary</p>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-400">Vegetation</span><span className="font-semibold">{pickTrend(latestSummary, trends, "vegetation_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Moisture</span><span className="font-semibold">{pickTrend(latestSummary, trends, "moisture_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Soil</span><span className="font-semibold">{pickTrend(latestSummary, trends, "soil_exposure_trend")}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">History points</span><span className="font-semibold">{history.length || "â€”"}</span></div>
+        <AnimatePresence>
+          {displaySelected && (
+            <div className="fixed inset-0 z-[60] flex items-end xl:hidden">
+              <Motion.div
+                className="absolute inset-0 bg-black/40"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedCell(null)}
+              />
+              <Motion.div
+                className="relative max-h-[86vh] w-full overflow-y-auto rounded-t-[24px] bg-white px-4 pb-10 pt-3"
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", stiffness: 320, damping: 34 }}
+              >
+                <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-[var(--mt-line)]" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedCell(null)}
+                  className="mb-2 ml-auto flex h-10 items-center gap-1.5 rounded-full bg-[var(--mt-paper-warm)] px-3.5 text-[13px] font-bold text-[var(--mt-ink)]"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.4} />
+                  Close
+                </button>
+                {panelBody()}
+              </Motion.div>
             </div>
-            <div className="mt-4 text-xs text-gray-500">
-              {canViewTechnicalH3Layer(user) ? "H3 technical layer available through the toggle." : "Farmer view defaults to the square visual grid."}
-            </div>
-            <div className="mt-3">
-              <Link to={`/farmers/${farm?.farmer_id || ""}`} className="text-xs font-semibold text-emerald-700 hover:underline">Open farmer profile</Link>
-            </div>
-          </div>
+          )}
+        </AnimatePresence>
+
+        {/* ── every signal explained (follows the picked cell) ─────────── */}
+        <div className="pt-2">
+          <h2 className="flex items-center gap-2 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
+            <Sparkles className="h-[18px] w-[18px]" strokeWidth={2.1} />
+            Every Signal, Explained
+          </h2>
+          <p className="mt-1 text-[12.5px] font-semibold text-[var(--mt-ink-soft)]">
+            {displaySelected ? "For the cell you picked on the map" : "Across the whole farm"}
+          </p>
         </div>
+        {calculatedReadingsForInterpretation.length > 0 && (
+          <div className="mb-3 overflow-hidden rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white">
+            {signalReadings.map(({ metric, result }) => {
+              const Icon = CALCULATED_METRIC_ICONS[metric.key] || Activity;
+              return (
+                <div key={metric.key} className="flex flex-col gap-3 border-b border-[var(--mt-line)] p-4 last:border-b-0 md:flex-row md:items-start md:gap-5 md:px-5" style={{ borderLeft: `4px solid ${result.color}` }}>
+                  <div className="flex items-center gap-3 md:w-[240px] md:shrink-0">
+                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[11px] ${result.className}`}><Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} /></span>
+                    <div className="min-w-0"><div className="text-[14px] font-extrabold text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</div><StatusBadge result={result} className="mt-1" /></div>
+                  </div>
+                  <div className="text-[13.5px] font-semibold leading-relaxed text-[var(--mt-ink)]">
+                    <p>{result.signalMeaning}</p>
+                    <p className="mt-1 text-[12px] font-bold" style={{ color: result.color }}>{result.headline || result.paragraph}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }
-

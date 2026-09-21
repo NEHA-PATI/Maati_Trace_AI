@@ -24,7 +24,6 @@ import {
 import { farmerProfileSchema } from "@/features/profile/profileSchemas";
 import { useProfileLocations } from "@/features/profile/hooks/useProfileLocations";
 import { ProfileControls } from "@/features/profile/components/ProfileControls";
-import { ProfilePlansSection } from "@/features/profile/components/ProfilePlansSection";
 import {
   ProfileCheckbox,
   ProfileGrid,
@@ -481,7 +480,7 @@ export function FarmerProfileForm({
         icon={Wheat}
       >
         <ProfileGrid>
-          <ProfileInput
+          <ProfileSelect
             label="Farmer type"
             error={
               errors.farmer_type
@@ -489,7 +488,26 @@ export function FarmerProfileForm({
             {...register(
               "farmer_type",
             )}
-          />
+          >
+            <option value="">
+              Select later
+            </option>
+            <option value="smallholder">
+              Smallholder
+            </option>
+            <option value="marginal">
+              Marginal
+            </option>
+            <option value="large_scale">
+              Large scale
+            </option>
+            <option value="tenant">
+              Tenant
+            </option>
+            <option value="landowner">
+              Landowner
+            </option>
+          </ProfileSelect>
           <ProfileInput
             type="number"
             step="0.01"
@@ -523,7 +541,7 @@ export function FarmerProfileForm({
               "primary_crop",
             )}
           />
-          <ProfileInput
+          <ProfileSelect
             label="Irrigation status"
             error={
               errors.irrigation_status
@@ -531,7 +549,20 @@ export function FarmerProfileForm({
             {...register(
               "irrigation_status",
             )}
-          />
+          >
+            <option value="">
+              Select later
+            </option>
+            <option value="irrigated">
+              Irrigated
+            </option>
+            <option value="rainfed">
+              Rainfed
+            </option>
+            <option value="partially_irrigated">
+              Partially irrigated
+            </option>
+          </ProfileSelect>
         </ProfileGrid>
       </ProfileSection>
 
@@ -586,8 +617,6 @@ export function FarmerProfileForm({
           />
         </div>
       </ProfileSection>
-
-      <ProfilePlansSection />
 
       <ProfileSection
         id="export"

@@ -1,4 +1,6 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
+
+import ScrollToTop from "@/components/ScrollToTop";
 
 import ProtectedRoute from "@/features/auth/components/ProtectedRoute";
 import AcceptInvitationPage from "@/features/auth/pages/AcceptInvitationPage";
@@ -8,10 +10,23 @@ import RegisterPage from "@/features/auth/pages/RegisterPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import FpoAccessRequestPage from "@/features/fpo-access/pages/FpoAccessRequestPage";
 import FpoAccessAdminPage from "@/features/fpo-access/pages/FpoAccessAdminPage";
+import {
+  CropLanguagePage,
+  CropStagePage,
+  MyCropsPage,
+  ObservationHistoryPage,
+} from "@/features/crop-observation";
+import {
+  CropObservationAdminHubPage,
+  CropConfigurationEditorPage,
+  CropConfigurationPage,
+  CropObservationRecordsPage,
+} from "@/features/crop-observation-admin";
 import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
 
 import AdminDashboard from "@/pages/AdminDashboard";
+import SystemManagementPage from "@/pages/SystemManagementPage";
 import BulkUpload from "@/pages/BulkUpload";
 import FarmRegister from "@/pages/FarmRegister";
 import FarmerProfile from "@/pages/FarmerProfile";
@@ -23,7 +38,17 @@ import Notifications from "@/pages/Notifications";
 import OurMethod from "@/pages/OurMethod";
 import UseCases from "@/pages/UseCases";
 
+function RouteLayout() {
+  return (
+    <>
+      <ScrollToTop />
+      <Outlet />
+    </>
+  );
+}
+
 export const router = createBrowserRouter([
+  { element: <RouteLayout />, children: [
   { path: "/", element: <Home /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
@@ -38,7 +63,19 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="adminDashboard" />, children: [
     { path: "/admin", element: <AdminDashboard /> },
     { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
+    { path: "/admin/system", element: <SystemManagementPage /> },
+    { path: "/admin/feature-processing", element: <SystemManagementPage /> },
   ] },
+  {
+    element: <ProtectedRoute permission="cropObservationAdmin" />,
+    children: [
+      { path: "/admin/crop-observation", element: <CropObservationAdminHubPage /> },
+      { path: "/admin/crop-observation/config/:cropCode", element: <CropConfigurationEditorPage /> },
+      { path: "/admin/crop-observations", element: <CropObservationRecordsPage /> },
+      { path: "/admin/crop-observations/config", element: <CropConfigurationPage /> },
+      { path: "/admin/crop-observations/config/:cropCode", element: <CropConfigurationEditorPage /> },
+    ],
+  },
   { element: <ProtectedRoute permission="fpoDashboard" />, children: [{ path: "/fpo/me", element: <FpoDashboard /> }] },
   { element: <ProtectedRoute permission="myFpo" />, children: [{ path: "/my-fpo", element: <MyFpo /> }] },
   {
@@ -49,9 +86,24 @@ export const router = createBrowserRouter([
     ],
   },
   { element: <ProtectedRoute permission="landIntelligence" />, children: [{ path: "/land/:farmId", element: <LandIntelligence /> }] },
+  {
+    element: <ProtectedRoute permission="cropDiary" />,
+    children: [
+      { path: "/my-crops/language", element: <CropLanguagePage /> },
+      { path: "/my-crops", element: <MyCropsPage /> },
+      { path: "/my-crops/:farmId/:cropCycleId/history", element: <ObservationHistoryPage /> },
+      { path: "/my-crops/:farmId/:cropCycleId/:stageCode", element: <CropStagePage /> },
+    ],
+  },
   { element: <ProtectedRoute permission="farmRegister" />, children: [{ path: "/farm-register", element: <FarmRegister /> }] },
   { element: <ProtectedRoute permission="bulkUpload" />, children: [{ path: "/bulk-upload", element: <BulkUpload /> }] },
   { element: <ProtectedRoute permission="notifications" />, children: [{ path: "/notifications", element: <Notifications /> }] },
   { element: <ProtectedRoute permission="settings" />, children: [{ path: "/settings", element: <ProfileSettingsPage /> }] },
   { path: "*", element: <Navigate to="/" replace /> },
-]);
+  ] },
+], {
+  future: {
+    v7_relativeSplatPath: true,
+    v7_startTransition: true,
+  },
+});

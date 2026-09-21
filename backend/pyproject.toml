@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests", "services"]
 pythonpath = ["."]
+addopts = "--import-mode=importlib"
 
 [tool.ruff]
 line-length = 100

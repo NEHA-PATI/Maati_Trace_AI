@@ -313,22 +313,28 @@ def update_user_profile_projection(
     *,
     user_id: UUID | str,
     full_name: str,
-    phone_number: str | None,
+    phone_number: str | None = None,
     profile_image_url: str | None,
     onboarding_status: str,
+    sync_phone_number: bool = True,
 ) -> None:
+    phone_number_clause = (
+        "phone_number = :phone_number,"
+        if sync_phone_number
+        else ""
+    )
     conn.execute(
         text(
             """
             UPDATE users
             SET
                 full_name = :full_name,
-                phone_number = :phone_number,
+                {phone_number_clause}
                 profile_image_url = :profile_image_url,
                 onboarding_status = :onboarding_status,
                 updated_at = now()
             WHERE user_id = :user_id;
-            """
+            """.format(phone_number_clause=phone_number_clause)
         ),
         {
             "user_id": str(user_id),
@@ -410,6 +416,29 @@ def get_fpo_by_id(
     ).mappings().first()
 
     return _dict(row)
+
+
+def list_fpos(
+    conn: Connection,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        text(
+            f"""
+            SELECT {FPO_SELECT}
+            FROM fpos f
+            WHERE f.is_active = TRUE
+            ORDER BY f.created_at DESC, f.fpo_id
+            LIMIT :limit
+            OFFSET :offset;
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
 
 
 def create_fpo_with_membership(

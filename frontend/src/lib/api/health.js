@@ -12,6 +12,7 @@ export const getServiceHealth = () => ({
   lakehouse: gatewayClient.request(`${HEALTH_ROUTE}/lakehouse/live`),
   orchestrator: gatewayClient.request(`${HEALTH_ROUTE}/orchestrator/live`),
   analytics: gatewayClient.request(`${HEALTH_ROUTE}/analytics/live`),
+  observability: gatewayClient.request(`${HEALTH_ROUTE}/observability/live`),
 });
 
 export async function getAllServiceHealth() {

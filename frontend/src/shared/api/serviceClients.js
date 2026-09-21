@@ -57,8 +57,14 @@ export const hotStreamClient =
 export const analyticsClient =
   createServiceClient("analytics");
 
+export const observabilityClient =
+  createServiceClient("observability");
+
 export const gatewayClient =
   createServiceClient("gateway");
+
+export const cropObservationClient =
+  createServiceClient("cropObservations");
 
 export function getSession() {
   return getSessionSnapshot();

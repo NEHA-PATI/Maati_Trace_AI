@@ -1,23 +1,39 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from shared.config.settings import settings
-from shared.logging.json_logging import configure_json_logging
 from services.api_gateway_service.app.proxy import (
+    UPSTREAM_CLIENT_STATE_KEY,
     GatewayProxyError,
+    create_upstream_client,
     get_route_targets,
     proxy_health_request,
     proxy_request,
 )
 from services.api_gateway_service.app.schemas import HealthResponse
+from shared.config.settings import settings
+from shared.logging.json_logging import configure_json_logging
 
 SERVICE_NAME = "api_gateway_service"
 
 configure_json_logging(SERVICE_NAME)
 
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    client = create_upstream_client()
+    setattr(application.state, UPSTREAM_CLIENT_STATE_KEY, client)
+    try:
+        yield
+    finally:
+        await client.aclose()
+
+
 app = FastAPI(
     title="MaatiTrace API Gateway Service",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

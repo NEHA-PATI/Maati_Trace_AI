@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d1fae5"/>
+      <stop offset="1" stop-color="#a7f3d0"/>
+    </linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" rx="28" fill="url(#sky)"/>
+  <circle cx="186" cy="54" r="26" fill="#fbbf24"/>
+  <path d="M0 150 Q60 120 120 150 T240 150 V240 H0 Z" fill="url(#field)"/>
+  <g stroke="#065f46" stroke-width="4" stroke-linecap="round">
+    <path d="M60 190 V150"/>
+    <path d="M60 160 q-14 -10 -22 -26"/>
+    <path d="M60 160 q14 -10 22 -26"/>
+    <path d="M60 172 q-16 -6 -26 -18"/>
+    <path d="M60 172 q16 -6 26 -18"/>
+    <path d="M100 196 V148"/>
+    <path d="M100 158 q-14 -10 -22 -26"/>
+    <path d="M100 158 q14 -10 22 -26"/>
+    <path d="M100 170 q-16 -6 -26 -18"/>
+    <path d="M100 170 q16 -6 26 -18"/>
+    <path d="M142 192 V150"/>
+    <path d="M142 160 q-14 -10 -22 -26"/>
+    <path d="M142 160 q14 -10 22 -26"/>
+    <path d="M142 172 q-16 -6 -26 -18"/>
+    <path d="M142 172 q16 -6 26 -18"/>
+    <path d="M182 196 V152"/>
+    <path d="M182 162 q-14 -10 -22 -26"/>
+    <path d="M182 162 q14 -10 22 -26"/>
+  </g>
+</svg>

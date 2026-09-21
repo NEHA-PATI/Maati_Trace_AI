@@ -5,6 +5,7 @@ backend/.env
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.*.example
 
 # Virtual environments
 backend/.venv/
@@ -35,5 +36,12 @@ coverage.xml
 # Logs
 *.log
 *.md
-*.pdfbackend/services/*/.env
+*.pdf
+backend/services/*/.env
 frontend/.env.local
+
+# Crop observation service — farmer-uploaded media (local V1 storage).
+# storage/system/ (admin-curated crop/stage images + audio) is committed.
+backend/services/crop_observation_service/storage/farmer/
+
+*.parquet

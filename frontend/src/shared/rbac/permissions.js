@@ -27,6 +27,16 @@ export const ROUTE_RULES = Object.freeze({
     ROLES.FARMER,
   ],
 
+  cropDiary: [
+    ROLES.ADMIN,
+    ROLES.FPO,
+    ROLES.FARMER,
+  ],
+
+  cropObservationAdmin: [
+    ROLES.ADMIN,
+  ],
+
   landIntelligence: [
     ROLES.ADMIN,
     ROLES.FPO,
@@ -69,6 +79,9 @@ const PATH_PERMISSION_MAP = Object.freeze({
   "/admin/fpo-access":
     "fpoAccessAdministration",
 
+  "/admin/system": "adminDashboard",
+  "/admin/feature-processing": "adminDashboard",
+
   "/fpo/me": "fpoDashboard",
   "/fpo/:fpoId": "fpoDashboard",
 
@@ -78,6 +91,17 @@ const PATH_PERMISSION_MAP = Object.freeze({
   "/farmers/:farmerId": "farmerProfile",
 
   "/land/:farmId": "landIntelligence",
+
+  "/my-crops/language": "cropDiary",
+  "/my-crops": "cropDiary",
+  "/my-crops/:farmId/:cropCycleId/:stageCode": "cropDiary",
+  "/my-crops/:farmId/:cropCycleId/history": "cropDiary",
+
+  "/admin/crop-observation": "cropObservationAdmin",
+  "/admin/crop-observation/config/:cropCode": "cropObservationAdmin",
+  "/admin/crop-observations": "cropObservationAdmin",
+  "/admin/crop-observations/config": "cropObservationAdmin",
+  "/admin/crop-observations/config/:cropCode": "cropObservationAdmin",
 
   "/farm-register": "farmRegister",
 
@@ -168,85 +192,4 @@ export function canViewTechnicalH3Layer(user) {
     user?.role === ROLES.ADMIN ||
     user?.role === ROLES.FPO
   );
-}
-
-const COMMON_SIDEBAR_ITEMS = Object.freeze([
-  {
-    to: "/farm-register",
-    label: "Register Land",
-  },
-  {
-    to: "/notifications",
-    label: "Notifications",
-  },
-  {
-    to: "/settings",
-    label: "Settings / Profile",
-  },
-  {
-    to: "/plans",
-    label: "Plans",
-  },
-  {
-    to: "/use-cases",
-    label: "Use Cases",
-  },
-  {
-    to: "/our-method",
-    label: "Our Method",
-  },
-]);
-
-export function getSidebarItemsForRole(role) {
-  if (role === ROLES.ADMIN) {
-    return [
-      {
-        to: "/admin",
-        label: "Admin Dashboard",
-      },
-      {
-        to: "/admin/fpo-access",
-        label: "FPO Access Requests",
-      },
-      {
-        to: "/my-fpo",
-        label: "My FPO",
-      },
-      {
-        to: "/bulk-upload",
-        label: "Bulk Upload",
-      },
-      ...COMMON_SIDEBAR_ITEMS,
-    ];
-  }
-
-  if (role === ROLES.FPO) {
-    return [
-      {
-        to: "/fpo/me",
-        label: "FPO Dashboard",
-      },
-      {
-        to: "/my-fpo",
-        label: "My FPO",
-      },
-      {
-        to: "/bulk-upload",
-        label: "Bulk Upload",
-      },
-      ...COMMON_SIDEBAR_ITEMS,
-    ];
-  }
-
-  if (role === ROLES.FARMER) {
-    return [
-      {
-        to: "/farmer/me",
-        label: "Farmer Profile",
-      },
-      ...COMMON_SIDEBAR_ITEMS,
-    ];
-  }
-
-  return [];
 }

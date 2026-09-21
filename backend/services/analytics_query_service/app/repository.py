@@ -10,7 +10,7 @@ from shapely.geometry import Point, Polygon, mapping, shape
 import uuid
 import h3
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, ResourceClosedError, SQLAlchemyError
 
 from shared.db.postgres import engine
 
@@ -114,10 +114,9 @@ def _weighted_row_from_contributions(
         if feature.get("valid_pixel_count") is not None and feature.get("pixel_count"):
             valid_sum += (float(feature["valid_pixel_count"]) / max(1.0, float(feature["pixel_count"]))) * overlap * 100.0
             valid_weight_sum += overlap
-        if feature.get("mean_swir16") is not None or feature.get("mean_swir22") is not None:
-            temp = (float(feature.get("mean_swir16") or 0) + float(feature.get("mean_swir22") or 0)) / 2.0
-            temp_sum += temp * effective_weight
-            temp_weight_sum += effective_weight
+        # Sentinel-2 has no thermal band. Real surface temperature is sourced
+        # separately from Landsat C2 L2 by the crop feature engine, so the old
+        # SWIR-reflectance approximation is no longer computed here.
 
     def safe_avg(param: str) -> float | None:
         if weights_by_param[param] <= 0:
@@ -126,7 +125,7 @@ def _weighted_row_from_contributions(
 
     cloud = round(cloud_sum / cloud_weight_sum, 6) if cloud_weight_sum else None
     valid_pixels = round(valid_sum / valid_weight_sum, 6) if valid_weight_sum else None
-    temp = round(temp_sum / temp_weight_sum, 6) if temp_weight_sum else None
+    temp = None  # thermal comes from Landsat via the crop feature engine, not Sentinel-2
 
     return {
         "grid_cell_id": cell["grid_cell_id"],
@@ -899,7 +898,9 @@ def get_grid_cell_details(farm_id: UUID | str, grid_cell_id: UUID | str) -> dict
             f.ndmi,
             f.ndwi,
             f.bsi,
-            f.valid_pixel_count
+            f.valid_pixel_count,
+            thermal.surface_temp_c,
+            thermal.thermal_snapshot_date
         FROM farm_grid_h3_crosswalk c
         LEFT JOIN LATERAL (
             SELECT *
@@ -909,25 +910,48 @@ def get_grid_cell_details(farm_id: UUID | str, grid_cell_id: UUID | str) -> dict
             ORDER BY snapshot_date DESC, created_at DESC
             LIMIT 1
         ) f ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT l.surface_temp_c, l.snapshot_date AS thermal_snapshot_date
+            FROM h3_landsat_features l
+            WHERE l.farm_id = c.farm_id
+              AND l.h3_index = c.h3_index
+              AND l.surface_temp_c IS NOT NULL
+              AND (f.snapshot_date IS NULL OR l.snapshot_date <= f.snapshot_date)
+            ORDER BY l.snapshot_date DESC, l.created_at DESC
+            LIMIT 1
+        ) thermal ON TRUE
         WHERE c.farm_id = :farm_id
           AND c.grid_cell_id = :grid_cell_id
         ORDER BY c.overlap_ratio DESC;
         """
     )
-    with engine.connect() as conn:
-        cell = conn.execute(cell_query, {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)}).mappings().first()
-        if cell is None:
-            return None
-        latest = conn.execute(
-    value_query,
-    {
-        "farm_id": str(farm_id),
-        "grid_cell_id": str(grid_cell_id),
-        "min_valid": USABLE_SCENE_MIN_VALID_PIXEL_PERCENTAGE,
-        "max_cloud": USABLE_SCENE_MAX_CLOUD_PERCENTAGE,
-    },
-    ).mappings().first()
-    contributions = conn.execute(contrib_query, {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)}).mappings().all()
+    for attempt in range(2):
+        try:
+            with engine.connect() as conn:
+                cell = conn.execute(
+                    cell_query,
+                    {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)},
+                ).mappings().first()
+                if cell is None:
+                    return None
+                latest = conn.execute(
+                    value_query,
+                    {
+                        "farm_id": str(farm_id),
+                        "grid_cell_id": str(grid_cell_id),
+                        "min_valid": USABLE_SCENE_MIN_VALID_PIXEL_PERCENTAGE,
+                        "max_cloud": USABLE_SCENE_MAX_CLOUD_PERCENTAGE,
+                    },
+                ).mappings().first()
+                contributions = conn.execute(
+                    contrib_query,
+                    {"farm_id": str(farm_id), "grid_cell_id": str(grid_cell_id)},
+                ).mappings().all()
+            break
+        except (ResourceClosedError, OperationalError):
+            if attempt == 1:
+                raise
+            engine.dispose()
     features_by_h3 = _latest_feature_rows_by_h3(farm_id)
 
     def _recommendations(data: dict[str, Any]) -> list[str]:
@@ -945,6 +969,22 @@ def get_grid_cell_details(farm_id: UUID | str, grid_cell_id: UUID | str) -> dict
     latest_values = dict(latest) if latest else {}
     if not latest_values:
         latest_values = _weighted_row_from_contributions(farm_id, dict(cell), [dict(row) for row in contributions], features_by_h3)
+    thermal_samples = [
+        (float(row["surface_temp_c"]), float(row.get("overlap_ratio") or 0.0))
+        for row in contributions
+        if row.get("surface_temp_c") is not None and float(row.get("overlap_ratio") or 0.0) > 0
+    ]
+    thermal_weight = sum(weight for _, weight in thermal_samples)
+    h3_surface_temperature = (
+        round(sum(value * weight for value, weight in thermal_samples) / thermal_weight, 6)
+        if thermal_weight > 0 else None
+    )
+    # farm_grid_daily_values predates the H3 thermal join and may contain NULL
+    # because Sentinel-2 cannot measure temperature. Prefer the latest thermal
+    # observation for the H3 cells contributing to this display cell.
+    if h3_surface_temperature is not None:
+        latest_values["surface_temp_c"] = h3_surface_temperature
+        latest_values["temperature_source"] = "landsat_h3_overlap_weighted"
     weighted_average = {k: latest_values.get(k) for k in ["ndvi", "ndmi", "ndwi", "bsi", "evi", "savi", "msi", "nbr", "ndre", "surface_temp_c", "cloud_percentage", "valid_pixel_percentage"]}
     recommendations = _recommendations(latest_values)
 
@@ -960,13 +1000,37 @@ def get_grid_cell_details(farm_id: UUID | str, grid_cell_id: UUID | str) -> dict
                 "ndmi": (features_by_h3.get(int(row.get("h3_index"))) or {}).get("ndmi"),
                 "bsi": (features_by_h3.get(int(row.get("h3_index"))) or {}).get("bsi"),
                 "valid_pixel_count": (features_by_h3.get(int(row.get("h3_index"))) or {}).get("valid_pixel_count"),
+                "surface_temp_c": row.get("surface_temp_c"),
+                "thermal_snapshot_date": row.get("thermal_snapshot_date"),
+                **_h3_centroid(int(row.get("h3_index"))),
             }
             for row in contributions
             if features_by_h3.get(int(row.get("h3_index")))
         ],
         "weighted_average": weighted_average,
+        "temperature": {
+            "value_c": h3_surface_temperature,
+            "source": "Landsat H3 observation" if h3_surface_temperature is not None else None,
+            "location": {
+                "latitude": cell.get("cell_centroid_lat"),
+                "longitude": cell.get("cell_centroid_lon"),
+                "coordinate_semantics": "display-grid cell centroid; thermal values are overlap-weighted from contributing H3 cells",
+            },
+        },
         "recommendations": recommendations,
     }
+
+
+def _h3_centroid(h3_index: int) -> dict[str, float | None]:
+    """Return the registered H3 cell's geographic centre for provenance/UI."""
+    try:
+        if hasattr(h3, "cell_to_latlng"):
+            lat, lon = h3.cell_to_latlng(h3.int_to_str(int(h3_index)))
+        else:
+            lat, lon = h3.h3_to_geo(h3.int_to_str(int(h3_index)))
+        return {"h3_centroid_lat": round(float(lat), 7), "h3_centroid_lon": round(float(lon), 7)}
+    except Exception:
+        return {"h3_centroid_lat": None, "h3_centroid_lon": None}
 
 def _stable_grid_cell_uuid(
     farm_id: UUID | str,

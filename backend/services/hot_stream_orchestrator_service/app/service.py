@@ -3,17 +3,21 @@ from __future__ import annotations
 import json
 from datetime import date
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from shapely.geometry import shape
 
 from services.farm_registry_service.app.area_calculator import calculate_area_acres, validate_farm_polygon
 from services.farm_registry_service.app.external_clients import (
-    ExternalServiceError,
     create_h3_preview,
     validate_location,
 )
-from services.farm_registry_service.app.repository import get_farm_for_repair, update_farm_derived_fields
+from services.farm_registry_service.app.errors import FarmRegistryError
+from services.farm_registry_service.app.repository import get_complete_farm, update_farm_derived_fields
+from services.analytics_query_service.app.repository import (
+    materialize_grid_for_farm,
+    materialize_trends_for_farm,
+)
 from services.hot_stream_orchestrator_service.app.clients import (
     OrchestratorClientError,
     get_farm,
@@ -30,6 +34,7 @@ from services.hot_stream_orchestrator_service.app.repository import (
     complete_pipeline_job,
     fail_pipeline_job,
     get_existing_scene_analysis_summary,
+    get_or_create_active_latest_analysis_job,
 )
 
 
@@ -126,7 +131,7 @@ def _choose_analysis_bbox(
 
 
 def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
-    farm = get_farm_for_repair(farm_id)
+    farm = get_complete_farm(farm_id)
     if farm is None:
         raise HotStreamOrchestratorError("Farm not found", code="FARM_NOT_FOUND", status_code=404)
 
@@ -175,10 +180,15 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
             area_acres = None
 
     h3_resolution = int(farm.get("h3_resolution") or 12)
+    correlation_id = str(uuid4())
 
     try:
-        preview = create_h3_preview(polygon=polygon, resolution=h3_resolution, max_cells=None)
-    except ExternalServiceError as exc:
+        preview = create_h3_preview(
+            polygon=polygon,
+            resolution=h3_resolution,
+            correlation_id=correlation_id,
+        )
+    except FarmRegistryError as exc:
         raise HotStreamOrchestratorError(
             f"H3 preview failed: {exc}",
             code="H3_PREVIEW_ERROR",
@@ -202,13 +212,14 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
                 district_name=farm["district_name"],
                 block_name=farm.get("block_name"),
                 block_code=farm.get("block_code"),
+                correlation_id=correlation_id,
             )
             location_updates = {
                 "district_code": location.get("district_code"),
                 "block_code": location.get("block_code"),
             }
             repaired_fields.extend([key for key, value in location_updates.items() if value is not None])
-        except ExternalServiceError as exc:
+        except FarmRegistryError as exc:
             warnings.append(f"Location validation skipped: {exc}")
         except Exception as exc:
             warnings.append(f"Location validation skipped: {exc}")
@@ -584,3 +595,327 @@ def materialize_farm_analysis(
         except Exception:
             pass
         raise
+
+
+def _latest_analysis_stage_details(name: str, result: Any) -> dict[str, Any]:
+    """Keep master-job metadata small and JSON serialisable."""
+
+    if not isinstance(result, dict):
+        return {}
+    if name == "farm_ready":
+        return {
+            "h3_cell_count": result.get("h3_cell_count"),
+            "repaired_fields": result.get("repaired_fields") or [],
+            "warnings": result.get("warnings") or [],
+        }
+    if name == "environment_datasets":
+        return {
+            "datasets": [
+                {
+                    "dataset_key": row.get("dataset_key"),
+                    "status": row.get("status"),
+                    "source_items_found": row.get("source_items_found", 0),
+                    "source_items_processed": row.get("source_items_processed", 0),
+                    "postgres_rows_written": row.get("postgres_rows_written", 0),
+                    "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
+                    "message": row.get("message"),
+                }
+                for row in (result.get("datasets") or [])
+            ],
+        }
+    if name in {"grid", "grid_context"}:
+        return {
+            "grid_cells_created": result.get("grid_cells_created"),
+            "crosswalk_rows_created": result.get("crosswalk_rows_created"),
+            "grid_values_created": result.get("grid_values_created"),
+            "processed_h3_cell_count": result.get("processed_h3_cell_count"),
+            "grid_size_meters": result.get("grid_size_meters"),
+            "warnings": result.get("warnings") or [],
+        }
+    if name == "intelligence":
+        feature = result.get("feature_processing") or {}
+        calculations = result.get("calculation_processing") or {}
+        return {
+            "feature_rows_written": feature.get("h3_rows_written"),
+            "feature_date": str(feature.get("latest_feature_date")) if feature.get("latest_feature_date") else None,
+            "formula_count": calculations.get("formula_count"),
+            "h3_predictions_written": calculations.get("h3_predictions_written"),
+            "farm_predictions_written": calculations.get("farm_predictions_written"),
+            "grid_values_written": calculations.get("grid_values_written"),
+            "result_date": str(calculations.get("latest_result_date")) if calculations.get("latest_result_date") else None,
+            "feature_job_id": str(feature.get("pipeline_job_id")) if feature.get("pipeline_job_id") else None,
+            "calculation_job_id": str(calculations.get("pipeline_job_id")) if calculations.get("pipeline_job_id") else None,
+        }
+    return {
+        key: value
+        for key, value in result.items()
+        if isinstance(value, (str, int, float, bool)) or value is None
+    }
+
+
+def run_latest_analysis(
+    farm_id: UUID,
+    payload: Any,
+    *,
+    job_id: UUID | str | None = None,
+) -> dict[str, Any]:
+    """Run the one canonical farm-to-intelligence workflow.
+
+    The lower-level stage functions remain available for diagnostics and
+    backfills.  This function is the only normal path: it owns ordering,
+    stage status, fault isolation, and the final farmer-visible result.
+    """
+
+    # Local imports avoid the existing environment_service -> service import
+    # cycle while keeping the orchestration boundary in this module.
+    from services.analytics_query_service.app.feature_engine.service import (
+        FeatureEngineError,
+        materialize_intelligence,
+    )
+    from services.hot_stream_orchestrator_service.app.environment_schemas import (
+        DEFAULT_ENVIRONMENT_DATASETS,
+        EnvironmentRefreshRequest,
+    )
+    from services.hot_stream_orchestrator_service.app.environment_service import (
+        materialize_environment,
+    )
+
+    if job_id is None:
+        job, already_running = get_or_create_active_latest_analysis_job(
+            farm_id=farm_id,
+            metadata={
+                "request": payload.model_dump() if hasattr(payload, "model_dump") else {},
+                "analysis_status": "queued",
+            },
+        )
+        if already_running:
+            return {
+                "farm_id": str(farm_id),
+                "job_id": str(job["job_id"]),
+                "status": "already_running",
+                "current_stage": job.get("current_stage"),
+            }
+        job_id = job["job_id"]
+
+    job_id = str(job_id)
+    stages: list[dict[str, Any]] = []
+    request_metadata = payload.model_dump() if hasattr(payload, "model_dump") else {}
+
+    def checkpoint(name: str, status: str, result: Any = None, error: Exception | None = None) -> None:
+        row: dict[str, Any] = {
+            "name": name,
+            "status": status,
+            "details": _latest_analysis_stage_details(name, result),
+        }
+        if error is not None:
+            row["code"] = getattr(error, "code", "UNEXPECTED_ERROR")
+            row["message"] = str(error)
+        existing = next((item for item in reversed(stages) if item["name"] == name), None)
+        if existing is not None and existing.get("status") == "running":
+            existing.update(row)
+            row = existing
+        else:
+            stages.append(row)
+        update_pipeline_job_stage(
+            job_id,
+            stage=name,
+            status="running",
+            metadata={
+                "request": request_metadata,
+                "stages": stages,
+                "analysis_status": "running",
+            },
+        )
+
+    def run_required(name: str, operation):
+        checkpoint(name, "running")
+        try:
+            result = operation()
+            if isinstance(result, dict) and result.get("status") == "failed":
+                raise HotStreamOrchestratorError(
+                    result.get("message") or f"Required stage '{name}' did not complete successfully.",
+                    code=result.get("code") or f"{name.upper()}_INCOMPLETE",
+                    status_code=502,
+                )
+            stage_status = "completed_with_warnings" if (
+                isinstance(result, dict)
+                and (
+                    result.get("warnings")
+                    or result.get("status") in {"partial", "completed_with_warnings"}
+                )
+            ) else "succeeded"
+            checkpoint(name, stage_status, result)
+            return result
+        except Exception as exc:
+            checkpoint(name, "failed", error=exc)
+            raise
+
+    def update_environment_progress(dataset_rows: list[dict[str, Any]], current_dataset: str | None) -> None:
+        environment_stage = next((item for item in stages if item["name"] == "environment_datasets"), None)
+        if environment_stage is None:
+            return
+        environment_stage["details"] = {
+            "datasets": [
+                {
+                    "dataset_key": row.get("dataset_key"),
+                    "status": row.get("status"),
+                    "source_items_found": row.get("source_items_found", 0),
+                    "source_items_processed": row.get("source_items_processed", 0),
+                    "postgres_rows_written": row.get("postgres_rows_written", 0),
+                    "parquet_rows_written": row.get("parquet_rows_written", 0),
+                    "reason_type": row.get("reason_type"),
+                    "reason_code": row.get("reason_code"),
+                    "accepted_source_item": row.get("accepted_source_item"),
+                    "candidate_rejections": row.get("candidate_rejections") or [],
+                    "message": row.get("message"),
+                }
+                for row in dataset_rows
+            ],
+            "current_dataset": current_dataset,
+        }
+        update_pipeline_job_stage(
+            job_id,
+            stage="environment_datasets",
+            status="running",
+            metadata={"request": request_metadata, "stages": stages, "analysis_status": "running"},
+        )
+
+    try:
+        run_required("farm_ready", lambda: ensure_farm_analysis_ready(farm_id))
+
+        environment_payload = EnvironmentRefreshRequest(
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            dataset_keys=list(DEFAULT_ENVIRONMENT_DATASETS),
+            max_items_per_dataset=payload.max_items_per_dataset,
+            max_cloud_cover=payload.max_cloud_cover,
+            force_refresh=payload.force_refresh,
+        )
+        # One mandatory environmental-observation stage contains Sentinel-2
+        # and all other registered datasets. No source is silently skipped.
+        run_required(
+            "environment_datasets",
+            lambda: materialize_environment(
+                farm_id,
+                environment_payload,
+                progress_callback=update_environment_progress,
+            ),
+        )
+        run_required("trends", lambda: materialize_trends_for_farm(farm_id))
+
+        update_pipeline_job_stage(
+            job_id,
+            stage="intelligence",
+            status="running",
+            metadata={
+                "request": request_metadata,
+                "stages": stages,
+                "analysis_status": "running",
+            },
+        )
+        # Build the display grid/crosswalk before intelligence so H3 formula
+        # scores can be projected onto 10 m frontend cells in the same run.
+        # If grid materialization is unavailable, intelligence still runs and
+        # farm/H3 predictions are saved.
+        try:
+            grid_context = materialize_grid_for_farm(farm_id)
+            grid_status = (
+                "completed_with_warnings"
+                if isinstance(grid_context, dict) and grid_context.get("status") == "failed"
+                else "succeeded"
+            )
+            checkpoint("grid_context", grid_status, grid_context)
+        except Exception as exc:
+            checkpoint("grid_context", "completed_with_warnings", error=exc)
+
+        try:
+            intelligence = materialize_intelligence(
+                farm_id,
+                start_date=date.fromisoformat(payload.start_date),
+                end_date=date.fromisoformat(payload.end_date),
+                latest_only=True,
+                force_refresh=payload.force_refresh,
+            )
+            checkpoint("intelligence", "succeeded", intelligence)
+        except FeatureEngineError as exc:
+            checkpoint("intelligence", "failed", error=exc)
+            fail_pipeline_job(
+                job_id,
+                error_code=exc.code,
+                error_message=str(exc),
+                metadata={"request": request_metadata, "stages": stages},
+            )
+            return {
+                "farm_id": str(farm_id),
+                "job_id": job_id,
+                "status": "failed",
+                "stages": stages,
+            }
+        except Exception as exc:
+            checkpoint("intelligence", "failed", error=exc)
+            fail_pipeline_job(
+                job_id,
+                error_code="INTELLIGENCE_FAILED",
+                error_message=str(exc),
+                metadata={"request": request_metadata, "stages": stages},
+            )
+            return {
+                "farm_id": str(farm_id),
+                "job_id": job_id,
+                "status": "failed",
+                "stages": stages,
+            }
+
+        failed_core = {
+            row["name"]
+            for row in stages
+            if row["status"] == "failed"
+            and row["name"] in {
+                "farm_ready",
+                "environment_datasets",
+                "trends",
+                "grid_context",
+                "intelligence",
+            }
+        }
+        warning_stages = {
+            row["name"]
+            for row in stages
+            if row["status"] in {"failed", "completed_with_warnings"}
+        }
+        final_status = "failed" if failed_core else (
+            "completed_with_warnings" if warning_stages else "completed"
+        )
+        complete_pipeline_job(
+            job_id,
+            status="succeeded",
+            metadata={
+                "request": request_metadata,
+                "stages": stages,
+                "analysis_status": final_status,
+            },
+        )
+        return {
+            "farm_id": str(farm_id),
+            "job_id": job_id,
+            "status": final_status,
+            "stages": stages,
+        }
+    except Exception as exc:
+        fail_pipeline_job(
+            job_id,
+            error_code=getattr(exc, "code", "LATEST_ANALYSIS_FAILED"),
+            error_message=str(exc),
+            metadata={"request": request_metadata, "stages": stages},
+        )
+        return {
+            "farm_id": str(farm_id),
+            "job_id": job_id,
+            "status": "failed",
+            "stages": stages,
+            "error": str(exc),
+        }
