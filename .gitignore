@@ -45,3 +45,4 @@ frontend/.env.local
 backend/services/crop_observation_service/storage/farmer/
 
 *.parquet
+*.zip

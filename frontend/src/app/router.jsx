@@ -31,6 +31,7 @@ import BulkUpload from "@/pages/BulkUpload";
 import FarmRegister from "@/pages/FarmRegister";
 import FarmerProfile from "@/pages/FarmerProfile";
 import FpoDashboard from "@/pages/FpoDashboard";
+import FpoAdminPage from "@/pages/FpoAdminPage";
 import Home from "@/pages/Home";
 import LandIntelligence from "@/pages/LandIntelligence";
 import MyFpo from "@/pages/MyFpo";
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
   { element: <ProtectedRoute permission="adminDashboard" />, children: [
     { path: "/admin", element: <AdminDashboard /> },
     { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
+    { path: "/admin/fpo", element: <FpoAdminPage /> },
     { path: "/admin/system", element: <SystemManagementPage /> },
     { path: "/admin/feature-processing", element: <SystemManagementPage /> },
   ] },

@@ -13,6 +13,7 @@ import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import {
   getFpo,
+  getFpoBootstrapStatus,
   getFpoFarmers,
   getFpoFarms,
   getFpoSummary,
@@ -30,6 +31,7 @@ export default function FpoDashboard() {
   const [farms, setFarms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [bootstrapStatus, setBootstrapStatus] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +40,20 @@ export default function FpoDashboard() {
       setLoading(true);
       setError("");
       try {
-        const baseFpo = isSelfRoute ? await getMyFpo() : await getFpo(fpoId);
+        let baseFpo;
+        try {
+          baseFpo = isSelfRoute ? await getMyFpo() : await getFpo(fpoId);
+        } catch (profileError) {
+          if (!isSelfRoute) throw profileError;
+          const status = await getFpoBootstrapStatus();
+          if (status.status !== "READY") {
+            setBootstrapStatus(status);
+            window.setTimeout(loadDashboard, 2500);
+            return;
+          }
+          throw profileError;
+        }
+        setBootstrapStatus(null);
         const [summaryPayload, farmersPayload, farmsPayload] = await Promise.all([
           getFpoSummary(baseFpo.fpo_id).catch(() => null),
           getFpoFarmers(baseFpo.fpo_id).catch(() => []),
@@ -139,6 +154,14 @@ export default function FpoDashboard() {
       {!loading && error && (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 p-6 text-sm text-rose-600 shadow-sm">
           {error}
+        </div>
+      )}
+
+      {!loading && !error && !fpo && bootstrapStatus && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-6 text-sm text-amber-800 shadow-sm">
+          <p className="font-semibold">Preparing your FPO workspace</p>
+          <p className="mt-1 leading-6">Your account is ready. We are creating your organisation profile and will open the dashboard automatically.</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-amber-700">Status: {bootstrapStatus.status}</p>
         </div>
       )}
 

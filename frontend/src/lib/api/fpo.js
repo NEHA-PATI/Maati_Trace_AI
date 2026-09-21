@@ -1,5 +1,6 @@
 import {
   farmRegistryClient,
+  fpoManagementClient,
   profileClient,
 } from "@/shared/api/serviceClients";
 
@@ -35,6 +36,39 @@ export async function getMyFpo() {
     );
 
   return unwrapFpoProfile(payload);
+}
+
+export function getFpoBootstrapStatus() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/bootstrap-status",
+  );
+}
+
+export function getFpoVerificationStatus() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/verification",
+  );
+}
+
+export function submitFpoVerification() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/verification/submit",
+    { method: "POST", body: {} },
+  );
+}
+
+export function getFpoVerificationQueue(status = "") {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fpoManagementClient.request(
+    `/v1/fpo-portal/admin/verification-queue${query}`,
+  );
+}
+
+export function reviewFpoVerification(fpoId, status, note = "") {
+  return fpoManagementClient.request(
+    `/v1/fpo-portal/admin/organizations/${fpoId}/verification`,
+    { method: "PATCH", body: { status, note } },
+  );
 }
 
 export async function getFpo(fpoId) {

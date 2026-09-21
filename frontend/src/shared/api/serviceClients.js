@@ -33,6 +33,9 @@ export const authClient =
 export const profileClient =
   createServiceClient("profile");
 
+export const fpoManagementClient =
+  createServiceClient("fpoManagement");
+
 export const boundaryIndexClient =
   createServiceClient("boundaryIndex");
 

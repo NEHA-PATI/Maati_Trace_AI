@@ -1,0 +1,46 @@
+MaatiTrace FPO phase 1 SQL index
+
+Apply in this order on the live schema:
+
+1. 20260921_01_fpo_signup_account_type.sql
+   Adds account_type, signup_profile_payload and authorised_fpo_representative
+   to signup_otp_sessions. Adds the transactional auth_outbox_events queue.
+
+2. 20260921_02_fpo_organization_foundation.sql
+   Adds the separate fpo_organizations identity table and public-number sequence.
+
+3. 20260921_03_fpo_provisioning_constraints.sql
+   Makes owner the only active FPO membership role and enforces one account per
+   organization and one organization per account.
+
+4. 20260921_04_fpo_verification_workflow.sql
+   Adds verification submission history and document metadata storage.
+
+5. 20260921_05_fpo_org_profile_link.sql
+   Adds the organization-to-Profile Service FPO identity link. This is required
+   when 20260921_03 was already applied before this follow-up implementation.
+
+Operational requirement:
+Deploy an idempotent consumer for auth_outbox_events before enabling FPO signup.
+The event auth.user.created creates the FPO organization and then provisions the
+Profile Service FPO profile. Auth does not write FPO profile tables.
+
+The repository consumer is:
+  python -m services.fpo_management_service.worker
+
+Run it with the working directory set to backend. The service loads its own
+backend/services/fpo_management_service/.env before shared settings initialize.
+
+The API process is:
+  uvicorn services.fpo_management_service.app.main:app --port 8016
+
+The gateway exposes its bootstrap endpoint at:
+  GET /api/fpo-portal/bootstrap-status
+
+Before applying:
+pg_dump --schema-only --no-owner --no-privileges --file maatitrace_schema_before_fpo.sql $DATABASE_URL
+
+After applying, verify:
+SELECT account_type, count(*) FROM signup_otp_sessions GROUP BY account_type;
+SELECT status, count(*) FROM auth_outbox_events GROUP BY status;
+SELECT count(*) FROM fpo_organizations;

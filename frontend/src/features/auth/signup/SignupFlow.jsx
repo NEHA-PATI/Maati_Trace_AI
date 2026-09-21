@@ -9,21 +9,31 @@ import VerifyOtpStep from "@/features/auth/signup/VerifyOtpStep";
 import { logger } from "@/shared/logging/logger";
 
 const INITIAL_ACCOUNT = {
+  account_type: "farmer",
   full_name: "",
   email: "",
   phone_number: "",
   password: "",
   confirm_password: "",
   consent_terms: false,
+  authorised_fpo_representative: false,
+  organisation_name: "",
+  registration_type: "producer_company",
+  registration_number: "",
+  state_code: "",
+  district_code: "",
 };
 
 function accountFingerprint(value) {
   return JSON.stringify({
     full_name: value.full_name,
+    account_type: value.account_type,
     email: value.email,
     phone_number: value.phone_number,
     password: value.password,
     consent_terms: value.consent_terms,
+    authorised_fpo_representative: value.authorised_fpo_representative,
+    ...(value.account_type === "fpo" ? { fpo: { organisation_name: value.organisation_name, registration_type: value.registration_type, registration_number: value.registration_number, state_code: Number(value.state_code), district_code: Number(value.district_code) } } : {}),
   });
 }
 
@@ -34,6 +44,9 @@ function signupPayload(value) {
     phone_number: value.phone_number,
     password: value.password,
     consent_terms: value.consent_terms,
+    account_type: value.account_type,
+    authorised_fpo_representative: value.authorised_fpo_representative,
+    ...(value.account_type === "fpo" ? { fpo: { organisation_name: value.organisation_name, registration_type: value.registration_type, registration_number: value.registration_number, state_code: Number(value.state_code), district_code: Number(value.district_code) } } : {}),
   };
 }
 
