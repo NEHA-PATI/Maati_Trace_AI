@@ -239,7 +239,6 @@ def update_pipeline_job_stage(job_id: UUID | str, stage: str, status: str | None
         # Step observability must not break older installations.
         pass
 
-
 def complete_pipeline_job(
     job_id: UUID | str,
     metadata: dict[str, Any] | None = None,

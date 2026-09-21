@@ -277,6 +277,7 @@ export default function FarmRegister() {
   }, []);
 
   async function handleRegister() {
+    let keepPipelineOpen = false;
     setLoading(true);
     setError("");
     setBackendErrorDetail("");
