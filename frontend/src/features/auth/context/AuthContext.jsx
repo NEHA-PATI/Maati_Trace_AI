@@ -1,9 +1,11 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 
 import { authApi } from "@/features/auth/api/authApi";
+import { cancelRefreshAccessSession } from "@/shared/api/apiClient";
 import {
   clearSession,
   getSessionSnapshot,
+  isAccessTokenFresh,
   setSession,
   subscribeSession,
 } from "@/features/auth/session";
@@ -17,7 +19,7 @@ let bootstrapPromise = null;
 
 function bootstrapSession() {
   if (!bootstrapPromise) {
-    bootstrapPromise = authApi.refresh().finally(() => {
+    bootstrapPromise = authApi.refresh({ timeoutMs: 8000 }).finally(() => {
       bootstrapPromise = null;
     });
   }
@@ -32,6 +34,16 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+
+    // Login/signup can populate the in-memory session while the app is
+    // bootstrapping. Avoid an unnecessary second refresh in that case.
+    if (isAccessTokenFresh()) {
+      setInitialising(false);
+      return () => {
+        active = false;
+      };
+    }
+
     bootstrapSession()
       .catch((error) => {
         clearSession();
@@ -59,6 +71,7 @@ export function AuthProvider({ children }) {
   const refreshSession = useCallback(async () => adoptAuthResponse(await authApi.refresh()), [adoptAuthResponse]);
 
   const logout = useCallback(async () => {
+    cancelRefreshAccessSession();
     try {
       await authApi.logout();
       clearSession();
@@ -73,6 +86,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logoutAll = useCallback(async () => {
+    cancelRefreshAccessSession();
     try {
       await authApi.logoutAll();
       clearSession();

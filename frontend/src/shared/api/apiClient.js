@@ -11,6 +11,8 @@ import { ApiError } from "@/shared/api/ApiError";
 import { serviceBaseUrl, servicePath } from "@/shared/api/serviceUrls";
 
 let refreshPromise = null;
+let refreshController = null;
+let refreshGeneration = 0;
 
 function joinUrl(base, path) {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
@@ -174,7 +176,8 @@ async function execute(path, options = {}) {
   }
 }
 
-async function performRefresh() {
+async function performRefresh({ timeoutMs = environment.requestTimeoutMs } = {}) {
+  const generation = refreshGeneration;
   const requestCorrelationId = correlationId();
   const headers = buildHeaders({
     headers: {},
@@ -184,7 +187,8 @@ async function performRefresh() {
     body: null,
   });
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), environment.requestTimeoutMs);
+  refreshController = controller;
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(joinUrl(serviceBaseUrl("auth"), servicePath("/v1/auth/refresh")), {
@@ -198,6 +202,14 @@ async function performRefresh() {
       clearSession();
       throw toApiError(response, payload, response.headers.get("x-correlation-id") || requestCorrelationId);
     }
+    // Logout may have started while this request was in flight. Do not let a
+    // late refresh response recreate the session after logout.
+    if (generation !== refreshGeneration) {
+      throw new ApiError("Session refresh was cancelled.", {
+        code: "REFRESH_CANCELLED",
+        correlationId: requestCorrelationId,
+      });
+    }
     setSession(payload);
     logger.info("auth_refresh_succeeded", {
       status: response.status,
@@ -205,7 +217,7 @@ async function performRefresh() {
     });
     return payload;
   } catch (error) {
-    clearSession();
+    if (generation === refreshGeneration) clearSession();
     logger.warn("auth_refresh_failed", {
       code: error?.code,
       status: error?.status,
@@ -218,16 +230,23 @@ async function performRefresh() {
     });
   } finally {
     window.clearTimeout(timer);
+    if (refreshController === controller) refreshController = null;
   }
 }
 
-export function refreshAccessSession() {
+export function refreshAccessSession(options = {}) {
   if (!refreshPromise) {
-    refreshPromise = performRefresh().finally(() => {
+    refreshPromise = performRefresh(options).finally(() => {
       refreshPromise = null;
     });
   }
   return refreshPromise;
+}
+
+export function cancelRefreshAccessSession() {
+  refreshGeneration += 1;
+  refreshController?.abort();
+  refreshController = null;
 }
 
 export const apiClient = Object.freeze({ request: execute });
