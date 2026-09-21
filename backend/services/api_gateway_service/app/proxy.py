@@ -20,6 +20,9 @@ ROUTE_TARGETS = {
     "h3": settings.boundary_index_service_url,
     "profiles": settings.profile_service_url,
     "fpo-portal": settings.fpo_management_service_url,
+    # Farmer/FPO consent endpoints are owned by FPO Management Service.
+    # Keep the public prefix aligned with the domain API contract.
+    "farmer": settings.fpo_management_service_url,
     "fpos": settings.farm_registry_service_url,
     "farmers": settings.farm_registry_service_url,
     "farms": settings.farm_registry_service_url,

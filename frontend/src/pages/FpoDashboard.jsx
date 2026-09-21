@@ -18,6 +18,9 @@ import {
   getFpoFarms,
   getFpoSummary,
   getMyFpo,
+  getFpoPortfolioReport,
+  getFpoOperationalAlerts,
+  acknowledgeFpoAlert,
 } from "@/lib/api/fpo";
 
 export default function FpoDashboard() {
@@ -32,6 +35,8 @@ export default function FpoDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [bootstrapStatus, setBootstrapStatus] = useState(null);
+  const [portfolioReport, setPortfolioReport] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,10 +59,12 @@ export default function FpoDashboard() {
           throw profileError;
         }
         setBootstrapStatus(null);
-        const [summaryPayload, farmersPayload, farmsPayload] = await Promise.all([
+        const [summaryPayload, farmersPayload, farmsPayload, reportPayload, alertsPayload] = await Promise.all([
           getFpoSummary(baseFpo.fpo_id).catch(() => null),
           getFpoFarmers(baseFpo.fpo_id).catch(() => []),
           getFpoFarms(baseFpo.fpo_id).catch(() => []),
+          getFpoPortfolioReport().catch(() => null),
+          getFpoOperationalAlerts("OPEN").catch(() => []),
         ]);
 
         if (cancelled) return;
@@ -65,6 +72,8 @@ export default function FpoDashboard() {
         setSummary(summaryPayload);
         setFarmers(farmersPayload || []);
         setFarms(farmsPayload || []);
+        setPortfolioReport(reportPayload);
+        setAlerts(alertsPayload || []);
       } catch (err) {
         if (cancelled) return;
         setError(typeof err?.message === "string" ? err.message : "Unable to load FPO dashboard.");
@@ -142,6 +151,9 @@ export default function FpoDashboard() {
               Bulk Upload
             </Button>
           </Link>
+          <Link to="/fpo/relationships" className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+            Farmer requests
+          </Link>
         </div>
       </div>
 
@@ -172,6 +184,14 @@ export default function FpoDashboard() {
         { label: "Active Blocks", value: blockCoverage.length, icon: Hexagon },
         { label: "Pending Actions", value: Math.max(0, farmerRows.filter((item) => item.status !== "active").length), icon: AlertTriangle },
       ]} />
+
+      {(portfolioReport || alerts.length) ? <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Portfolio report</p><p className="mt-1 text-sm text-gray-500">Consent-backed relationship health</p></div><BarChart3 className="h-5 w-5 text-emerald-600" /></div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Active members", portfolioReport?.relationships?.active_farmers || 0], ["Pending requests", portfolioReport?.relationships?.pending_relationships || 0], ["Linked profiles", portfolioReport?.relationships?.linked_profiles || 0], ["Open alerts", portfolioReport?.alerts?.open_alerts || 0]].map(([label, value]) => <div key={label} className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-500">{label}</p><p className="mt-1 text-xl font-black text-gray-900">{value}</p></div>)}</div>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Operational alerts</p>{alerts.length ? <div className="mt-3 space-y-3">{alerts.slice(0, 3).map((alert) => <div key={alert.alert_id} className="rounded-xl bg-white/80 p-3"><p className="text-sm font-bold text-gray-900">{alert.title}</p><p className="mt-1 text-xs text-gray-600">{alert.message}</p><button type="button" className="mt-2 text-xs font-bold text-emerald-700" onClick={async () => { await acknowledgeFpoAlert(alert.alert_id); setAlerts((items) => items.filter((item) => item.alert_id !== alert.alert_id)); }}>Acknowledge</button></div>)}</div> : <p className="mt-3 text-sm text-amber-800">No open alerts.</p>}</div>
+      </div> : null}
 
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">

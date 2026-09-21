@@ -24,6 +24,8 @@ import {
 } from "@/features/crop-observation-admin";
 import { PlansPage } from "@/features/plans";
 import { ProfileSettingsPage } from "@/features/profile";
+import { FpoAppShell, FpoDashboardPage, FpoFarmerDirectoryPage } from "@/features/fpo";
+import FpoProvisioningRoute from "@/features/fpo/access/FpoProvisioningRoute";
 
 import AdminDashboard from "@/pages/AdminDashboard";
 import SystemManagementPage from "@/pages/SystemManagementPage";
@@ -32,6 +34,8 @@ import FarmRegister from "@/pages/FarmRegister";
 import FarmerProfile from "@/pages/FarmerProfile";
 import FpoDashboard from "@/pages/FpoDashboard";
 import FpoAdminPage from "@/pages/FpoAdminPage";
+import FarmerFpoPage from "@/pages/FarmerFpoPage";
+import FpoRelationshipsPage from "@/pages/FpoRelationshipsPage";
 import Home from "@/pages/Home";
 import LandIntelligence from "@/pages/LandIntelligence";
 import MyFpo from "@/pages/MyFpo";
@@ -79,11 +83,20 @@ export const router = createBrowserRouter([
     ],
   },
   { element: <ProtectedRoute permission="fpoDashboard" />, children: [{ path: "/fpo/me", element: <FpoDashboard /> }] },
+  { element: <FpoProvisioningRoute />, children: [{ element: <FpoAppShell />, children: [
+    { path: "/fpo/dashboard", element: <FpoDashboardPage /> },
+    { path: "/fpo/farmers", element: <FpoFarmerDirectoryPage /> },
+    { path: "/fpo/alerts", element: <FpoDashboardPage /> },
+    { path: "/fpo/reports", element: <FpoDashboardPage /> },
+    { path: "/fpo/profile", element: <ProfileSettingsPage /> },
+    { path: "/fpo/relationships", element: <FpoRelationshipsPage /> },
+  ] }] },
   { element: <ProtectedRoute permission="myFpo" />, children: [{ path: "/my-fpo", element: <MyFpo /> }] },
   {
     element: <ProtectedRoute permission="farmerProfile" />,
     children: [
       { path: "/farmer/me", element: <FarmerProfile /> },
+      { path: "/farmer/fpo", element: <FarmerFpoPage /> },
       { path: "/farmers/:farmerId", element: <FarmerProfile /> },
     ],
   },

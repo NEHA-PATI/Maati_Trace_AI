@@ -20,6 +20,34 @@ Apply in this order on the live schema:
    Adds the organization-to-Profile Service FPO identity link. This is required
    when 20260921_03 was already applied before this follow-up implementation.
 
+6. 20260921_06_fpo_farmer_relationships.sql
+   Adds consent-backed relationship history, one-active-FPO enforcement, and
+   relationship event history.
+
+7. 20260921_07_fpo_feature_entitlements.sql
+   Adds the versioned feature catalogue, class assignments, feature overrides,
+   and Class A/B/C entitlement configuration.
+
+8. 20260921_08_fpo_stabilization_audit.sql
+   Adds FPO audit events and reconciliation-run tracking for tenant-security
+   and projection-drift repair.
+
+9. 20260921_09_fpo_operational_alerts_reports.sql
+   Adds the Class A operational alert inbox used by the FPO portfolio report
+   and alert acknowledgement workflow.
+
+10. 20260921_10_fpo_profile_expansion.sql
+    Expands the Profile Service FPO contract with professional profile fields,
+    normalized commodities, service areas, and services.
+
+11. 20260921_11_fpo_portfolio_read_models.sql
+    Adds server-side portfolio summary and farmer-directory read models for
+    bounded dashboard and paginated directory queries.
+
+12. 20260921_12_fpo_provisioning_recovery.sql
+    Adds provisioning error visibility and supports recovery from legacy FPO
+    profiles created before the organization identity was provisioned.
+
 Operational requirement:
 Deploy an idempotent consumer for auth_outbox_events before enabling FPO signup.
 The event auth.user.created creates the FPO organization and then provisions the

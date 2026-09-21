@@ -447,6 +447,12 @@ export default function FarmerProfile() {
             <Pencil className="h-4 w-4" strokeWidth={2.4} />
             Edit Profile
           </Link>
+          <Link
+            to="/farmer/fpo"
+            className="flex h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[var(--mt-leaf)]/25 bg-[var(--mt-paper-warm)] px-4 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]"
+          >
+            {farmer.fpoName === "Independent farmer" ? "Find an FPO" : "Manage FPO"}
+          </Link>
         </div>
       </motion.section>
 
