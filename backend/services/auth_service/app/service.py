@@ -1136,6 +1136,39 @@ def create_invitation_for_admin(
 
     try:
         with engine.begin() as conn:
+            invitation_metadata = dict(payload.metadata)
+            access_request_id = invitation_metadata.get("access_request_id")
+            if payload.role == "fpo" and access_request_id:
+                access_request = get_fpo_access_request_for_update(
+                    conn,
+                    request_id=access_request_id,
+                )
+                if access_request is None:
+                    raise AuthError(
+                        "FPO_ACCESS_REQUEST_NOT_FOUND",
+                        "The FPO access request was not found.",
+                        404,
+                    )
+                if access_request["status"] not in {"approved", "closed"}:
+                    raise AuthError(
+                        "FPO_ACCESS_REQUEST_NOT_APPROVED",
+                        "Approve the FPO access request before creating an invitation.",
+                        409,
+                    )
+                if access_request["contact_email"].lower() != email.lower():
+                    raise AuthError(
+                        "FPO_ACCESS_REQUEST_EMAIL_MISMATCH",
+                        "The invitation email must match the approved FPO access request.",
+                        409,
+                    )
+                invitation_metadata.update({
+                    "organisation_name": access_request["organisation_name"],
+                    "registration_number": access_request["registration_number"],
+                    "contact_person_name": access_request["contact_person_name"],
+                    "contact_phone": access_request["contact_phone"],
+                    "state_name": access_request["state_name"],
+                    "district_name": access_request["district_name"],
+                })
             if get_user_by_email(conn, email, for_update=True) is not None:
                 raise AuthError(
                     "INVITATION_UNAVAILABLE",
@@ -1151,7 +1184,7 @@ def create_invitation_for_admin(
                 token_hash=token_hash,
                 invited_by=admin_user_id,
                 expires_at=expires_at,
-                metadata=payload.metadata,
+                metadata=invitation_metadata,
                 created_ip=context.ip_address,
                 device_id_hash=context.device_id_hash,
                 correlation_id=get_correlation_id(),
@@ -1255,6 +1288,30 @@ def accept_invitation(payload: InvitationAcceptRequest, context: RequestContext)
                 role=invitation["role"],
                 is_verified=True,
             )
+            if invitation["role"] == "fpo":
+                metadata = invitation.get("metadata") or {}
+                create_auth_outbox_event(
+                    conn,
+                    event_type="auth.user.created",
+                    subject_id=user["user_id"],
+                    idempotency_key=f"auth.user.created:{user['user_id']}",
+                    payload={
+                        "user_id": str(user["user_id"]),
+                        "account_type": "fpo",
+                        "full_name": user["full_name"],
+                        "email": user.get("email"),
+                        "phone_number": user.get("phone_number"),
+                        "signup_profile": {
+                            "organisation_name": metadata.get("organisation_name") or user["full_name"],
+                            "registration_type": metadata.get("registration_type") or "other",
+                            "registration_number": metadata.get("registration_number"),
+                            "state_name": metadata.get("state_name"),
+                            "district_name": metadata.get("district_name"),
+                            "state_code": metadata.get("state_code"),
+                            "district_code": metadata.get("district_code"),
+                        },
+                    },
+                )
             mark_account_invitation_accepted(
                 conn,
                 invitation_id=invitation["invitation_id"],

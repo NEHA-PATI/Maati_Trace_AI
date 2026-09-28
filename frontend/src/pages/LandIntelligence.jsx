@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Activity, ArrowLeft, CalendarDays, ChevronRight,
   Droplets, Layers, Leaf, MapPin, Mountain, RefreshCw,
@@ -31,6 +31,7 @@ import {
 } from "@/lib/api/hotStream";
 import { canViewTechnicalH3Layer } from "@/shared/rbac/permissions";
 import { getStoredUser } from "@/features/auth/session";
+import { getFarmerFpoRelationships } from "@/lib/api/fpo";
 
 const PARAMETERS = [
   ...CALCULATED_METRICS.map((metric) => ({ key: metric.key, name: metric.name })),
@@ -146,6 +147,7 @@ export default function LandIntelligence() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [farm, setFarm] = useState(null);
+  const [farmFpoRelationships, setFarmFpoRelationships] = useState([]);
   const [metricContent, setMetricContent] = useState([]);
   const [gridCells, setGridCells] = useState([]);
   const [gridValues, setGridValues] = useState([]);
@@ -162,6 +164,7 @@ export default function LandIntelligence() {
   const [pipelineFailure, setPipelineFailure] = useState("");
   const [pipelineWarning, setPipelineWarning] = useState("");
   const [pipelineDetails, setPipelineDetails] = useState([]);
+  const [analysisStatus, setAnalysisStatus] = useState(null);
   const manualRunRef = useRef(false);
 
   function updatePipelineStage(stage, status, details = []) {
@@ -170,14 +173,17 @@ export default function LandIntelligence() {
     setPipelineDetails(details.filter(Boolean));
   }
 
-  async function loadLandIntelligence() {
+  async function loadLandIntelligence(statusSnapshot = analysisStatus) {
+    const completedResultDate = statusSnapshot?.latest_completed_run?.result_date
+      ? String(statusSnapshot.latest_completed_run.result_date).slice(0, 10)
+      : "";
     const [farmPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
       getFarmGridCells(farmId).catch(() => []),
       getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
-      getLatestGridCalculations(farmId).catch(() => []),
-      getLatestFarmCalculations(farmId).catch(() => []),
+      getLatestGridCalculations(farmId, completedResultDate).catch(() => []),
+      getLatestFarmCalculations(farmId, "farm", completedResultDate).catch(() => []),
     ]);
 
     console.log("FARM", farmPayload);
@@ -196,7 +202,16 @@ export default function LandIntelligence() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    loadLandIntelligence()
+    // Read the run state before analytics. Existing latest rows may belong to
+    // the previous completed run while a new source materialization is still
+    // in progress; retaining that distinction prevents stale results from
+    // being presented as the active run's output.
+    getLatestAnalysisStatus(farmId)
+      .catch(() => null)
+      .then((status) => {
+        if (!cancelled) setAnalysisStatus(status);
+        return loadLandIntelligence(status);
+      })
       .catch((err) => {
         if (!cancelled) setError(err?.message || "Unable to load land intelligence.");
       })
@@ -207,6 +222,17 @@ export default function LandIntelligence() {
       cancelled = true;
     };
   }, [farmId]);
+
+  useEffect(() => {
+    if (user?.role !== "farmer") return;
+    let cancelled = false;
+    getFarmerFpoRelationships()
+      .then((rows) => {
+        if (!cancelled) setFarmFpoRelationships((Array.isArray(rows) ? rows : rows?.items || []).filter((row) => String(row.farm_id) === String(farmId)));
+      })
+      .catch(() => { if (!cancelled) setFarmFpoRelationships([]); });
+    return () => { cancelled = true; };
+  }, [farmId, user?.role]);
 
   // Registration queues the same canonical workflow before navigating here.
   // Pick that job up on first load so the page does not require a second manual
@@ -221,6 +247,7 @@ export default function LandIntelligence() {
       if (manualRunRef.current) return;
       const status = await getLatestAnalysisStatus(farmId).catch(() => null);
       if (cancelled || manualRunRef.current || !status) return;
+      setAnalysisStatus(status);
 
       const progress = analysisProgress(status, pipelineMode === "bootstrap" ? REGISTRATION_PIPELINE_STEPS.length : 0);
       updatePipelineStage(progress.step, progress.label, progress.details);
@@ -233,7 +260,7 @@ export default function LandIntelligence() {
         setPipelineFailure("");
         setPipelineWarning("");
         setPipelineOpen(false);
-        await loadLandIntelligence().catch(() => null);
+        await loadLandIntelligence(status).catch(() => null);
         return;
       }
 
@@ -332,6 +359,7 @@ export default function LandIntelligence() {
       let status = queued;
       for (let attempt = 0; attempt < 300; attempt += 1) {
         status = await getLatestAnalysisStatus(farmId);
+        setAnalysisStatus(status);
         const progress = analysisProgress(status, 0);
         updatePipelineStage(progress.step, progress.label, progress.details);
         if (terminalStatuses.has(status?.status)) break;
@@ -358,7 +386,7 @@ export default function LandIntelligence() {
       }
 
       try {
-        await loadLandIntelligence();
+        await loadLandIntelligence(status);
       } catch (refreshErr) {
         console.warn("Land intelligence refresh warning", refreshErr);
         setError(refreshErr?.message || "Analysis completed, but the page refresh failed. Please retry.");
@@ -544,6 +572,11 @@ export default function LandIntelligence() {
             {error}
           </div>
         )}
+        {analysisStatus && ["running", "queued"].includes(analysisStatus.status) && (
+          <div className="rounded-[var(--mt-radius-md)] border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+            A new analysis is still running. The values below are from the latest completed analysis and will refresh automatically when this run finishes.
+          </div>
+        )}
 
         {/* ── hero ─────────────────────────────────────────────────────── */}
         <Reveal>
@@ -576,6 +609,8 @@ export default function LandIntelligence() {
         </Reveal>
 
         {/* ── priority banner ──────────────────────────────────────────── */}
+        {user?.role === "farmer" ? <Reveal delay={0.04}><section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700">Farm sharing</p><h2 className="mt-1 text-base font-extrabold text-[var(--mt-ink)]">FPO connections for this farm</h2><p className="mt-1 text-sm text-slate-600">Connections are limited to this land; your other farms stay private.</p></div><Link to={`/farmer/fpo?farm_id=${encodeURIComponent(farmId)}`} className="inline-flex items-center rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-900">Manage FPOs</Link></div><div className="mt-3 flex flex-wrap gap-2">{farmFpoRelationships.length ? farmFpoRelationships.map((relationship) => <Link key={relationship.relationship_id} to={`/farmer/farms/${farmId}/fpo/${relationship.relationship_id}`} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800 hover:border-emerald-400 hover:bg-emerald-50"><span>{relationship.fpo_name || "FPO"}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${relationship.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : relationship.status === "PENDING_FPO_ACCEPTANCE" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{String(relationship.status || "").replaceAll("_", " ")}</span></Link>) : <p className="text-sm text-slate-500">No FPO connection for this farm yet. Find an approved FPO to send a consent-based request.</p>}</div></section></Reveal> : null}
+
         <Reveal delay={0.08}>
           <section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">

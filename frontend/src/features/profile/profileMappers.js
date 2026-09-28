@@ -148,6 +148,19 @@ export function toFpoForm(
   user,
 ) {
   return {
+    legal_name: profile?.legal_name || "",
+    display_name: profile?.display_name || "",
+    organisation_type: profile?.organisation_type || "",
+    cin: profile?.cin || "",
+    gstin: profile?.gstin || "",
+    website_url: profile?.website_url || "",
+    organisation_description: profile?.organisation_description || "",
+    operating_since_year: numberFormValue(profile?.operating_since_year),
+    registered_address_line_1: profile?.registered_address_line_1 || "",
+    registered_address_line_2: profile?.registered_address_line_2 || "",
+    women_member_count: numberFormValue(profile?.women_member_count),
+    small_marginal_member_count: numberFormValue(profile?.small_marginal_member_count),
+    declared_area_acres: numberFormValue(profile?.declared_area_acres),
     fpo_name:
       profile?.fpo_name || "",
     registration_number:
@@ -331,6 +344,19 @@ export function buildFpoPayload(
     setupRequired || keys.has(field);
 
   const fields = [
+    "legal_name",
+    "display_name",
+    "organisation_type",
+    "cin",
+    "gstin",
+    "website_url",
+    "organisation_description",
+    "operating_since_year",
+    "registered_address_line_1",
+    "registered_address_line_2",
+    "women_member_count",
+    "small_marginal_member_count",
+    "declared_area_acres",
     "fpo_name",
     "registration_number",
     "registration_type",

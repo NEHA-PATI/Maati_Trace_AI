@@ -53,12 +53,14 @@ export async function getCropFormulas(cropCode = "") {
   const query = cropCode ? `?crop_code=${encodeURIComponent(cropCode)}` : "";
   return extractItems(await analyticsClient.request(`/v1/analytics/formulas${query}`));
 }
-export async function getLatestGridCalculations(farmId) {
-  return extractItems(await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-calculations/latest`));
+export async function getLatestGridCalculations(farmId, resultDate = "") {
+  const query = resultDate ? `?result_date=${encodeURIComponent(resultDate)}` : "";
+  return extractItems(await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-calculations/latest${query}`));
 }
-export async function getLatestFarmCalculations(farmId, scope = "farm") {
+export async function getLatestFarmCalculations(farmId, scope = "farm", resultDate = "") {
+  const dateQuery = resultDate ? `&result_date=${encodeURIComponent(resultDate)}` : "";
   return extractItems(
-    await analyticsClient.request(`/v1/analytics/farms/${farmId}/calculations/latest?scope=${encodeURIComponent(scope)}`),
+    await analyticsClient.request(`/v1/analytics/farms/${farmId}/calculations/latest?scope=${encodeURIComponent(scope)}${dateQuery}`),
   );
 }
 export async function getGridCellCalculations(farmId, gridCellId) {

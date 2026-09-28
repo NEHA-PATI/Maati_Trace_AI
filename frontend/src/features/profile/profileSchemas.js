@@ -279,6 +279,19 @@ export const farmerProfileSchema = z
 
 export const fpoProfileSchema = z
   .object({
+    legal_name: z.string().trim().max(240).default(""),
+    display_name: z.string().trim().max(240).default(""),
+    organisation_type: z.string().trim().max(100).default(""),
+    cin: z.string().trim().max(32).default(""),
+    gstin: z.string().trim().max(32).default(""),
+    website_url: z.string().trim().max(500).default(""),
+    organisation_description: z.string().trim().max(3000).default(""),
+    operating_since_year: optionalPositiveInteger.default(null),
+    registered_address_line_1: z.string().trim().max(300).default(""),
+    registered_address_line_2: z.string().trim().max(300).default(""),
+    women_member_count: optionalNonNegativeInteger.default(null),
+    small_marginal_member_count: optionalNonNegativeInteger.default(null),
+    declared_area_acres: z.preprocess((value) => value === "" || value == null ? null : Number(value), z.number().min(0).nullable().default(null)),
     fpo_name: z
       .string()
       .trim()

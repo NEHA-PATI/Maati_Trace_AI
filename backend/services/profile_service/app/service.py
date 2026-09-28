@@ -83,6 +83,19 @@ FPO_REQUIRED_FIELDS = (
 )
 
 FPO_DISPLAY_FIELDS = (
+    "legal_name",
+    "display_name",
+    "organisation_type",
+    "cin",
+    "gstin",
+    "website_url",
+    "organisation_description",
+    "operating_since_year",
+    "registered_address_line_1",
+    "registered_address_line_2",
+    "women_member_count",
+    "small_marginal_member_count",
+    "declared_area_acres",
     "fpo_name",
     "registration_number",
     "registration_type",
@@ -270,6 +283,8 @@ def _public_fpo_profile(
         profile.get("services_provided")
         or []
     )
+    public_profile["profile_completion_percentage"] = profile.get("profile_completion_percentage") or 0
+    public_profile["verification_readiness_percentage"] = profile.get("verification_readiness_percentage") or 0
 
     public_profile["district_name"] = (
         public_location_value(
@@ -1092,6 +1107,19 @@ async def update_my_fpo_profile(
         repository_values = {
             field: merged.get(field)
             for field in (
+                "legal_name",
+                "display_name",
+                "organisation_type",
+                "cin",
+                "gstin",
+                "website_url",
+                "organisation_description",
+                "operating_since_year",
+                "registered_address_line_1",
+                "registered_address_line_2",
+                "women_member_count",
+                "small_marginal_member_count",
+                "declared_area_acres",
                 "fpo_name",
                 "registration_number",
                 "registration_type",

@@ -51,6 +51,23 @@ FARMER_SELECT = """
 
 FPO_SELECT = """
     f.fpo_id,
+    f.legal_name,
+    f.display_name,
+    f.organisation_type,
+    f.cin,
+    f.gstin,
+    f.website_url,
+    f.organisation_description,
+    f.operating_since_year,
+    f.registered_address_line_1,
+    f.registered_address_line_2,
+    f.women_member_count,
+    f.small_marginal_member_count,
+    f.declared_area_acres,
+    f.logo_object_key,
+    f.logo_mime_type,
+    f.logo_size_bytes,
+    f.logo_checksum,
     f.fpo_name,
     f.registration_number,
     f.registration_type,
@@ -71,10 +88,12 @@ FPO_SELECT = """
     f.gram_panchayat,
     f.pincode,
     f.office_address,
-    f.main_commodities,
+    COALESCE((SELECT array_agg(c.commodity_code ORDER BY c.priority, c.commodity_code) FROM public.fpo_profile_commodities c WHERE c.fpo_id = f.fpo_id), f.main_commodities) AS main_commodities,
     f.member_count,
     f.active_member_count,
-    f.services_provided,
+    COALESCE((SELECT array_agg(s.service_code ORDER BY s.service_code) FROM public.fpo_profile_services s WHERE s.fpo_id = f.fpo_id AND s.is_active = TRUE), f.services_provided) AS services_provided,
+    f.profile_completion_percentage,
+    f.verification_readiness_percentage,
     f.verification_status,
     f.profile_image_url,
     f.is_active,
@@ -532,6 +551,11 @@ def create_fpo_with_membership(
 
     fpo_id = row["fpo_id"]
 
+    conn.execute(text("DELETE FROM public.fpo_profile_commodities WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
+    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(:commodities::text[]) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
+    conn.execute(text("DELETE FROM public.fpo_profile_services WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
+    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(:services::text[]) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
+
     conn.execute(
         text(
             """
@@ -561,6 +585,11 @@ def create_fpo_with_membership(
         },
     )
 
+    conn.execute(text("DELETE FROM public.fpo_profile_commodities WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
+    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(:commodities::text[]) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
+    conn.execute(text("DELETE FROM public.fpo_profile_services WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
+    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(:services::text[]) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
+
     created = get_fpo_by_id(conn, fpo_id)
 
     if created is None:
@@ -584,6 +613,19 @@ def update_fpo_profile(
             """
             UPDATE fpos
             SET
+                legal_name = COALESCE(:legal_name, legal_name),
+                display_name = COALESCE(:display_name, display_name),
+                organisation_type = COALESCE(:organisation_type, organisation_type),
+                cin = COALESCE(:cin, cin),
+                gstin = COALESCE(:gstin, gstin),
+                website_url = COALESCE(:website_url, website_url),
+                organisation_description = COALESCE(:organisation_description, organisation_description),
+                operating_since_year = COALESCE(:operating_since_year, operating_since_year),
+                registered_address_line_1 = COALESCE(:registered_address_line_1, registered_address_line_1),
+                registered_address_line_2 = COALESCE(:registered_address_line_2, registered_address_line_2),
+                women_member_count = COALESCE(:women_member_count, women_member_count),
+                small_marginal_member_count = COALESCE(:small_marginal_member_count, small_marginal_member_count),
+                declared_area_acres = COALESCE(:declared_area_acres, declared_area_acres),
                 fpo_name = :fpo_name,
                 registration_number = :registration_number,
                 registration_type = :registration_type,

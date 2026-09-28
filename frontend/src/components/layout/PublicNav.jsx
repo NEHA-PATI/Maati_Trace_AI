@@ -3,24 +3,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Bell, LogOut, Menu, X } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
-
-const NAV_ITEMS = [
-  { to: "/", label: "Home" },
-  { to: "/our-method", label: "Our Method" },
-  { to: "/use-cases", label: "Use Cases" },
-  { to: "/plans", label: "Plans" },
-];
+import { getAuthenticatedNavigation, PUBLIC_ITEMS, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
+import { LanguageToggle } from "@/features/language";
 
 const GET_STARTED_ITEM = {
   to: "/register",
   label: "Get Started",
 };
-
-const AUTHENTICATED_NAV_ITEMS = [
-  { to: "/farmer/me", label: "Dashboard" },
-  { to: "/settings", label: "Profile" },
-  { to: "/farm-register", label: "Register" },
-];
 
 function MaatiLogo() {
   return (
@@ -39,14 +28,12 @@ function MaatiLogo() {
 export default function PublicNav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, initialising, logout } = useAuth();
+  const { isAuthenticated, initialising, logout, user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navItems = isAuthenticated
-    ? [...AUTHENTICATED_NAV_ITEMS, ...NAV_ITEMS]
-    : NAV_ITEMS;
+  const navItems = isAuthenticated ? getAuthenticatedNavigation(user?.role) : PUBLIC_ITEMS;
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -71,11 +58,12 @@ export default function PublicNav() {
 
         <nav className="hidden items-center gap-1.5 md:flex">
           {navItems.map((item) => {
-            const active = location.pathname === item.to;
+            const active = isNavigationItemActive(location.pathname, item);
             return (
               <Link
                 key={item.to}
                 to={item.to}
+                aria-current={active ? "page" : undefined}
                 className={`rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors ${
                   active
                     ? "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"
@@ -89,6 +77,7 @@ export default function PublicNav() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+          <LanguageToggle />
           {initialising ? null : isAuthenticated ? (
             <>
               <Link
@@ -112,6 +101,9 @@ export default function PublicNav() {
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{loggingOut ? "Logging out…" : "Log out"}</span>
+              </button>
+              <button type="button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
+                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             </>
           ) : (
@@ -148,14 +140,13 @@ export default function PublicNav() {
     {mobileMenuOpen ? (
       <div className="fixed inset-x-0 top-14 z-40 border-b border-[var(--mt-line)] bg-white p-3 shadow-lg md:hidden">
         <nav className="grid gap-1.5" aria-label="Mobile menu">
-          {NAV_ITEMS.map((item) => (
-            <Link key={item.to} to={item.to} onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 text-sm font-bold text-[var(--mt-ink-soft)] hover:bg-[var(--mt-leaf-tint)] hover:text-[var(--mt-leaf-deep)]">
+          {navItems.map((item) => (
+            <Link key={item.to} to={item.to} onClick={() => setMobileMenuOpen(false)} className={`rounded-xl px-4 py-3 text-sm font-bold transition-colors ${isNavigationItemActive(location.pathname, item) ? "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]" : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-leaf-tint)] hover:text-[var(--mt-leaf-deep)]"}`}>
               {item.label}
             </Link>
           ))}
           <div className="my-1 border-t border-[var(--mt-line)]" />
-          <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">Login</Link>
-          <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="rounded-xl bg-[var(--mt-leaf)] px-4 py-3 text-center text-sm font-bold text-white">Get Started</Link>
+          {isAuthenticated ? <Link to="/notifications" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">Notifications</Link> : <><Link to="/login" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">Login</Link><Link to="/register" onClick={() => setMobileMenuOpen(false)} className="rounded-xl bg-[var(--mt-leaf)] px-4 py-3 text-center text-sm font-bold text-white">Get Started</Link></>}
         </nav>
       </div>
     ) : null}

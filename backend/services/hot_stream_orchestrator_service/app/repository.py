@@ -93,6 +93,16 @@ def upsert_farm_dataset_state(
     history_start: str | None = None,
     history_end: str | None = None,
     latest_observation_at: str | None = None,
+    boundary_hash: str | None = None,
+    h3_resolution: int | None = None,
+    h3_index_set_hash: str | None = None,
+    dataset_version: str | None = None,
+    source_version: str | None = None,
+    materialization_version: str | None = None,
+    materialization_fingerprint: str | None = None,
+    latest_source_item_id: str | None = None,
+    latest_content_hash: str | None = None,
+    latest_row_fingerprint: str | None = None,
     row_count: int = 0,
     retryable: bool = False,
     error_code: str | None = None,
@@ -106,6 +116,9 @@ def upsert_farm_dataset_state(
             farm_id, dataset_key, status, spatial_level, native_resolution_m,
             last_attempt_at, last_success_at, history_start, history_end,
             latest_observation_at,
+            boundary_hash, h3_resolution, h3_index_set_hash, dataset_version,
+            source_version, materialization_version, materialization_fingerprint,
+            latest_source_item_id, latest_content_hash, latest_row_fingerprint,
             row_count, processing_version, provider, retryable, retry_count,
             next_retry_at, error_code, error_message, metadata, updated_at
         ) VALUES (
@@ -113,6 +126,9 @@ def upsert_farm_dataset_state(
             now(), CASE WHEN :success THEN now() ELSE NULL END,
             CAST(:history_start AS date), CAST(:history_end AS date),
             CAST(:latest_observation_at AS timestamptz),
+            :boundary_hash, :h3_resolution, :h3_index_set_hash, :dataset_version,
+            :source_version, :materialization_version, :materialization_fingerprint,
+            :latest_source_item_id, :latest_content_hash, :latest_row_fingerprint,
             :row_count, :processing_version, :provider, :retryable,
             CASE WHEN :retryable THEN 1 ELSE 0 END,
             CASE WHEN :retryable THEN now() + interval '1 hour' ELSE NULL END,
@@ -127,6 +143,16 @@ def upsert_farm_dataset_state(
             history_start = COALESCE(EXCLUDED.history_start, farm_dataset_state.history_start),
             history_end = COALESCE(EXCLUDED.history_end, farm_dataset_state.history_end),
             latest_observation_at = COALESCE(EXCLUDED.latest_observation_at, farm_dataset_state.latest_observation_at),
+            boundary_hash = COALESCE(EXCLUDED.boundary_hash, farm_dataset_state.boundary_hash),
+            h3_resolution = COALESCE(EXCLUDED.h3_resolution, farm_dataset_state.h3_resolution),
+            h3_index_set_hash = COALESCE(EXCLUDED.h3_index_set_hash, farm_dataset_state.h3_index_set_hash),
+            dataset_version = COALESCE(EXCLUDED.dataset_version, farm_dataset_state.dataset_version),
+            source_version = COALESCE(EXCLUDED.source_version, farm_dataset_state.source_version),
+            materialization_version = COALESCE(EXCLUDED.materialization_version, farm_dataset_state.materialization_version),
+            materialization_fingerprint = COALESCE(EXCLUDED.materialization_fingerprint, farm_dataset_state.materialization_fingerprint),
+            latest_source_item_id = COALESCE(EXCLUDED.latest_source_item_id, farm_dataset_state.latest_source_item_id),
+            latest_content_hash = COALESCE(EXCLUDED.latest_content_hash, farm_dataset_state.latest_content_hash),
+            latest_row_fingerprint = COALESCE(EXCLUDED.latest_row_fingerprint, farm_dataset_state.latest_row_fingerprint),
             row_count = EXCLUDED.row_count,
             processing_version = COALESCE(EXCLUDED.processing_version, farm_dataset_state.processing_version),
             provider = COALESCE(EXCLUDED.provider, farm_dataset_state.provider),
@@ -149,6 +175,16 @@ def upsert_farm_dataset_state(
         "history_start": history_start,
         "history_end": history_end,
         "latest_observation_at": latest_observation_at,
+        "boundary_hash": boundary_hash,
+        "h3_resolution": h3_resolution,
+        "h3_index_set_hash": h3_index_set_hash,
+        "dataset_version": dataset_version,
+        "source_version": source_version,
+        "materialization_version": materialization_version,
+        "materialization_fingerprint": materialization_fingerprint,
+        "latest_source_item_id": latest_source_item_id,
+        "latest_content_hash": latest_content_hash,
+        "latest_row_fingerprint": latest_row_fingerprint,
         "row_count": int(row_count or 0),
         "processing_version": processing_version,
         "provider": provider,
@@ -177,6 +213,154 @@ def get_farm_dataset_states(farm_id: UUID | str) -> list[dict[str, Any]]:
             return [dict(row) for row in conn.execute(query, {"farm_id": str(farm_id)}).mappings().all()]
     except SQLAlchemyError as exc:
         raise HotStreamRepositoryError(f"Failed to read dataset state: {exc}") from exc
+
+
+def get_latest_dataset_source(
+    farm_id: UUID | str,
+    dataset_key: str,
+) -> dict[str, Any] | None:
+    query = text(
+        """
+        SELECT *
+        FROM farm_dataset_source_versions
+        WHERE farm_id = :farm_id AND dataset_key = :dataset_key
+          AND materialization_status = 'materialized'
+        ORDER BY source_datetime DESC NULLS LAST, updated_at DESC
+        LIMIT 1;
+        """
+    )
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(query, {
+                "farm_id": str(farm_id),
+                "dataset_key": dataset_key,
+            }).mappings().first()
+        return dict(row) if row else None
+    except SQLAlchemyError as exc:
+        # Source identity is an optimization/observability layer. Older
+        # installations may not have its migration yet; processing remains
+        # authoritative and will simply miss the optimization until migrated.
+        return None
+
+
+def upsert_dataset_source_version(
+    farm_id: UUID | str,
+    *,
+    dataset_key: str,
+    source_item_id: str,
+    source_datetime: str | None,
+    period_start: str | None,
+    period_end: str | None,
+    processing_version: str,
+    content_hash: str | None,
+    row_fingerprint: str | None,
+    materialization_status: str = "materialized",
+    parquet_uri: str | None = None,
+    row_count: int = 0,
+) -> None:
+    query = text(
+        """
+        INSERT INTO farm_dataset_source_versions (
+            farm_id, dataset_key, source_item_id, source_datetime,
+            period_start, period_end, processing_version, content_hash,
+            row_fingerprint, materialization_status, parquet_uri, row_count,
+            last_seen_at, updated_at
+        ) VALUES (
+            :farm_id, :dataset_key, :source_item_id, CAST(:source_datetime AS timestamptz),
+            CAST(:period_start AS date), CAST(:period_end AS date), :processing_version,
+            :content_hash, :row_fingerprint, :materialization_status, :parquet_uri,
+            :row_count, now(), now()
+        )
+        ON CONFLICT (farm_id, dataset_key, source_item_id, processing_version)
+        DO UPDATE SET
+            source_datetime = COALESCE(EXCLUDED.source_datetime, farm_dataset_source_versions.source_datetime),
+            period_start = COALESCE(EXCLUDED.period_start, farm_dataset_source_versions.period_start),
+            period_end = COALESCE(EXCLUDED.period_end, farm_dataset_source_versions.period_end),
+            content_hash = COALESCE(EXCLUDED.content_hash, farm_dataset_source_versions.content_hash),
+            row_fingerprint = COALESCE(EXCLUDED.row_fingerprint, farm_dataset_source_versions.row_fingerprint),
+            materialization_status = EXCLUDED.materialization_status,
+            parquet_uri = COALESCE(EXCLUDED.parquet_uri, farm_dataset_source_versions.parquet_uri),
+            row_count = CASE
+                WHEN EXCLUDED.row_count > 0 THEN EXCLUDED.row_count
+                ELSE farm_dataset_state.row_count
+            END,
+            last_seen_at = now(), updated_at = now();
+        """
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(query, {
+                "farm_id": str(farm_id),
+                "dataset_key": dataset_key,
+                "source_item_id": source_item_id,
+                "source_datetime": source_datetime,
+                "period_start": period_start,
+                "period_end": period_end,
+                "processing_version": processing_version,
+                "content_hash": content_hash,
+                "row_fingerprint": row_fingerprint,
+                "materialization_status": materialization_status,
+                "parquet_uri": parquet_uri,
+                "row_count": int(row_count or 0),
+            })
+    except SQLAlchemyError as exc:
+        return
+
+
+def upsert_dataset_materialization(
+    farm_id: UUID | str,
+    *,
+    dataset_key: str,
+    boundary_hash: str,
+    h3_resolution: int,
+    h3_index_set_hash: str,
+    dataset_version: str | None,
+    source_version: str | None,
+    processing_version: str | None,
+    materialization_version: str,
+    materialization_fingerprint: str,
+    row_count: int,
+) -> None:
+    query = text(
+        """
+        INSERT INTO farm_dataset_materializations (
+            farm_id, dataset_key, boundary_hash, h3_resolution,
+            h3_index_set_hash, dataset_version, source_version,
+            processing_version, materialization_version,
+            materialization_fingerprint, row_count, updated_at
+        ) VALUES (
+            :farm_id, :dataset_key, :boundary_hash, :h3_resolution,
+            :h3_index_set_hash, :dataset_version, :source_version,
+            :processing_version, :materialization_version,
+            :materialization_fingerprint, :row_count, now()
+        )
+        ON CONFLICT (farm_id, dataset_key) DO UPDATE SET
+            boundary_hash = EXCLUDED.boundary_hash,
+            h3_resolution = EXCLUDED.h3_resolution,
+            h3_index_set_hash = EXCLUDED.h3_index_set_hash,
+            dataset_version = EXCLUDED.dataset_version,
+            source_version = EXCLUDED.source_version,
+            processing_version = EXCLUDED.processing_version,
+            materialization_version = EXCLUDED.materialization_version,
+            materialization_fingerprint = EXCLUDED.materialization_fingerprint,
+            row_count = EXCLUDED.row_count,
+            updated_at = now();
+        """
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(query, {
+                "farm_id": str(farm_id), "dataset_key": dataset_key,
+                "boundary_hash": boundary_hash, "h3_resolution": h3_resolution,
+                "h3_index_set_hash": h3_index_set_hash,
+                "dataset_version": dataset_version, "source_version": source_version,
+                "processing_version": processing_version,
+                "materialization_version": materialization_version,
+                "materialization_fingerprint": materialization_fingerprint,
+                "row_count": int(row_count or 0),
+            })
+    except SQLAlchemyError as exc:
+        return
 
 
 def create_pipeline_job(farm_id: UUID | str, job_type: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -368,6 +552,87 @@ def get_active_pipeline_job(
     except SQLAlchemyError as exc:
         raise HotStreamRepositoryError(f"Failed to read active pipeline job: {exc}") from exc
     return dict(row) if row else None
+
+
+def create_analysis_run(
+    farm_id: UUID | str,
+    *,
+    pipeline_job_id: UUID | str,
+    run_mode: str,
+    requested_start_date: str | None,
+    requested_end_date: str | None,
+) -> dict[str, Any] | None:
+    query = text(
+        """
+        INSERT INTO analysis_runs (
+            farm_id, pipeline_job_id, run_mode, status,
+            requested_start_date, requested_end_date
+        ) VALUES (
+            :farm_id, :pipeline_job_id, :run_mode, 'running',
+            CAST(:requested_start_date AS date), CAST(:requested_end_date AS date)
+        )
+        ON CONFLICT (pipeline_job_id) DO UPDATE SET updated_at = now()
+        RETURNING analysis_run_id, farm_id, pipeline_job_id, status;
+        """
+    )
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(query, {
+                "farm_id": str(farm_id), "pipeline_job_id": str(pipeline_job_id),
+                "run_mode": run_mode, "requested_start_date": requested_start_date,
+                "requested_end_date": requested_end_date,
+            }).mappings().first()
+        return dict(row) if row else None
+    except SQLAlchemyError:
+        return None
+
+
+def finish_analysis_run(
+    pipeline_job_id: UUID | str,
+    *,
+    status: str,
+    result_date: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    query = text(
+        """
+        UPDATE analysis_runs
+        SET status = :status,
+            result_date = CAST(:result_date AS date),
+            finished_at = now(),
+            metadata = CAST(:metadata AS jsonb),
+            updated_at = now()
+        WHERE pipeline_job_id = :pipeline_job_id;
+        """
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(query, {
+                "pipeline_job_id": str(pipeline_job_id), "status": status,
+                "result_date": result_date, "metadata": json_or_empty(metadata),
+            })
+    except SQLAlchemyError:
+        return
+
+
+def get_latest_completed_analysis_run(farm_id: UUID | str) -> dict[str, Any] | None:
+    query = text(
+        """
+        SELECT analysis_run_id, pipeline_job_id, status, requested_start_date,
+               requested_end_date, started_at, finished_at, result_date, metadata
+        FROM analysis_runs
+        WHERE farm_id = :farm_id
+          AND status IN ('completed', 'completed_with_warnings')
+        ORDER BY finished_at DESC NULLS LAST
+        LIMIT 1;
+        """
+    )
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(query, {"farm_id": str(farm_id)}).mappings().first()
+        return dict(row) if row else None
+    except SQLAlchemyError:
+        return None
 
 
 def get_or_create_active_latest_analysis_job(

@@ -44,5 +44,10 @@ frontend/.env.local
 # storage/system/ (admin-curated crop/stage images + audio) is committed.
 backend/services/crop_observation_service/storage/farmer/
 
+# FPO verification documents in local storage mode.
+backend/services/fpo_management_service/.data/
+backend/.data/
+
 *.parquet
 *.zip
+*.example

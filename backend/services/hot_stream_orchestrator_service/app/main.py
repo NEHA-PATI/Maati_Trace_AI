@@ -37,6 +37,7 @@ from services.hot_stream_orchestrator_service.app.repository import (
     get_farm_dataset_states,
     get_or_create_active_latest_analysis_job,
     get_latest_pipeline_job,
+    get_latest_completed_analysis_run,
 )
 from services.analytics_query_service.app.repository import (
     get_farm_grid_cells,
@@ -272,6 +273,7 @@ def latest_analysis_status_endpoint(farm_id: UUID):
             "current_stage": None,
             "stages": [],
             "dataset_states": get_farm_dataset_states(farm_id),
+            "latest_completed_run": get_latest_completed_analysis_run(farm_id),
         }
     metadata = job.get("metadata") or {}
     job_status = job.get("status")
@@ -295,6 +297,7 @@ def latest_analysis_status_endpoint(farm_id: UUID):
         "finished_at": job.get("finished_at"),
         "updated_at": job.get("updated_at"),
         "dataset_states": get_farm_dataset_states(farm_id),
+        "latest_completed_run": get_latest_completed_analysis_run(farm_id),
     }
 
 

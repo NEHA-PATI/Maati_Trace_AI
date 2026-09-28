@@ -129,22 +129,24 @@ def latest_calculations(
     farm_id: UUID,
     scope: str = Query(default="farm", pattern="^(farm|h3)$"),
     prediction_key: str | None = Query(default=None),
+    result_date: str | None = Query(default=None),
 ):
     return {
         "farm_id": str(farm_id),
         "scope": scope,
         "items": repository.get_calculated_predictions(
-            farm_id, scope=scope, latest_only=True, prediction_key=prediction_key
+            farm_id, scope=scope, latest_only=True, prediction_key=prediction_key,
+            result_date=result_date,
         ),
     }
 
 
 @router.get("/v1/analytics/farms/{farm_id}/grid-calculations/latest")
-def latest_grid_calculations(farm_id: UUID):
+def latest_grid_calculations(farm_id: UUID, result_date: str | None = Query(default=None)):
     return {
         "farm_id": str(farm_id),
         "grid_semantics": "Scores are H3 formula results projected to the existing display grid with H3/grid overlap weights; they are not independent 10 m measurements.",
-        "items": repository.get_latest_grid_calculations(farm_id),
+        "items": repository.get_latest_grid_calculations(farm_id, result_date=result_date),
     }
 
 

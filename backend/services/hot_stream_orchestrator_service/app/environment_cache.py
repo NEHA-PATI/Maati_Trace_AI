@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from shared.db.postgres import engine
 
@@ -37,11 +38,45 @@ def static_dataset_is_cached(
     farm_id: UUID | str,
     dataset_key: str,
     expected_rows: int,
+    *,
+    expected_h3_indexes: list[int] | None = None,
+    expected_fingerprint: str | None = None,
 ) -> bool:
     table = STATIC_TABLES.get(dataset_key)
     if not table:
         return False
-    query = text(f"SELECT COUNT(*) FROM {table} WHERE farm_id = :farm_id")
-    with engine.connect() as conn:
-        count = int(conn.execute(query, {"farm_id": str(farm_id)}).scalar() or 0)
-    return count >= expected_rows
+    try:
+        with engine.connect() as conn:
+            count = int(conn.execute(
+                text(f"SELECT COUNT(*) FROM {table} WHERE farm_id = :farm_id"),
+                {"farm_id": str(farm_id)},
+            ).scalar() or 0)
+            if count < expected_rows:
+                return False
+
+            if expected_h3_indexes is not None:
+                rows = conn.execute(
+                    text(f"SELECT DISTINCT h3_index FROM {table} WHERE farm_id = :farm_id"),
+                    {"farm_id": str(farm_id)},
+                ).scalars().all()
+                if {int(value) for value in rows} != {int(value) for value in expected_h3_indexes}:
+                    return False
+
+            if expected_fingerprint:
+                materialized = conn.execute(
+                    text(
+                        """
+                        SELECT materialization_fingerprint
+                        FROM farm_dataset_materializations
+                        WHERE farm_id = :farm_id AND dataset_key = :dataset_key
+                        """
+                    ),
+                    {"farm_id": str(farm_id), "dataset_key": dataset_key},
+                ).scalar()
+                if materialized != expected_fingerprint:
+                    return False
+    except SQLAlchemyError:
+        # A missing stabilization migration must never turn an unverified
+        # cache into a valid cache.
+        return False
+    return True

@@ -174,6 +174,11 @@ def upsert_environment_rows(dataset_key: str, rows: list[dict[str, Any]]) -> int
     update_sql = ",\n".join(
         f"{column} = EXCLUDED.{column}" for column in update_columns if column != "created_at"
     )
+    changed_sql = " OR ".join(
+        f"{spec.table}.{column} IS DISTINCT FROM EXCLUDED.{column}"
+        for column in update_columns
+        if column not in {"created_at", "updated_at"}
+    ) or "FALSE"
     query = text(
         f"""
         INSERT INTO {spec.table} ({col_sql})
@@ -188,10 +193,14 @@ def upsert_environment_rows(dataset_key: str, rows: list[dict[str, Any]]) -> int
     for row in rows:
         prepared.append({column: row.get(column) for column in columns})
     try:
+        # The comparison predicate avoids rewriting identical observations.
+        # This matters for repeated latest-analysis runs and keeps updated_at
+        # meaningful for downstream freshness checks.
+        query = text(query.text.replace("            updated_at = now();", f"            updated_at = now()\n        WHERE {changed_sql};"))
         with engine.begin() as conn:
-            conn.execute(query, prepared)
+            result = conn.execute(query, prepared)
     except SQLAlchemyError as exc:
         raise EnvironmentRepositoryError(
             f"Failed writing {dataset_key} to {spec.table}: {exc}"
         ) from exc
-    return len(rows)
+    return int(result.rowcount) if result.rowcount is not None and result.rowcount >= 0 else len(rows)

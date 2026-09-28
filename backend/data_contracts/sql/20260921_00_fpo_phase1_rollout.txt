@@ -3,72 +3,44 @@ MaatiTrace FPO phase 1 SQL index
 Apply in this order on the live schema:
 
 1. 20260921_01_fpo_signup_account_type.sql
-   Adds account_type, signup_profile_payload and authorised_fpo_representative
-   to signup_otp_sessions. Adds the transactional auth_outbox_events queue.
-
 2. 20260921_02_fpo_organization_foundation.sql
-   Adds the separate fpo_organizations identity table and public-number sequence.
-
 3. 20260921_03_fpo_provisioning_constraints.sql
-   Makes owner the only active FPO membership role and enforces one account per
-   organization and one organization per account.
-
 4. 20260921_04_fpo_verification_workflow.sql
-   Adds verification submission history and document metadata storage.
-
 5. 20260921_05_fpo_org_profile_link.sql
-   Adds the organization-to-Profile Service FPO identity link. This is required
-   when 20260921_03 was already applied before this follow-up implementation.
-
 6. 20260921_06_fpo_farmer_relationships.sql
-   Adds consent-backed relationship history, one-active-FPO enforcement, and
-   relationship event history.
-
 7. 20260921_07_fpo_feature_entitlements.sql
-   Adds the versioned feature catalogue, class assignments, feature overrides,
-   and Class A/B/C entitlement configuration.
-
 8. 20260921_08_fpo_stabilization_audit.sql
-   Adds FPO audit events and reconciliation-run tracking for tenant-security
-   and projection-drift repair.
-
 9. 20260921_09_fpo_operational_alerts_reports.sql
-   Adds the Class A operational alert inbox used by the FPO portfolio report
-   and alert acknowledgement workflow.
-
 10. 20260921_10_fpo_profile_expansion.sql
-    Expands the Profile Service FPO contract with professional profile fields,
-    normalized commodities, service areas, and services.
-
 11. 20260921_11_fpo_portfolio_read_models.sql
-    Adds server-side portfolio summary and farmer-directory read models for
-    bounded dashboard and paginated directory queries.
-
 12. 20260921_12_fpo_provisioning_recovery.sql
-    Adds provisioning error visibility and supports recovery from legacy FPO
-    profiles created before the organization identity was provisioned.
 
-Operational requirement:
-Deploy an idempotent consumer for auth_outbox_events before enabling FPO signup.
-The event auth.user.created creates the FPO organization and then provisions the
-Profile Service FPO profile. Auth does not write FPO profile tables.
+13. 20260922_13_fpo_class_a_hardening.sql
+14. 20260922_14_fpo_plan_version_2.sql
+15. 20260922_15_fpo_documents_consent_lifecycle.sql
+16. 20260922_16_fpo_document_scan_queue.sql
+17. 20260922_17_fpo_class_a_closure.sql
+18. 20260922_18_fpo_plan_assignment_reconciliation.sql
+19. 20260923_19_fpo_class_b_foundation_bulk.sql
+20. 20260923_20_fpo_class_b_activation_gate.sql
+21. 20260923_21_fpo_class_b_portfolio_organization.sql
+22. 20260923_22_fpo_class_b_portfolio_activation_gate.sql
+23. 20260924_23_fpo_class_b_monitoring_advisories.sql
 
-The repository consumer is:
-  python -m services.fpo_management_service.worker
+24. 20260925_24_fpo_class_b_inputs_forecasts_reports.sql
 
-Run it with the working directory set to backend. The service loads its own
-backend/services/fpo_management_service/.env before shared settings initialize.
+25. 20260925_25_fpo_class_b_release_governance.sql
+26. 20260926_36_fpo_bulk_commit_staging.sql
 
-The API process is:
-  uvicorn services.fpo_management_service.app.main:app --port 8016
+Class B v3 remains DRAFT until the B8 activation gates pass. The repository
+consumer is: python -m services.fpo_management_service.worker
 
-The gateway exposes its bootstrap endpoint at:
-  GET /api/fpo-portal/bootstrap-status
+Run with the working directory set to backend. The API process is:
+uvicorn services.fpo_management_service.app.main:app --port 8016
 
 Before applying:
 pg_dump --schema-only --no-owner --no-privileges --file maatitrace_schema_before_fpo.sql $DATABASE_URL
 
 After applying, verify:
-SELECT account_type, count(*) FROM signup_otp_sessions GROUP BY account_type;
 SELECT status, count(*) FROM auth_outbox_events GROUP BY status;
 SELECT count(*) FROM fpo_organizations;

@@ -1,7 +1,5 @@
-export const LOCALES = {
-  OR: "or-IN",
-  EN: "en-IN",
-};
+export { LOCALES } from "@/features/language";
+import { LOCALES } from "@/features/language";
 
 export const STRINGS = {
   cards: { en: "Cards", or: "କାର୍ଡ" },
