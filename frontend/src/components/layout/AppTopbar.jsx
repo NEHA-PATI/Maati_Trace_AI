@@ -1,19 +1,10 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Bell, LogOut } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
-
-const NAV_ITEMS = [
-  { to: "/farmer/me", label: "Dashboard" },
-  { to: "/my-crops/language", label: "My Crop" },
-  { to: "/", label: "Home" },
-  { to: "/our-method", label: "Our Method" },
-  { to: "/use-cases", label: "Use Cases" },
-  { to: "/plans", label: "Plans" },
-  { to: "/settings", label: "Profile" },
-  { to: "/farm-register", label: "Register" },
-];
+import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
+import { LanguageToggle } from "@/features/language";
 
 function MaatiLogo() {
   return (
@@ -32,9 +23,10 @@ function MaatiLogo() {
 export default function AppTopbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const navItems = getAuthenticatedNavigation(user?.role);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -57,12 +49,14 @@ export default function AppTopbar() {
         </Link>
 
         <nav className="hidden items-center gap-1.5 md:flex">
-          {NAV_ITEMS.map((item) => {
-            const active = location.pathname === item.to;
+          {navItems.map((item) => {
+            const active = isNavigationItemActive(location.pathname, item);
             return (
-              <Link
+              <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.end}
+                aria-current={active ? "page" : undefined}
                 className={`rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors ${
                   active
                     ? "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"
@@ -70,12 +64,13 @@ export default function AppTopbar() {
                 }`}
               >
                 {item.label}
-              </Link>
+              </NavLink>
             );
           })}
         </nav>
 
         <div className="flex items-center gap-2">
+          <LanguageToggle />
           <Link
             to="/notifications"
             aria-label="Notifications"

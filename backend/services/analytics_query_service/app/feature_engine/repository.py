@@ -69,7 +69,7 @@ def _row(query: str, params: dict[str, Any]) -> dict[str, Any] | None:
 
 def get_farm_context(farm_id: UUID | str) -> dict[str, Any] | None:
     return _row(
-        """
+        f"""
         SELECT
             farm_id, farmer_id, fpo_id, farm_name,
             state_name, district_name, district_code, block_name, block_code,
@@ -602,13 +602,17 @@ def get_calculated_predictions(
     scope: str = "farm",
     latest_only: bool = True,
     prediction_key: str | None = None,
+    result_date: str | None = None,
 ) -> list[dict[str, Any]]:
     where = ["farm_id = :farm_id", "result_scope = :scope"]
     params: dict[str, Any] = {"farm_id": str(farm_id), "scope": scope}
     if prediction_key:
         where.append("prediction_key = :prediction_key")
         params["prediction_key"] = prediction_key
-    if latest_only:
+    if result_date:
+        where.append("result_date = CAST(:result_date AS date)")
+        params["result_date"] = result_date
+    elif latest_only:
         where.append(
             "result_date = (SELECT MAX(result_date) FROM farm_calculated_predictions WHERE farm_id = :farm_id AND result_scope = :scope)"
         )
@@ -686,9 +690,10 @@ def upsert_grid_prediction_rows(rows: list[dict[str, Any]]) -> int:
     return len(rows)
 
 
-def get_latest_grid_calculations(farm_id: UUID | str) -> list[dict[str, Any]]:
+def get_latest_grid_calculations(farm_id: UUID | str, result_date: str | None = None) -> list[dict[str, Any]]:
+    date_clause = "gv.result_date = CAST(:result_date AS date)" if result_date else "gv.result_date = (SELECT MAX(result_date) FROM farm_grid_calculated_values WHERE farm_id = :farm_id)"
     rows = _rows(
-        """
+        f"""
         SELECT
             gv.*,
             gc.grid_row, gc.grid_col, gc.grid_size_meters,
@@ -697,12 +702,10 @@ def get_latest_grid_calculations(farm_id: UUID | str) -> list[dict[str, Any]]:
         FROM farm_grid_calculated_values gv
         JOIN farm_grid_cells gc ON gc.grid_cell_id = gv.grid_cell_id
         WHERE gv.farm_id = :farm_id
-          AND gv.result_date = (
-              SELECT MAX(result_date) FROM farm_grid_calculated_values WHERE farm_id = :farm_id
-          )
+          AND {date_clause}
         ORDER BY gc.grid_row, gc.grid_col, gv.prediction_key;
         """,
-        {"farm_id": str(farm_id)},
+        {"farm_id": str(farm_id), "result_date": result_date},
     )
     # Pivot one database row per prediction into one frontend row per display grid cell.
     by_cell: dict[str, dict[str, Any]] = {}

@@ -73,6 +73,7 @@ def search_catalog_dataset(
         f"{settings.stac_catalog_service_url}/v1/catalog/search",
         body,
         timeout=settings.catalog_http_timeout_seconds + 30,
+        retry_attempts=settings.catalog_http_retry_attempts,
     )
 
 

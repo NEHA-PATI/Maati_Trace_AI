@@ -139,7 +139,10 @@ class Settings(BaseSettings):
     nasa_cmr_enabled: bool = False
 
     # Multi-source catalog / remote access
-    catalog_http_timeout_seconds: int = 120
+    # Provider discovery must be bounded so one catalog cannot hold the
+    # complete farm run indefinitely. Retries are handled by the client.
+    catalog_http_timeout_seconds: int = 45
+    catalog_http_retry_attempts: int = 2
     source_download_timeout_seconds: int = 600
     stac_search_max_concurrency: int = 1
     stac_search_retry_attempts: int = 3
@@ -164,6 +167,7 @@ class Settings(BaseSettings):
     raster_http_timeout_seconds: int = 120
     raster_max_pixels_per_request: int = 250000
     environment_pipeline_max_workers: int = 8
+    environment_discovery_max_workers: int = 4
     lakehouse_write_retry_attempts: int = 2
 
     model_config = SettingsConfigDict(

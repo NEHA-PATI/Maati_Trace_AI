@@ -273,6 +273,19 @@ class FarmerProfileResponse(StrictModel):
 
 
 class FpoProfileSetupRequest(StrictModel):
+    legal_name: str | None = Field(default=None, min_length=2, max_length=240)
+    display_name: str | None = Field(default=None, min_length=2, max_length=240)
+    organisation_type: str | None = Field(default=None, max_length=100)
+    cin: str | None = Field(default=None, max_length=32)
+    gstin: str | None = Field(default=None, max_length=32)
+    website_url: str | None = Field(default=None, max_length=500)
+    organisation_description: str | None = Field(default=None, max_length=3000)
+    operating_since_year: int | None = Field(default=None, ge=1900, le=2100)
+    registered_address_line_1: str | None = Field(default=None, max_length=300)
+    registered_address_line_2: str | None = Field(default=None, max_length=300)
+    women_member_count: int | None = Field(default=None, ge=0)
+    small_marginal_member_count: int | None = Field(default=None, ge=0)
+    declared_area_acres: float | None = Field(default=None, ge=0)
     fpo_name: str = Field(
         min_length=2,
         max_length=200,
@@ -489,6 +502,23 @@ class FpoProfileUpdate(FpoProfileSetupRequest):
 
 class FpoProfileResponse(StrictModel):
     fpo_id: UUID
+    legal_name: str | None = None
+    display_name: str | None = None
+    organisation_type: str | None = None
+    cin: str | None = None
+    gstin: str | None = None
+    website_url: str | None = None
+    organisation_description: str | None = None
+    operating_since_year: int | None = None
+    logo_object_key: str | None = None
+    logo_mime_type: str | None = None
+    logo_size_bytes: int | None = None
+    logo_checksum: str | None = None
+    registered_address_line_1: str | None = None
+    registered_address_line_2: str | None = None
+    women_member_count: int | None = None
+    small_marginal_member_count: int | None = None
+    declared_area_acres: Decimal | None = None
     fpo_name: str
     registration_number: str | None = None
     registration_type: str | None = None
@@ -516,6 +546,8 @@ class FpoProfileResponse(StrictModel):
     member_count: int | None = None
     active_member_count: int | None = None
     services_provided: list[str]
+    profile_completion_percentage: int = Field(default=0, ge=0, le=100)
+    verification_readiness_percentage: int = Field(default=0, ge=0, le=100)
 
     verification_status: VerificationStatus
     profile_image_url: str | None = None

@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useForm,
 } from "react-hook-form";
+import { Link } from "react-router-dom";
 import {
   AlertCircle,
   Building2,
@@ -211,12 +212,25 @@ export function FpoProfileForm({
         icon={Building2}
       >
         <ProfileGrid>
+          <ProfileInput label="Legal name" error={errors.legal_name} {...register("legal_name")} />
+          <ProfileInput label="Display name" error={errors.display_name} {...register("display_name")} />
+          <ProfileInput label="Organisation type" error={errors.organisation_type} {...register("organisation_type")} />
           <ProfileInput
             label="FPO name"
             required
             error={errors.fpo_name}
             {...register("fpo_name")}
           />
+          <ProfileInput label="CIN" error={errors.cin} {...register("cin")} />
+          <ProfileInput label="GSTIN" error={errors.gstin} {...register("gstin")} />
+          <ProfileInput label="Website" type="url" error={errors.website_url} {...register("website_url")} />
+          <ProfileInput label="Operating since year" type="number" error={errors.operating_since_year} {...register("operating_since_year")} />
+          <ProfileInput label="Declared area (acres)" type="number" step="0.01" error={errors.declared_area_acres} {...register("declared_area_acres")} />
+          <ProfileInput label="Women members" type="number" error={errors.women_member_count} {...register("women_member_count")} />
+          <ProfileInput label="Small/marginal members" type="number" error={errors.small_marginal_member_count} {...register("small_marginal_member_count")} />
+          <ProfileInput label="Registered address line 1" error={errors.registered_address_line_1} {...register("registered_address_line_1")} />
+          <ProfileInput label="Registered address line 2" error={errors.registered_address_line_2} {...register("registered_address_line_2")} />
+          <ProfileTextarea label="Organisation description" error={errors.organisation_description} {...register("organisation_description")} />
           <ProfileInput
             label="Registration number"
             error={
@@ -328,6 +342,13 @@ export function FpoProfileForm({
             )}
           />
         </ProfileGrid>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+          <div>
+            <p className="font-bold text-emerald-950">Verification documents</p>
+            <p className="mt-1 text-sm text-emerald-800">Upload registration evidence and submit it for administrator review.</p>
+          </div>
+          <Link to="/fpo/verification" className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800">Manage documents</Link>
+        </div>
       </ProfileSection>
 
       <ProfileSection

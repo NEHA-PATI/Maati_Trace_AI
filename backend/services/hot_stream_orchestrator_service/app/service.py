@@ -36,6 +36,8 @@ from services.hot_stream_orchestrator_service.app.repository import (
     get_existing_scene_analysis_summary,
     get_sentinel2_history_summary,
     get_or_create_active_latest_analysis_job,
+    create_analysis_run,
+    finish_analysis_run,
 )
 
 
@@ -825,6 +827,13 @@ def run_latest_analysis(
         job_id = job["job_id"]
 
     job_id = str(job_id)
+    analysis_run = create_analysis_run(
+        farm_id,
+        pipeline_job_id=job_id,
+        run_mode=getattr(payload, "analysis_mode", "incremental_latest"),
+        requested_start_date=getattr(payload, "start_date", None),
+        requested_end_date=getattr(payload, "end_date", None),
+    )
     stages: list[dict[str, Any]] = []
     request_metadata = payload.model_dump() if hasattr(payload, "model_dump") else {}
     request_metadata.setdefault("analysis_mode", getattr(payload, "analysis_mode", "incremental_latest"))
@@ -978,6 +987,7 @@ def run_latest_analysis(
                 error_message=str(exc),
                 metadata={"request": request_metadata, "stages": stages},
             )
+            finish_analysis_run(job_id, status="failed", metadata={"stages": stages})
             return {
                 "farm_id": str(farm_id),
                 "job_id": job_id,
@@ -992,6 +1002,7 @@ def run_latest_analysis(
                 error_message=str(exc),
                 metadata={"request": request_metadata, "stages": stages},
             )
+            finish_analysis_run(job_id, status="failed", metadata={"stages": stages})
             return {
                 "farm_id": str(farm_id),
                 "job_id": job_id,
@@ -1029,6 +1040,20 @@ def run_latest_analysis(
                 "analysis_status": final_status,
             },
         )
+        latest_result_date = None
+        try:
+            latest_result_date = str(
+                ((intelligence.get("calculation_processing") or {}).get("latest_result_date"))
+                or ""
+            ) or None
+        except Exception:
+            latest_result_date = None
+        finish_analysis_run(
+            job_id,
+            status=final_status,
+            result_date=latest_result_date,
+            metadata={"stages": stages, "analysis_status": final_status},
+        )
         return {
             "farm_id": str(farm_id),
             "job_id": job_id,
@@ -1041,6 +1066,11 @@ def run_latest_analysis(
             error_code=getattr(exc, "code", "LATEST_ANALYSIS_FAILED"),
             error_message=str(exc),
             metadata={"request": request_metadata, "stages": stages},
+        )
+        finish_analysis_run(
+            job_id,
+            status="failed",
+            metadata={"request": request_metadata, "stages": stages, "error": str(exc)},
         )
         return {
             "farm_id": str(farm_id),

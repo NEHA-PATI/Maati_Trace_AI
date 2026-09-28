@@ -32,6 +32,15 @@ from services.hot_stream_orchestrator_service.app.repository import (
     get_farm_dataset_states,
     upsert_farm_dataset_state,
     update_pipeline_job_stage,
+    get_latest_dataset_source,
+    upsert_dataset_source_version,
+    upsert_dataset_materialization,
+)
+from services.hot_stream_orchestrator_service.app.source_identity import (
+    content_hash,
+    source_item_hash,
+    h3_index_set_hash,
+    materialization_fingerprint,
 )
 from services.hot_stream_orchestrator_service.app.service import (
     _full_farm_bbox,
@@ -48,21 +57,31 @@ class EnvironmentRefreshError(RuntimeError):
 SENTINEL2_CANDIDATE_LIMIT = 5
 ERA5_LAND_AVAILABILITY_LAG_DAYS = 5
 
-INCREMENTAL_DATASET_MAX_AGE_DAYS = {
-    "sentinel_2_l2a": 14,
-    "sentinel_1_rtc": 30,
-    "landsat_c2_l2": 60,
-    "gpm_imerg": 2,
-    "era5_land": 2,
-    "smap_l4_sm": 5,
-    "modis_et": 16,
-    "modis_lai_fpar": 16,
-    "weather_forecast": 2,
-}
-
-
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _expected_processing_version(dataset_key: str) -> str | None:
+    """Return the current contract version used to materialize a dataset."""
+    try:
+        from services.stac_catalog_service.app.collection_registry import get_registered_dataset
+
+        contract = get_registered_dataset(dataset_key) or {}
+        value = contract.get("processing_version")
+        return str(value) if value else None
+    except Exception:
+        # A registry lookup must not make an otherwise valid source unavailable.
+        return None
+
+
+# Deprecated compatibility helper. The production environment path no longer
+# calls this function: dynamic sources must perform STAC discovery first. It
+# remains available for older diagnostic callers and migrations.
+INCREMENTAL_DATASET_MAX_AGE_DAYS = {
+    "sentinel_2_l2a": 14, "sentinel_1_rtc": 30, "landsat_c2_l2": 60,
+    "gpm_imerg": 2, "era5_land": 2, "smap_l4_sm": 5,
+    "modis_et": 16, "modis_lai_fpar": 16, "weather_forecast": 2,
+}
 
 
 def _fresh_cached_dataset_result(
@@ -71,73 +90,43 @@ def _fresh_cached_dataset_result(
     payload: EnvironmentRefreshRequest,
     dataset_states: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Return a fresh-cache or retry-deferred result for incremental runs."""
+    """Legacy diagnostic helper; not used by the production pipeline."""
     if getattr(payload, "analysis_mode", "manual") != "incremental_latest" or payload.force_refresh:
         return None
     max_age = INCREMENTAL_DATASET_MAX_AGE_DAYS.get(dataset_key)
-    if max_age is None:
+    state = (dataset_states or {}).get(dataset_key)
+    if not max_age or not state:
         return None
-    if dataset_states is None:
-        try:
-            states = get_farm_dataset_states(farm_id)
-        except Exception:
-            # Older installations may not have the readiness migration yet.
-            return None
-        dataset_states = {str(row.get("dataset_key")): row for row in states}
-    state = dataset_states.get(dataset_key)
-    if not state:
+    retry_at = state.get("next_retry_at")
+    if state.get("status") in {"failed", "stale"} and retry_at:
+        retry_at = retry_at if isinstance(retry_at, datetime) else datetime.fromisoformat(str(retry_at).replace("Z", "+00:00"))
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        if retry_at > datetime.now(timezone.utc):
+            return {
+                "dataset_key": dataset_key, "status": "unavailable",
+                "reason_type": "provider_unavailable", "reason_code": "SOURCE_RETRY_DEFERRED",
+                "message": f"Deferred {dataset_key} retry until {retry_at.isoformat()}.",
+                "source_items_found": 0, "source_items_processed": 0,
+                "postgres_rows_written": int(state.get("row_count") or 0),
+                "parquet_rows_written": 0, "retry_deferred": True,
+            }
+    raw = state.get("latest_observation_at")
+    if state.get("status") != "ready" or not raw:
         return None
-
-    raw_retry = state.get("next_retry_at")
-    if state.get("status") in {"failed", "stale"} and raw_retry:
-        try:
-            retry_at = raw_retry if isinstance(raw_retry, datetime) else datetime.fromisoformat(str(raw_retry).replace("Z", "+00:00"))
-            if retry_at.tzinfo is None:
-                retry_at = retry_at.replace(tzinfo=timezone.utc)
-            if retry_at > datetime.now(timezone.utc):
-                return {
-                    "dataset_key": dataset_key,
-                    "status": "unavailable",
-                    "reason_type": "provider_unavailable",
-                    "reason_code": "SOURCE_RETRY_DEFERRED",
-                    "message": f"Deferred {dataset_key} retry until {retry_at.isoformat()}.",
-                    "source_items_found": 0,
-                    "source_items_processed": 0,
-                    "postgres_rows_written": int(state.get("row_count") or 0),
-                    "parquet_rows_written": 0,
-                    "latest_observation_at": str(state.get("latest_observation_at")) if state.get("latest_observation_at") else None,
-                    "start_date": str(state.get("history_start")) if state.get("history_start") else None,
-                    "end_date": str(state.get("history_end")) if state.get("history_end") else None,
-                    "retry_deferred": True,
-                }
-        except Exception:
-            pass
-
-    if state.get("status") != "ready" or not state.get("latest_observation_at"):
-        return None
-    raw = state["latest_observation_at"]
-    try:
-        observed = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=timezone.utc)
-        target = datetime.fromisoformat(f"{payload.end_date}T23:59:59+00:00")
-        age = (target - observed).total_seconds() / 86400
-    except Exception:
-        return None
+    observed = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    target = datetime.fromisoformat(f"{payload.end_date}T23:59:59+00:00")
+    age = (target - observed).total_seconds() / 86400
     if age < 0 or age > max_age:
         return None
     return {
-        "dataset_key": dataset_key,
-        "status": "cached",
-        "reason_type": "cached",
-        "reason_code": "DATASET_FRESH_CACHE",
-        "message": f"Reused fresh {dataset_key} data ({age:.1f} days old).",
-        "source_items_found": 0,
-        "source_items_processed": 0,
-        "postgres_rows_written": 0,
-        "parquet_rows_written": 0,
-        "latest_observation_at": str(raw),
-        "cache_age_days": round(age, 2),
+        "dataset_key": dataset_key, "status": "cached", "reason_type": "cached",
+        "reason_code": "DATASET_FRESH_CACHE", "message": f"Reused fresh {dataset_key} data ({age:.1f} days old).",
+        "source_items_found": 0, "source_items_processed": 0,
+        "postgres_rows_written": 0, "parquet_rows_written": 0,
+        "latest_observation_at": str(raw), "cache_age_days": round(age, 2),
     }
 
 
@@ -221,11 +210,23 @@ def _search_unavailable_reason(errors: list[str]) -> tuple[str, str]:
     return "data_unavailable", "NO_SOURCE_ITEM"
 
 
+def _is_retryable_provider_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in (
+            "timed out", "timeout", "connection", "429", "502", "503", "504",
+            "temporarily unavailable", "rate limit", "dns",
+        )
+    )
+
+
 def _source_item_label(source_item: dict[str, Any]) -> str:
     return str(
         source_item.get("id")
         or source_item.get("scene_id")
         or source_item.get("source_item_id")
+        or source_item.get("item_id")
         or source_item.get("datetime")
         or "unknown-scene"
     )
@@ -258,6 +259,16 @@ def _persist_dataset_state(farm_id: UUID, result: dict[str, Any]) -> None:
             history_start=result.get("start_date"),
             history_end=result.get("end_date"),
             latest_observation_at=result.get("latest_observation_at"),
+            boundary_hash=result.get("boundary_hash"),
+            h3_resolution=result.get("h3_resolution"),
+            h3_index_set_hash=result.get("h3_index_set_hash"),
+            dataset_version=result.get("dataset_version"),
+            source_version=result.get("source_version"),
+            materialization_version=result.get("materialization_version"),
+            materialization_fingerprint=result.get("materialization_fingerprint"),
+            latest_source_item_id=result.get("source_item_id"),
+            latest_content_hash=result.get("content_hash"),
+            latest_row_fingerprint=result.get("row_fingerprint"),
             row_count=int(result.get("postgres_rows_written") or 0),
             retryable=result.get("reason_type") == "provider_unavailable",
             error_code=result.get("reason_code"),
@@ -271,6 +282,38 @@ def _persist_dataset_state(farm_id: UUID, result: dict[str, Any]) -> None:
         return
 
 
+def _discover_dataset(
+    *,
+    dataset_key: str,
+    payload: EnvironmentRefreshRequest,
+    bbox: Any,
+) -> dict[str, Any]:
+    """Perform only provider discovery; materialization is a later phase."""
+    options = payload.dataset_options.get(dataset_key) or {}
+    start_date, end_date = _dataset_search_window(dataset_key, payload, options)
+    limit = SENTINEL2_CANDIDATE_LIMIT if dataset_key == "sentinel_2_l2a" else max(payload.max_items_per_dataset, 1)
+    try:
+        result = search_catalog_dataset(
+            dataset_key=dataset_key,
+            bbox=bbox,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            max_cloud_cover=payload.max_cloud_cover,
+        )
+        result["start_date"] = start_date
+        result["end_date"] = end_date
+        return result
+    except Exception as exc:
+        return {
+            "items": [],
+            "errors": [str(exc)],
+            "provider": None,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+
+
 def _process_dataset(
     *,
     farm_id: UUID,
@@ -281,6 +324,7 @@ def _process_dataset(
     h3_cells: list[int],
     h3_resolution: int,
     dataset_states: dict[str, dict[str, Any]] | None = None,
+    discovered_search: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Process one environmental source.
 
@@ -298,10 +342,6 @@ def _process_dataset(
         "postgres_rows_written": 0,
         "parquet_rows_written": 0,
     }
-    cached = _fresh_cached_dataset_result(farm_id, dataset_key, payload, dataset_states)
-    if cached is not None:
-        _persist_dataset_state(farm_id, cached)
-        return cached
     started = perf_counter()
     _persist_dataset_state(farm_id, current)
     try:
@@ -315,12 +355,39 @@ def _process_dataset(
         current["end_date"] = search_end_date
         if dataset_key in STATIC_TABLES and not payload.force_refresh:
             expected_rows = expected_static_rows(dataset_key, len(h3_cells), dataset_options)
-            if static_dataset_is_cached(farm_id, dataset_key, expected_rows):
+            boundary_hash = content_hash(polygon)
+            h3_hash = h3_index_set_hash(h3_cells)
+            static_processing_version = f"static:{dataset_key}:v1"
+            static_fingerprint = materialization_fingerprint(
+                farm_id=str(farm_id),
+                boundary_hash=boundary_hash,
+                h3_resolution=h3_resolution,
+                h3_indexes=h3_cells,
+                dataset_key=dataset_key,
+                dataset_version="static-v1",
+                source_version="static-v1",
+                processing_version=static_processing_version,
+            )
+            if static_dataset_is_cached(
+                farm_id,
+                dataset_key,
+                expected_rows,
+                expected_h3_indexes=h3_cells,
+                expected_fingerprint=static_fingerprint,
+            ):
                 current.update({
                     "status": "cached",
                     "reason_type": "cached",
                     "reason_code": "STATIC_DATASET_CACHED",
                     "message": f"Static dataset already materialized ({expected_rows} expected rows).",
+                    "boundary_hash": boundary_hash,
+                    "h3_resolution": h3_resolution,
+                    "h3_index_set_hash": h3_hash,
+                    "dataset_version": "static-v1",
+                    "source_version": "static-v1",
+                    "processing_version": static_processing_version,
+                    "materialization_version": "1",
+                    "materialization_fingerprint": static_fingerprint,
                 })
                 _persist_dataset_state(farm_id, current)
                 return current
@@ -330,7 +397,7 @@ def _process_dataset(
             if dataset_key == "sentinel_2_l2a"
             else max(payload.max_items_per_dataset, 1)
         )
-        search = search_catalog_dataset(
+        search = discovered_search or search_catalog_dataset(
             dataset_key=dataset_key,
             bbox=bbox,
             start_date=search_start_date,
@@ -343,11 +410,83 @@ def _process_dataset(
         current["source_items_found"] = len(items)
         if not items:
             reason_type, reason_code = _search_unavailable_reason(search.get("errors") or [])
+            existing_source = get_latest_dataset_source(farm_id, dataset_key)
+            if existing_source:
+                # A provider can be late or temporarily unavailable. Preserve
+                # continuity by using the newest materialized source while
+                # exposing the source warning to the caller and retry ledger.
+                current.update({
+                    "status": "cached",
+                    "reason_type": "provider_unavailable" if reason_type == "provider_unavailable" else "cached",
+                    "reason_code": "SOURCE_LATEST_STORED",
+                    "message": (
+                        "; ".join(search.get("errors") or [])
+                        or "No newer STAC item was available; reused the latest stored source."
+                    ),
+                    "source_item_id": existing_source.get("source_item_id"),
+                    "latest_observation_at": existing_source.get("source_datetime"),
+                    "processing_version": existing_source.get("processing_version"),
+                    "content_hash": existing_source.get("content_hash"),
+                    "row_fingerprint": existing_source.get("row_fingerprint"),
+                    "postgres_rows_written": 0,
+                    "parquet_rows_written": 0,
+                })
+                _persist_dataset_state(farm_id, current)
+                return current
             current.update({
                 "status": "unavailable",
                 "reason_type": reason_type,
                 "reason_code": reason_code,
                 "message": "; ".join(search.get("errors") or []) or "No source item found for the requested location/date range.",
+            })
+            _persist_dataset_state(farm_id, current)
+            return current
+
+        # STAC discovery is mandatory for dynamic datasets. Reuse is allowed
+        # only after the newest candidate has been compared with the stored
+        # source identity.
+        items = sorted(
+            items,
+            key=lambda item: str(
+                item.get("datetime")
+                or item.get("end_datetime")
+                or (item.get("properties") or {}).get("end_datetime")
+                or item.get("start_datetime")
+                or ""
+            ),
+            reverse=True,
+        )
+        candidate = items[0]
+        candidate_id = _source_item_label(candidate)
+        candidate_datetime = candidate.get("datetime") or candidate.get("start_datetime")
+        existing_source = get_latest_dataset_source(farm_id, dataset_key)
+        candidate_hash = source_item_hash(candidate)
+        expected_processing_version = _expected_processing_version(dataset_key)
+        if (
+            existing_source
+            and str(existing_source.get("source_item_id")) == candidate_id
+            and (
+                not existing_source.get("content_hash")
+                or str(existing_source.get("content_hash")) == candidate_hash
+            )
+            and (
+                not expected_processing_version
+                or str(existing_source.get("processing_version")) == expected_processing_version
+            )
+        ):
+            current.update({
+                "status": "cached",
+                "reason_type": "cached",
+                "reason_code": "SOURCE_ITEM_UNCHANGED",
+                "message": "STAC returned the already materialized source item; reused database rows.",
+                "source_items_found": len(items),
+                "source_item_id": candidate_id,
+                "latest_observation_at": candidate_datetime or existing_source.get("source_datetime"),
+                "processing_version": existing_source.get("processing_version"),
+                "content_hash": candidate_hash,
+                "row_fingerprint": existing_source.get("row_fingerprint"),
+                "postgres_rows_written": 0,
+                "parquet_rows_written": 0,
             })
             _persist_dataset_state(farm_id, current)
             return current
@@ -397,6 +536,10 @@ def _process_dataset(
                 current["native_resolution_m"] = 10.0
                 current["processing_version"] = (features[0].get("processing_version") if features else None)
                 current["latest_observation_at"] = source_item.get("datetime")
+                current["source_item_id"] = label
+                current["content_hash"] = source_item_hash(source_item)
+                current["row_fingerprint"] = content_hash(features)
+                current["dataset_version"] = "sentinel-2-l2a"
             else:
                 processed = process_environment_dataset(
                     dataset_key=dataset_key,
@@ -429,9 +572,16 @@ def _process_dataset(
                 current["processing_version"] = processed.get("processing_version")
                 current["latest_observation_at"] = processed.get("source_datetime") or source_item.get("datetime")
                 current["source_items_processed"] += 1
+                records = processed.get("records") or []
+                current["source_item_id"] = str(processed.get("source_item_id") or candidate_id)
+                current["content_hash"] = source_item_hash(source_item)
+                current["row_fingerprint"] = content_hash(records)
+                current["dataset_version"] = str(processed.get("source_collection") or dataset_key)
             current["postgres_rows_written"] += int(written.get("postgres_rows_written") or 0)
             current["parquet_rows_written"] += int(written.get("parquet_rows_written") or 0)
             if dataset_key == "sentinel_2_l2a" and sentinel2_accepted:
+                break
+            if dataset_key != "sentinel_2_l2a":
                 break
 
         if dataset_key == "sentinel_2_l2a" and not sentinel2_accepted:
@@ -453,11 +603,54 @@ def _process_dataset(
             "reason_type": "data_available",
             "reason_code": "SOURCE_PROCESSED",
         })
+        if current.get("source_item_id"):
+            processed_rows = processed.get("features") if dataset_key == "sentinel_2_l2a" else processed.get("records")
+            first_row = (processed_rows or [{}])[0]
+            upsert_dataset_source_version(
+                farm_id,
+                dataset_key=dataset_key,
+                source_item_id=str(current["source_item_id"]),
+                source_datetime=current.get("latest_observation_at"),
+                period_start=first_row.get("period_start"),
+                period_end=first_row.get("period_end"),
+                processing_version=str(current.get("processing_version") or dataset_key),
+                content_hash=current.get("content_hash"),
+                row_fingerprint=current.get("row_fingerprint"),
+                parquet_uri=written.get("parquet_uri") or (written.get("parquet_uris") or [None])[0],
+                row_count=current.get("postgres_rows_written") or 0,
+            )
+        if dataset_key in STATIC_TABLES and current.get("status") == "succeeded":
+            boundary_hash = content_hash(polygon)
+            h3_hash = h3_index_set_hash(h3_cells)
+            processing_version = f"static:{dataset_key}:v1"
+            fingerprint = materialization_fingerprint(
+                farm_id=str(farm_id), boundary_hash=boundary_hash,
+                h3_resolution=h3_resolution, h3_indexes=h3_cells,
+                dataset_key=dataset_key, dataset_version="static-v1",
+                source_version="static-v1", processing_version=processing_version,
+            )
+            current.update({
+                "boundary_hash": boundary_hash,
+                "h3_resolution": h3_resolution,
+                "h3_index_set_hash": h3_hash,
+                "dataset_version": "static-v1",
+                "source_version": "static-v1",
+                "materialization_version": "1",
+                "materialization_fingerprint": fingerprint,
+            })
+            upsert_dataset_materialization(
+                farm_id, dataset_key=dataset_key, boundary_hash=boundary_hash,
+                h3_resolution=h3_resolution, h3_index_set_hash=h3_hash,
+                dataset_version="static-v1", source_version="static-v1",
+                processing_version=processing_version, materialization_version="1",
+                materialization_fingerprint=fingerprint,
+                row_count=current.get("postgres_rows_written") or 0,
+            )
     except Exception as exc:
         current.update({
             "status": "failed",
-            "reason_type": "processing_failed",
-            "reason_code": "DATASET_PROCESSING_ERROR",
+            "reason_type": "provider_unavailable" if _is_retryable_provider_error(exc) else "processing_failed",
+            "reason_code": "SOURCE_PROVIDER_ERROR" if _is_retryable_provider_error(exc) else "DATASET_PROCESSING_ERROR",
             "message": str(exc),
         })
     finally:
@@ -527,6 +720,31 @@ def materialize_environment(
         except Exception:
             # Older installations may not have the readiness migration yet.
             dataset_states = {}
+
+        # Phase 1: discover all dynamic candidates in parallel. No source
+        # download or raster work starts until discovery is complete, making
+        # the STAC-first identity decision deterministic for the whole run.
+        discovered_searches: dict[str, dict[str, Any]] = {}
+        dynamic_keys = [key for key in payload.dataset_keys if key not in STATIC_TABLES]
+        discovery_workers = max(1, min(
+            int(getattr(settings, "environment_discovery_max_workers", 4)),
+            len(dynamic_keys) or 1,
+        ))
+        with ThreadPoolExecutor(max_workers=discovery_workers, thread_name_prefix="stac-discovery") as discovery_executor:
+            discovery_futures = {
+                discovery_executor.submit(
+                    _discover_dataset,
+                    dataset_key=dataset_key,
+                    payload=payload,
+                    bbox=bbox,
+                ): dataset_key
+                for dataset_key in dynamic_keys
+            }
+            for future in as_completed(discovery_futures):
+                discovered_searches[discovery_futures[future]] = future.result()
+
+        # Phase 2: materialize only candidates whose source identity is new;
+        # unchanged candidates are reused after the completed STAC check.
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="env-dataset") as executor:
             for dataset_key in payload.dataset_keys:
                 futures[executor.submit(
@@ -539,6 +757,7 @@ def materialize_environment(
                     h3_cells=h3_cells,
                     h3_resolution=h3_resolution,
                     dataset_states=dataset_states,
+                    discovered_search=discovered_searches.get(dataset_key),
                 )] = dataset_key
 
             for future in as_completed(futures):
@@ -570,7 +789,11 @@ def materialize_environment(
 
         failures = [row for row in stage_results if row["status"] in {"failed", "unavailable"}]
         successes = [row for row in stage_results if row["status"] in {"succeeded", "cached"}]
-        if not failures:
+        stale_reuses = [
+            row for row in stage_results
+            if row.get("reason_type") == "provider_unavailable"
+        ]
+        if not failures and not stale_reuses:
             overall = "succeeded"
         elif successes:
             overall = "completed_with_warnings"

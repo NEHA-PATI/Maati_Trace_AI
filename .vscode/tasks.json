@@ -1,0 +1,436 @@
+// MAATITRACE - WINDOWS / VS CODE SERVICE LAUNCHER
+//
+// SETUP
+// 1. Open D:\Maati Trace\MaatiTrace AI in VS Code (the project root).
+// 2. Save this file as .vscode/tasks.json inside that root folder.
+//    If tasks.json already exists, back it up and merge these settings/tasks.
+// 3. Press Ctrl+Shift+B to start all 16 processes.
+//    Or Ctrl+Shift+P > Tasks: Run Task > MaatiTrace: Start All.
+// 4. Select named terminals in the Terminal panel to view live logs.
+//    If only one tab shows, widen the panel or use its terminal dropdown.
+//
+// HOW IT WORKS
+// Each task runs backend/.venv/Scripts/python.exe directly.
+// No manual cd, Activate.ps1, or execution-policy command is needed.
+// cwd, PYTHONPATH, VIRTUAL_ENV, and PATH are configured below.
+// Existing system environment variables are inherited.
+// The 14 APIs retain your ports, --reload, and explicit --env-file settings.
+// Email Worker loads auth_service/.env with python-dotenv before starting.
+// Its .env values override inherited variables, matching your old script.
+// FPO Worker keeps your original module command; this task does not add an
+// explicit .env loader. Its configuration loading remains inside your code.
+// python-dotenv must be installed in backend/.venv; Uvicorn --env-file also
+// requires it. If missing, from the project root in PowerShell run:
+// & ".\backend\.venv\Scripts\python.exe" -m pip install python-dotenv
+//
+// RUN / STOP / RESTART
+// One service: Ctrl+Shift+P > Tasks: Run Task > select its name.
+// Stop one gracefully: focus its terminal and press Ctrl+C.
+// Stop all: Ctrl+Shift+P > Tasks: Terminate Task > All Tasks.
+// Restart one: stop it first, then run that task again.
+// APIs auto-reload Python changes; workers need a manual restart.
+// instanceLimit avoids duplicate launches through this task configuration;
+// it cannot prevent a port conflict with an already-running manual command.
+// Stop your old manually launched services before the first Start All.
+// These are long-running tasks; the aggregate stays active while they run.
+// Parallel launch does not wait for service readiness or enforce startup order.
+// Start external dependencies (PostgreSQL, Redis, etc.) separately beforehand.
+// If a process exits because a dependency was not ready, rerun that task.
+//
+// ADD A NEW API
+// 1. Copy an API task object in the tasks array.
+// 2. Give it a unique label, module path, and unused port.
+// 3. Add --env-file and its path only if that service needs it.
+// 4. Add the exact new label to Start All's dependsOn list.
+// Example task (uncomment and insert inside the tasks array):
+// {
+//   "label": "MaatiTrace: My New Service",
+//   "type": "process",
+//   "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+//   "args": [
+//     "-m", "uvicorn", "services.my_new_service.app.main:app",
+//     "--host", "0.0.0.0", "--port", "8017", "--reload",
+//     "--env-file", "services/my_new_service/.env"
+//   ],
+//   "problemMatcher": [],
+//   "runOptions": { "instanceLimit": 1 }
+// }
+// Example worker args: ["-u", "-m", "services.my_new_service.worker"]
+// For a Python file: ["-u", "scripts/my_script.py"]
+// Keep each command-line argument as a separate string. Do not paste a whole
+// PowerShell command into args. "type": "process" does not evaluate shell syntax.
+// Other executables can use their own command, args, and options.cwd.
+//
+// EDITING NOTES
+// VS Code accepts these // comments in tasks.json (JSON with comments).
+// Keep commas between task objects and between dependsOn labels.
+// To exclude a service from Start All, remove only its dependsOn label.
+// To change the shortcut's default task, edit group.isDefault.
+// This file assumes Windows VS Code, not a VS Code window connected to WSL.
+// If you open backend itself as your VS Code folder, place this in
+// backend/.vscode/tasks.json and replace every ${workspaceFolder}/backend
+// occurrence with ${workspaceFolder}.
+// --reload is preserved across all APIs. With many services, reloading all
+// watchers may use noticeable CPU/RAM. Optional: add --reload-dir for a service
+// directory plus any shared code directories it imports.
+// This starts development servers on 0.0.0.0, exactly as in your commands.
+//
+// Reference: https://code.visualstudio.com/docs/debugtest/tasks
+//
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}/backend",
+    "env": {
+      "PYTHONPATH": "${workspaceFolder}/backend",
+      "PYTHONUNBUFFERED": "1",
+      "VIRTUAL_ENV": "${workspaceFolder}/backend/.venv",
+      "PATH": "${workspaceFolder}/backend/.venv/Scripts;${env:PATH}"
+    }
+  },
+  "presentation": {
+    "reveal": "always",
+    "focus": false,
+    "panel": "dedicated",
+    "clear": false,
+    "close": false,
+    "showReuseMessage": true
+  },
+  "tasks": [
+    {
+      "label": "MaatiTrace: Start All",
+      "dependsOn": [
+        "MaatiTrace: API Gateway",
+        "MaatiTrace: Auth Service",
+        "MaatiTrace: Email Worker",
+        "MaatiTrace: Profile Service",
+        "MaatiTrace: Boundary Index Service",
+        "MaatiTrace: District Boundary Service",
+        "MaatiTrace: Farm Registry Service",
+        "MaatiTrace: STAC Catalog Service",
+        "MaatiTrace: Raster Processor Service",
+        "MaatiTrace: Lakehouse Writer Service",
+        "MaatiTrace: Hot Stream Orchestrator Service",
+        "MaatiTrace: Analytics Query Service",
+        "MaatiTrace: Crop Observability Service",
+        "MaatiTrace: Crop Observation Service",
+        "MaatiTrace: FPO Management Service",
+        "MaatiTrace: FPO Management Worker"
+      ],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: API Gateway",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.api_gateway_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Auth Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.auth_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002",
+        "--reload",
+        "--env-file",
+        "services/auth_service/.env"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Email Worker",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-u",
+        "-c",
+        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.email_worker', run_name='__main__', alter_sys=True)"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Profile Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.profile_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8003",
+        "--reload",
+        "--env-file",
+        "services/profile_service/.env"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Boundary Index Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.boundary_index_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8004",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: District Boundary Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.district_boundary_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8005",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Farm Registry Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.farm_registry_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8006",
+        "--reload",
+        "--env-file",
+        "services/farm_registry_service/.env"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: STAC Catalog Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.stac_catalog_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8007",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Raster Processor Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.raster_processor_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8008",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Lakehouse Writer Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.lakehouse_writer_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8009",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Hot Stream Orchestrator Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.hot_stream_orchestrator_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8010",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Analytics Query Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.analytics_query_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8011",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Crop Observability Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.observability_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8014",
+        "--reload"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: Crop Observation Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.crop_observation_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8015",
+        "--reload",
+        "--env-file",
+        "services/crop_observation_service/.env"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: FPO Management Service",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "services.fpo_management_service.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8016",
+        "--reload",
+        "--env-file",
+        "services/fpo_management_service/.env"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: FPO Management Worker",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-u",
+        "-m",
+        "services.fpo_management_service.worker"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}
+

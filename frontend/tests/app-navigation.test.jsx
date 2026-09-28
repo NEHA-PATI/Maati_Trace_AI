@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import AppShell from "@/components/layout/AppShell";
 import PublicNav from "@/components/layout/PublicNav";
 import { AuthContext } from "@/features/auth/context/AuthContext";
+import { LanguageProvider } from "@/features/language/LanguageProvider";
 
 const authValue = {
   initialising: false,
@@ -16,7 +17,9 @@ const authValue = {
 function renderWithAuth(element) {
   return render(
     <AuthContext.Provider value={authValue}>
-      <MemoryRouter>{element}</MemoryRouter>
+      <LanguageProvider>
+        <MemoryRouter>{element}</MemoryRouter>
+      </LanguageProvider>
     </AuthContext.Provider>,
   );
 }

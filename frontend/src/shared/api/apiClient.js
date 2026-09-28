@@ -9,6 +9,7 @@ import {
 import { logger } from "@/shared/logging/logger";
 import { ApiError } from "@/shared/api/ApiError";
 import { serviceBaseUrl, servicePath } from "@/shared/api/serviceUrls";
+import { getActiveLocale } from "@/features/language";
 
 let refreshPromise = null;
 let refreshController = null;
@@ -76,6 +77,7 @@ function buildHeaders({ headers, authMode, csrf, requestCorrelationId, body }) {
   result.set("Accept", "application/json");
   result.set("X-Device-ID", getDeviceId());
   result.set("X-Correlation-ID", requestCorrelationId);
+  result.set("Accept-Language", getActiveLocale());
 
   if (body !== undefined && body !== null && !(body instanceof FormData) && !result.has("Content-Type")) {
     result.set("Content-Type", "application/json");
@@ -106,6 +108,7 @@ async function execute(path, options = {}) {
     retryOnAuth = authMode === "required",
     _retried = false,
     serviceName = "auth",
+    responseType = "json",
   } = options;
 
   if (authMode === "required" && !_retried && !isAccessTokenFresh()) {
@@ -131,7 +134,7 @@ async function execute(path, options = {}) {
       signal: signal || controller.signal,
     });
 
-    const payload = await readPayload(response);
+    const payload = responseType === "blob" ? await response.blob() : await readPayload(response);
     const responseCorrelationId = response.headers.get("x-correlation-id") || requestCorrelationId;
 
     logger.info("api_request_completed", {
