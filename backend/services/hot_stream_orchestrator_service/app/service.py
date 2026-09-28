@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -34,6 +34,7 @@ from services.hot_stream_orchestrator_service.app.repository import (
     complete_pipeline_job,
     fail_pipeline_job,
     get_existing_scene_analysis_summary,
+    get_sentinel2_history_summary,
     get_or_create_active_latest_analysis_job,
 )
 
@@ -62,6 +63,15 @@ def _make_tiny_bbox_from_farm_bbox(
         center_lon + half,
         center_lat + half,
     ]
+
+
+def _environment_refresh_start_date(payload: Any) -> str:
+    """Limit repeat source acquisition without shrinking history calculation."""
+    if getattr(payload, "analysis_mode", "incremental_latest") == "bootstrap":
+        return payload.start_date
+    requested_start = date.fromisoformat(payload.start_date)
+    requested_end = date.fromisoformat(payload.end_date)
+    return max(requested_start, requested_end - timedelta(days=120)).isoformat()
 
 
 def _normalize_bbox(raw_bbox: Any) -> list[float] | None:
@@ -597,6 +607,103 @@ def materialize_farm_analysis(
         raise
 
 
+def ensure_sentinel2_history_for_intelligence(
+    farm_id: UUID,
+    payload: Any,
+) -> dict[str, Any]:
+    """Ensure enough Sentinel-2 dates exist for growth/anomaly formulas.
+
+    Latest scene processing is enough for current-condition cards and grid
+    rendering, but growth and anomaly formulas need a small optical time
+    series. This stage is intentionally non-blocking: if no acceptable history
+    can be found, the master analysis continues and the intelligence layer
+    persists explicit "not enough history" reasons.
+    """
+
+    min_dates = int(getattr(payload, "sentinel2_history_min_dates", 3) or 0)
+    start = date.fromisoformat(payload.start_date)
+    end = date.fromisoformat(payload.end_date)
+    before = get_sentinel2_history_summary(
+        farm_id,
+        start_date=start,
+        end_date=end,
+    )
+    if min_dates <= 0:
+        return {
+            "status": "skipped",
+            "reason": "Sentinel-2 history requirement disabled for this request.",
+            "required_observation_dates": min_dates,
+            "before": before,
+            "after": before,
+        }
+    if before["valid_observation_dates"] >= min_dates:
+        return {
+            "status": "cached",
+            "reason": "Enough Sentinel-2 history already exists.",
+            "required_observation_dates": min_dates,
+            "before": before,
+            "after": before,
+        }
+
+    try:
+        from services.hot_stream_orchestrator_service.app.history_backfill import (
+            backfill_sentinel2_history,
+        )
+        from services.hot_stream_orchestrator_service.app.schemas import (
+            Sentinel2HistoryBackfillRequest,
+        )
+
+        backfill = backfill_sentinel2_history(
+            farm_id,
+            Sentinel2HistoryBackfillRequest(
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+                max_cloud_cover=payload.max_cloud_cover,
+                max_scenes=int(getattr(payload, "sentinel2_history_max_scenes", 20) or 20),
+                provider=payload.provider,
+                collection_id=payload.collection_id,
+                force_refresh=payload.force_refresh,
+            ),
+        )
+    except Exception as exc:
+        return {
+            "status": "completed_with_warnings",
+            "reason": "Sentinel-2 history backfill could not complete; continuing latest analysis.",
+            "required_observation_dates": min_dates,
+            "before": before,
+            "after": before,
+            "warning": str(exc),
+        }
+
+    after = get_sentinel2_history_summary(
+        farm_id,
+        start_date=start,
+        end_date=end,
+    )
+    if after["valid_observation_dates"] < min_dates:
+        status = "completed_with_warnings"
+        reason = "Sentinel-2 history is still below the minimum required observation dates."
+    else:
+        status = "succeeded"
+        reason = "Sentinel-2 history is ready for temporal crop intelligence."
+
+    return {
+        "status": status,
+        "reason": reason,
+        "required_observation_dates": min_dates,
+        "before": before,
+        "after": after,
+        "backfill": {
+            "status": backfill.get("status"),
+            "scenes_found": backfill.get("scenes_found"),
+            "processed": backfill.get("processed"),
+            "cached": backfill.get("cached"),
+            "failed": backfill.get("failed"),
+            "pipeline_job_id": str(backfill.get("pipeline_job_id")) if backfill.get("pipeline_job_id") else None,
+        },
+    }
+
+
 def _latest_analysis_stage_details(name: str, result: Any) -> dict[str, Any]:
     """Keep master-job metadata small and JSON serialisable."""
 
@@ -620,12 +727,27 @@ def _latest_analysis_stage_details(name: str, result: Any) -> dict[str, Any]:
                     "parquet_rows_written": row.get("parquet_rows_written", 0),
                     "reason_type": row.get("reason_type"),
                     "reason_code": row.get("reason_code"),
+                    "start_date": row.get("start_date"),
+                    "end_date": row.get("end_date"),
+                    "started_at": row.get("started_at"),
+                    "finished_at": row.get("finished_at"),
+                    "duration_seconds": row.get("duration_seconds"),
                     "accepted_source_item": row.get("accepted_source_item"),
                     "candidate_rejections": row.get("candidate_rejections") or [],
                     "message": row.get("message"),
                 }
                 for row in (result.get("datasets") or [])
             ],
+        }
+    if name == "sentinel2_history_backfill":
+        return {
+            "status": result.get("status"),
+            "reason": result.get("reason"),
+            "required_observation_dates": result.get("required_observation_dates"),
+            "before": result.get("before") or {},
+            "after": result.get("after") or {},
+            "backfill": result.get("backfill") or {},
+            "warning": result.get("warning"),
         }
     if name in {"grid", "grid_context"}:
         return {
@@ -689,6 +811,7 @@ def run_latest_analysis(
             farm_id=farm_id,
             metadata={
                 "request": payload.model_dump() if hasattr(payload, "model_dump") else {},
+                "analysis_mode": getattr(payload, "analysis_mode", "incremental_latest"),
                 "analysis_status": "queued",
             },
         )
@@ -704,6 +827,7 @@ def run_latest_analysis(
     job_id = str(job_id)
     stages: list[dict[str, Any]] = []
     request_metadata = payload.model_dump() if hasattr(payload, "model_dump") else {}
+    request_metadata.setdefault("analysis_mode", getattr(payload, "analysis_mode", "incremental_latest"))
 
     def checkpoint(name: str, status: str, result: Any = None, error: Exception | None = None) -> None:
         row: dict[str, Any] = {
@@ -788,12 +912,13 @@ def run_latest_analysis(
         run_required("farm_ready", lambda: ensure_farm_analysis_ready(farm_id))
 
         environment_payload = EnvironmentRefreshRequest(
-            start_date=payload.start_date,
+            start_date=_environment_refresh_start_date(payload),
             end_date=payload.end_date,
             dataset_keys=list(DEFAULT_ENVIRONMENT_DATASETS),
             max_items_per_dataset=payload.max_items_per_dataset,
             max_cloud_cover=payload.max_cloud_cover,
             force_refresh=payload.force_refresh,
+            analysis_mode=getattr(payload, "analysis_mode", "incremental_latest"),
         )
         # One mandatory environmental-observation stage contains Sentinel-2
         # and all other registered datasets. No source is silently skipped.
@@ -804,6 +929,10 @@ def run_latest_analysis(
                 environment_payload,
                 progress_callback=update_environment_progress,
             ),
+        )
+        run_required(
+            "sentinel2_history_backfill",
+            lambda: ensure_sentinel2_history_for_intelligence(farm_id, payload),
         )
         run_required("trends", lambda: materialize_trends_for_farm(farm_id))
 
@@ -877,6 +1006,7 @@ def run_latest_analysis(
             and row["name"] in {
                 "farm_ready",
                 "environment_datasets",
+                "sentinel2_history_backfill",
                 "trends",
                 "grid_context",
                 "intelligence",

@@ -38,14 +38,26 @@ const passwordSchema = z
   .max(128, "Use no more than 128 characters.")
   .refine((value) => value.trim().length >= 12, "Use a longer passphrase, not only spaces.");
 
+const optionalLocationCode = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? null : Number(value)),
+  z.number().int().positive().nullable(),
+);
+
 export const signupAccountSchema = z
   .object({
+    account_type: z.enum(["farmer", "fpo"]),
     full_name: z.string().trim().min(2, "Enter your full name.").max(200, "Name is too long."),
     email: z.string().trim().email("Enter a valid email address.").transform((value) => value.toLowerCase()),
     phone_number: phoneSchema,
     password: passwordSchema,
     confirm_password: z.string(),
     consent_terms: z.boolean().refine((value) => value === true, "Accept the terms and privacy notice."),
+    authorised_fpo_representative: z.boolean(),
+    organisation_name: z.string().trim().max(250),
+    registration_type: z.enum(["producer_company", "cooperative_society", "other"]),
+    registration_number: z.string().trim().max(100),
+    state_code: optionalLocationCode,
+    district_code: optionalLocationCode,
   })
   .superRefine((value, context) => {
     if (value.password !== value.confirm_password) {
@@ -54,6 +66,13 @@ export const signupAccountSchema = z
         path: ["confirm_password"],
         message: "Passwords do not match.",
       });
+    }
+    if (value.account_type === "fpo") {
+      if (value.organisation_name.length < 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ["organisation_name"], message: "Enter the registered FPO name." });
+      if (value.registration_number.length < 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ["registration_number"], message: "Enter the registration number." });
+      if (!value.state_code) context.addIssue({ code: z.ZodIssueCode.custom, path: ["state_code"], message: "Enter the state code." });
+      if (!value.district_code) context.addIssue({ code: z.ZodIssueCode.custom, path: ["district_code"], message: "Enter the district code." });
+      if (!value.authorised_fpo_representative) context.addIssue({ code: z.ZodIssueCode.custom, path: ["authorised_fpo_representative"], message: "Confirm your authority to register this FPO." });
     }
   });
 

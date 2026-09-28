@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from services.analytics_query_service.app.feature_engine.formula_engine import (
+    FormulaEngineError,
     aggregate_farm_predictions,
     calculate_h3_predictions,
     project_h3_predictions_to_grid,
@@ -120,3 +121,35 @@ def test_grid_projection_uses_crosswalk_and_marks_semantics():
     assert grid[0]["contributing_h3_count"] == 2
     assert grid[0]["dominant_h3_index"] == 1
     assert grid[0]["score"] > 70
+
+
+def test_grid_projection_stays_bounded_by_contributing_h3_scores():
+    h3_rows = calculate_h3_predictions(
+        feature_rows=[
+            feature_row(h3_index=1, ndmi_z=-3, msi_z=3, rain_z=-3),
+            feature_row(h3_index=2, ndmi_z=0, msi_z=0, rain_z=0),
+        ],
+        formulas=[water_formula()],
+        profile=profile(),
+    )
+    grid = project_h3_predictions_to_grid(
+        h3_rows=h3_rows,
+        crosswalk=[
+            {"grid_cell_id": "g", "h3_index": 1, "overlap_ratio": 0.5},
+            {"grid_cell_id": "g", "h3_index": 2, "overlap_ratio": 0.5},
+        ],
+        formulas=[water_formula()],
+    )
+    scores = [row["score"] for row in h3_rows if row["score"] is not None]
+    assert min(scores) <= grid[0]["score"] <= max(scores)
+
+
+def test_formula_profile_versions_must_match():
+    row = feature_row()
+    row["crop_profile_version"] = "mango_v2"
+    with pytest.raises(FormulaEngineError, match="version mismatch"):
+        calculate_h3_predictions(
+            feature_rows=[row],
+            formulas=[water_formula()],
+            profile=profile(),
+        )

@@ -27,6 +27,7 @@ from services.auth_service.app.repository import (
     create_signup_session,
     create_user,
     create_farmer_profile_stub,
+    create_auth_outbox_event,
     get_account_invitation_by_hash,
     get_auth_identity,
     get_fpo_access_request_for_update,
@@ -277,6 +278,9 @@ def start_signup(payload: SignupStartRequest, context: RequestContext) -> dict[s
                 email=email,
                 phone_number=payload.phone_number,
                 password_hash=password_hash,
+                account_type=payload.account_type,
+                signup_profile_payload=(payload.fpo.model_dump() if payload.fpo else {}),
+                authorised_fpo_representative=payload.authorised_fpo_representative,
                 otp_hash=otp_hash,
                 otp_expires_at=expires_at,
                 created_ip=context.ip_address,
@@ -507,21 +511,37 @@ def complete_signup(signup_session_id: UUID | str, context: RequestContext) -> I
                     email=session["email"],
                     phone_number=session["phone_number"],
                     password_hash=session["password_hash"],
-                    role="farmer",
+                    role=session.get("account_type", session.get("role", "farmer")),
                     is_verified=True,
                 )
             except IntegrityError as exc:
                 raise _signup_integrity_error("create_user", exc) from exc
 
-            try:
-                create_farmer_profile_stub(
-                    conn,
-                    user_id=user["user_id"],
-                    full_name=user["full_name"],
-                    phone_number=user.get("phone_number"),
-                )
-            except IntegrityError as exc:
-                raise _signup_integrity_error("create_farmer_profile_stub", exc) from exc
+            if session.get("account_type", session.get("role", "farmer")) == "farmer":
+                try:
+                    create_farmer_profile_stub(
+                        conn,
+                        user_id=user["user_id"],
+                        full_name=user["full_name"],
+                        phone_number=user.get("phone_number"),
+                    )
+                except IntegrityError as exc:
+                    raise _signup_integrity_error("create_farmer_profile_stub", exc) from exc
+
+            create_auth_outbox_event(
+                conn,
+                event_type="auth.user.created",
+                subject_id=user["user_id"],
+                idempotency_key=f"auth.user.created:{user['user_id']}",
+                payload={
+                    "user_id": str(user["user_id"]),
+                    "account_type": session.get("account_type", session.get("role", "farmer")),
+                    "full_name": user["full_name"],
+                    "email": user.get("email"),
+                    "phone_number": user.get("phone_number"),
+                    "signup_profile": session.get("signup_profile_payload") or {},
+                },
+            )
             mark_signup_completed(conn, signup_session_id)
             mark_user_login(conn, user["user_id"])
             issued = _issue_session(conn, user, context)

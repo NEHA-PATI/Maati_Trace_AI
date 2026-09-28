@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FarmCard from "@/components/ui-custom/FarmCard";
-import HexagonPipelineLoader from "@/components/ui-custom/HexagonPipelineLoader";
 import { getMyFarmerProfile } from "@/lib/api/farmer";
 import { previewH3, registerFarm } from "@/lib/api/farm";
 import { getCropProfiles } from "@/lib/api/analytics";
@@ -24,11 +23,7 @@ import {
   normalizeStates,
   validateLocation,
 } from "@/lib/api/location";
-import {
-  runLatestAnalysis,
-  getLatestAnalysisStatus,
-  ANALYSIS_PIPELINE_STEPS,
-} from "@/lib/api/hotStream";
+import { runLatestAnalysis } from "@/lib/api/hotStream";
 import { getStoredUser } from "@/features/auth/session";
 import FarmBoundaryStep from "@/features/farm-registration/boundary/FarmBoundaryStep";
 import { resolveFarmLocation } from "@/features/farm-registration/boundary/locationGeocoder";
@@ -60,49 +55,9 @@ const EMPTY_FORM = {
 };
 const FARM_DRAFT_KEY = "maatitrace:farm-registration:draft:v1";
 const MotionDiv = motion.div;
-const REGISTRATION_PIPELINE_STEPS = [
-  "Validate farmer, crop and boundary",
-  "Validate farm location",
-  "Generate H3 hexagons",
-  "Save farm record and polygon",
-  "Start complete analysis",
-];
-const PIPELINE_STEPS = [
-  ...REGISTRATION_PIPELINE_STEPS,
-  ...ANALYSIS_PIPELINE_STEPS.map(([, label]) => label),
-];
-
 function isValidLocationName(value) {
   return Boolean(value && String(value).trim() && String(value).trim().toLowerCase() !== "unassigned");
 }
-
-function getAnalysisProgress(status, offset) {
-  const terminal = ["completed", "completed_with_warnings", "failed"].includes(status?.status);
-  if (terminal) {
-    const finalStep = REGISTRATION_PIPELINE_STEPS.length + ANALYSIS_PIPELINE_STEPS.length - 1;
-    return {
-      step: finalStep,
-      label: status.status === "failed" ? "Analysis failed" : "Build crop intelligence",
-      status: status.status,
-    };
-  }
-  const rows = Array.isArray(status?.stages) ? status.stages : [];
-  const current = status?.current_stage;
-  const index = ANALYSIS_PIPELINE_STEPS.findIndex(([key]) => key === current);
-  let step = index >= 0 ? index : 0;
-  let label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || "Running analysis";
-  const environment = rows.find((row) => row.name === "environment_datasets");
-  const datasets = environment?.details?.datasets || [];
-  if (current === "environment_datasets" && datasets.length) {
-    const active = datasets.findIndex((row) => row.status === "running");
-    const completed = datasets.filter((row) => ["succeeded", "cached", "completed_with_warnings"].includes(row.status)).length;
-    const datasetIndex = active >= 0 ? active : Math.min(completed, ANALYSIS_PIPELINE_STEPS.length - 2);
-    step = 1 + datasetIndex;
-    label = ANALYSIS_PIPELINE_STEPS[step]?.[1] || label;
-  }
-  return { step: offset + step, label, status: status?.status || "running" };
-}
-
 
 export default function FarmRegister() {
   const navigate = useNavigate();
@@ -128,8 +83,6 @@ export default function FarmRegister() {
   const [boundaryConfirmed, setBoundaryConfirmed] = useState(false);
   const [h3Preview, setH3Preview] = useState(null);
   const [validationWarning, setValidationWarning] = useState("");
-  const [pipelineStage, setPipelineStage] = useState(0);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
   const [backendErrorDetail, setBackendErrorDetail] = useState("");
 
   const update = (field, value) => {
@@ -329,16 +282,12 @@ export default function FarmRegister() {
     setError("");
     setBackendErrorDetail("");
     setValidationWarning("");
-    setPipelineOpen(true);
-    setPipelineStage(0);
     setPipelineStatus("Validating location...");
     try {
       if (!boundarySummary.valid || !farmGeometry || !boundaryConfirmed) {
         throw new Error("Complete and confirm the farm boundary before registration.");
       }
-      setPipelineStage(0);
       setPipelineStatus("Validating farm location...");
-      setPipelineStage(1);
       const validated = await validateLocation({
         state_name: formData.state_name,
         district_name: formData.district_name,
@@ -362,7 +311,6 @@ export default function FarmRegister() {
       }
 
       setPipelineStatus("Generating H3 preview...");
-      setPipelineStage(2);
       try {
         const preview = await previewH3({
           polygon: farmGeometry,
@@ -393,41 +341,30 @@ export default function FarmRegister() {
       };
 
       setPipelineStatus("Saving farm record and polygon...");
-      setPipelineStage(3);
       const farmPayload = await registerFarm(registerPayload);
       setRegisteredFarm(farmPayload);
 
-      setPipelineStatus("Starting complete farm analysis...");
-      setPipelineStage(4);
+      // Registration is complete once the farm row exists and the canonical
+      // analysis job has been queued.  Analysis continues on Land Intelligence
+      // so a slow/unavailable provider cannot make registration appear stuck.
+      setPipelineStatus("Preparing farm intelligence...");
       const endDate = new Date();
       const startDate = new Date(endDate);
       startDate.setDate(startDate.getDate() - 365);
       await runLatestAnalysis(farmPayload.farm_id, {
+        analysis_mode: "bootstrap",
         start_date: startDate.toISOString().slice(0, 10),
         end_date: endDate.toISOString().slice(0, 10),
         max_cloud_cover: 40,
         provider: "planetary_computer",
         collection_id: "sentinel-2-l2a",
       });
-
-      let status = null;
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        status = await getLatestAnalysisStatus(farmPayload.farm_id);
-        const progress = getAnalysisProgress(status, REGISTRATION_PIPELINE_STEPS.length);
-        setPipelineStage(progress.step);
-        setPipelineStatus(`${progress.label} · ${status.status || "running"}`);
-        if (["completed", "completed_with_warnings", "failed"].includes(status.status)) break;
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      }
-      if (status?.status === "failed") {
-        throw new Error(status.error_message || "Farm analysis failed.");
-      }
-
-      setPipelineStatus("Registered. Redirecting to land intelligence...");
-      setPipelineStage(PIPELINE_STEPS.length - 1);
-      keepPipelineOpen = true;
+      setPipelineStatus("Farm registered. Opening Land Intelligence...");
       localStorage.removeItem(FARM_DRAFT_KEY);
-      setTimeout(() => navigate(`/land/${farmPayload.farm_id}`), 800);
+      navigate(`/land/${farmPayload.farm_id}`, {
+        replace: true,
+        state: { pipelineMode: "bootstrap" },
+      });
     } catch (err) {
       setBackendErrorDetail(JSON.stringify({
         status: err?.response?.status || null,
@@ -440,10 +377,8 @@ export default function FarmRegister() {
           ? detail
           : detail?.message || err?.response?.data?.message || err?.message;
       setError(backendMessage || "Unable to register farm.");
-      setPipelineStage(-1);
     } finally {
       setLoading(false);
-      if (!keepPipelineOpen) setPipelineOpen(false);
     }
   }
 
@@ -494,21 +429,6 @@ export default function FarmRegister() {
         )}
         {validationWarning && <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">{validationWarning}</div>}
         {pipelineStatus && <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">{pipelineStatus}</div>}
-        <HexagonPipelineLoader
-          open={pipelineOpen}
-          title="Land registration pipeline"
-          status={pipelineStatus}
-          currentStep={Math.max(0, pipelineStage)}
-          steps={PIPELINE_STEPS}
-          details={[
-            `State: ${formData.state_name || "â€”"}`,
-            `District: ${formData.district_name || "â€”"}`,
-            `Block: ${formData.block_name || "â€”"}`,
-            `Boundary: ${boundarySummary.valid ? `${boundarySummary.pointCount} corners` : "not completed"}`,
-          ]}
-          failure={error || null}
-        />
-
         {pageLoading ? (
           <div
             className="space-y-5 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"

@@ -1,0 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
+import FpoFeatureGate from "@/features/fpo/access/FpoFeatureGate";
+import { acknowledgeFpoDashboardAlert, getFpoDashboardAlerts, getFpoDashboardReport } from "@/features/fpo/api/fpoDashboardApi";
+
+function Metric({ label, value }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-slate-950">{value ?? 0}</p></div>; }
+
+export default function FpoDashboardPage() {
+  const report = useQuery({ queryKey: ["fpo-portfolio-report"], queryFn: getFpoDashboardReport });
+  const alerts = useQuery({ queryKey: ["fpo-alerts", "OPEN"], queryFn: () => getFpoDashboardAlerts("OPEN") });
+  const relationships = report.data?.relationships || {};
+  return <div className="space-y-6"><div><h1 className="text-3xl font-black text-slate-950">Overview</h1><p className="mt-1 text-sm text-slate-500">A current view of your consent-backed FPO portfolio.</p></div><FpoFeatureGate feature="BASIC_REPORTS" fallback={<div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">Portfolio reports are not enabled for this organization.</div>}><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Active farmers" value={relationships.active_farmers} /><Metric label="Pending requests" value={relationships.pending_relationships} /><Metric label="Linked profiles" value={relationships.linked_profiles} /><Metric label="Open alerts" value={report.data?.alerts?.open_alerts} /></div></FpoFeatureGate><FpoFeatureGate feature="BASIC_ALERTS"><section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><h2 className="font-black text-slate-950">Attention queue</h2><span className="text-xs font-bold text-slate-400">Open alerts</span></div>{alerts.data?.length ? <div className="mt-4 space-y-3">{alerts.data.map((alert) => <div key={alert.alert_id} className="flex items-start justify-between gap-4 rounded-xl border border-slate-100 p-4"><div><p className="font-bold text-slate-900">{alert.title}</p><p className="mt-1 text-sm text-slate-500">{alert.message}</p></div><button type="button" className="text-xs font-bold text-emerald-700" onClick={async () => { await acknowledgeFpoDashboardAlert(alert.alert_id); alerts.refetch(); }}>Acknowledge</button></div>)}</div> : <p className="mt-4 text-sm text-slate-500">No open alerts.</p>}</section></FpoFeatureGate></div>;
+}

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from services.auth_service.app.security import normalize_email, normalize_indian_mobile
 
@@ -42,12 +42,39 @@ class AuthResponse(StrictModel):
     user: UserPublic
 
 
+class FpoSignupBasics(StrictModel):
+    organisation_name: str = Field(min_length=2, max_length=250)
+    registration_type: Literal["producer_company", "cooperative_society", "other"]
+    registration_number: str = Field(min_length=2, max_length=100)
+    state_code: int = Field(ge=1)
+    district_code: int = Field(ge=1)
+
+    @field_validator("organisation_name", "registration_number")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
 class SignupStartRequest(StrictModel):
+    account_type: Literal["farmer", "fpo"] = "farmer"
     full_name: str = Field(min_length=2, max_length=200)
     email: EmailStr
     phone_number: str
     password: str = Field(min_length=12, max_length=128)
     consent_terms: bool
+    authorised_fpo_representative: bool = False
+    fpo: FpoSignupBasics | None = None
+
+    @model_validator(mode="after")
+    def validate_account_fields(self):
+        if self.account_type == "fpo":
+            if self.fpo is None:
+                raise ValueError("FPO details are required.")
+            if not self.authorised_fpo_representative:
+                raise ValueError("Confirm that you are authorised to register this FPO.")
+        elif self.fpo is not None or self.authorised_fpo_representative:
+            raise ValueError("FPO details are only accepted for an FPO signup.")
+        return self
 
     @field_validator("full_name")
     @classmethod

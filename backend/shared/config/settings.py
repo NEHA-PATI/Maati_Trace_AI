@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -107,6 +111,7 @@ class Settings(BaseSettings):
     district_boundary_service_url: str = "http://localhost:8005"
     farm_registry_service_url: str = "http://localhost:8006"
     profile_service_url: str = "http://localhost:8003"
+    fpo_management_service_url: str = "http://localhost:8016"
     stac_catalog_service_url: str = "http://localhost:8007"
     raster_processor_service_url: str = "http://localhost:8008"
     lakehouse_writer_service_url: str = "http://localhost:8009"
@@ -162,7 +167,7 @@ class Settings(BaseSettings):
     lakehouse_write_retry_attempts: int = 2
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,

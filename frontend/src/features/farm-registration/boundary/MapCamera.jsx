@@ -10,24 +10,26 @@ function getZoom(precision) {
   return MAP_CONFIG.zoom.default;
 }
 
-export default function MapCamera({ target, bounds, polygonBounds }) {
+export default function MapCamera({ target, bounds, polygonBounds, isEditing = false }) {
   const map = useMap();
   useEffect(() => {
+    if (isEditing) return undefined;
     const timeout = window.setTimeout(() => map.invalidateSize(), 150);
     return () => window.clearTimeout(timeout);
-  }, [map]);
+  }, [map, isEditing]);
   useEffect(() => {
+    if (isEditing) return;
     if (polygonBounds?.length === 2) {
-      map.fitBounds(polygonBounds, { padding: [32, 32], maxZoom: MAP_CONFIG.zoom.farm, animate: true });
+      map.fitBounds(polygonBounds, { padding: [32, 32], maxZoom: MAP_CONFIG.zoom.farm, animate: false });
       return;
     }
     if (bounds?.length === 2) {
-      map.fitBounds(bounds, { padding: [32, 32], maxZoom: getZoom(target?.precision), animate: true });
+      map.fitBounds(bounds, { padding: [32, 32], maxZoom: getZoom(target?.precision), animate: false });
       return;
     }
     if (Number.isFinite(target?.latitude) && Number.isFinite(target?.longitude)) {
       map.flyTo([target.latitude, target.longitude], getZoom(target.precision), { animate: true, duration: 1.2 });
     }
-  }, [bounds, map, polygonBounds, target]);
+  }, [bounds, isEditing, map, polygonBounds, target?.latitude, target?.longitude, target?.precision]);
   return null;
 }

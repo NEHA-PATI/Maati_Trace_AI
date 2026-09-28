@@ -65,8 +65,12 @@ def _enrich_record(
             "source_datetime": source_dt,
             "processing_version": payload.processing_version,
             "parquet_uri": parquet_uri,
+            "spatial_level": payload.spatial_level,
         }
     )
+    # Normalize the resolution name across H3-native and farm-context tables;
+    # older processors still emit source_resolution_m for coarse products.
+    row.setdefault("native_resolution_m", row.get("source_resolution_m"))
 
     if payload.dataset_key in {"sentinel_1_rtc", "landsat_c2_l2"}:
         row.setdefault("snapshot_date", (source_dt.date() if source_dt else date.today()))

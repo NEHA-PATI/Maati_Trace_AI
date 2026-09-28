@@ -55,7 +55,7 @@ class DatasetProcessResponse(BaseModel):
     source_item_id: str
     source_datetime: str | None = None
     processing_version: str
-    spatial_level: Literal["h3", "farm"]
+    spatial_level: Literal["h3", "static_h3", "farm", "regional", "forecast"]
     h3_resolution: int | None = None
     source_assets_used: list[str] = Field(default_factory=list)
     record_count: int

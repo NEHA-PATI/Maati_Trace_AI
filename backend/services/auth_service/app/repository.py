@@ -289,6 +289,9 @@ def create_signup_session(
     email: str,
     phone_number: str,
     password_hash: str,
+    account_type: str,
+    signup_profile_payload: dict[str, Any],
+    authorised_fpo_representative: bool,
     otp_hash: str,
     otp_expires_at: datetime,
     created_ip: str | None,
@@ -305,6 +308,9 @@ def create_signup_session(
                 email,
                 password_hash,
                 role,
+                account_type,
+                signup_profile_payload,
+                authorised_fpo_representative,
                 otp_hash,
                 otp_expires_at,
                 attempts,
@@ -320,7 +326,10 @@ def create_signup_session(
                 :phone_number,
                 :email,
                 :password_hash,
-                'farmer',
+                :account_type,
+                :account_type,
+                CAST(:signup_profile_payload AS jsonb),
+                :authorised_fpo_representative,
                 :otp_hash,
                 :otp_expires_at,
                 0,
@@ -339,6 +348,9 @@ def create_signup_session(
             "phone_number": phone_number,
             "email": email,
             "password_hash": password_hash,
+            "account_type": account_type,
+            "signup_profile_payload": json.dumps(signup_profile_payload),
+            "authorised_fpo_representative": authorised_fpo_representative,
             "otp_hash": otp_hash,
             "otp_expires_at": otp_expires_at,
             "created_ip": created_ip,
@@ -347,6 +359,49 @@ def create_signup_session(
         },
     ).mappings().one()
     return dict(row)
+
+
+def create_auth_outbox_event(
+    conn: Connection,
+    *,
+    event_type: str,
+    subject_id: UUID | str,
+    idempotency_key: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO auth_outbox_events (
+                event_type,
+                event_version,
+                subject_id,
+                idempotency_key,
+                payload,
+                status,
+                available_at
+            )
+            VALUES (
+                :event_type,
+                1,
+                :subject_id,
+                :idempotency_key,
+                CAST(:payload AS jsonb),
+                'queued',
+                now()
+            )
+            ON CONFLICT (idempotency_key) DO NOTHING
+            RETURNING *;
+            """
+        ),
+        {
+            "event_type": event_type,
+            "subject_id": str(subject_id),
+            "idempotency_key": idempotency_key,
+            "payload": json.dumps(payload),
+        },
+    ).mappings().first()
+    return dict(row) if row else {"idempotency_key": idempotency_key}
 
 
 def get_signup_session(
@@ -366,6 +421,9 @@ def get_signup_session(
                 email,
                 password_hash,
                 role,
+                account_type,
+                signup_profile_payload,
+                authorised_fpo_representative,
                 otp_hash,
                 otp_expires_at,
                 attempts,

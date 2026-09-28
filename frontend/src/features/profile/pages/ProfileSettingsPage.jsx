@@ -29,6 +29,10 @@ import {
 } from "@/features/profile/components/ProfileStates";
 import { useProfile } from "@/features/profile/hooks/useProfile";
 import {
+  getFpoVerificationStatus,
+  submitFpoVerification,
+} from "@/lib/api/fpo";
+import {
   downloadProfileJson,
   readableFieldName,
 } from "@/features/profile/profileMappers";
@@ -120,6 +124,9 @@ export function ProfileSettingsPage() {
 
   const [activeSection, setActiveSection] =
     useState("account");
+  const [verification, setVerification] = useState(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
 
   useEffect(() => {
     if (profileType === "fpo") {
@@ -128,6 +135,28 @@ export function ProfileSettingsPage() {
       setActiveSection("account");
     }
   }, [profileType]);
+
+  useEffect(() => {
+    if (profileType !== "fpo") return undefined;
+    let active = true;
+    getFpoVerificationStatus()
+      .then((payload) => { if (active) setVerification(payload); })
+      .catch(() => { if (active) setVerification(null); });
+    return () => { active = false; };
+  }, [profileType, profile]);
+
+  const handleSubmitVerification = async () => {
+    setVerificationLoading(true);
+    setVerificationError("");
+    try {
+      const payload = await submitFpoVerification();
+      setVerification(payload);
+    } catch (requestError) {
+      setVerificationError(requestError?.message || "Complete the required profile fields before submitting.");
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
 
   if (loading) {
     return <ProfileLoading />;
@@ -227,18 +256,32 @@ export function ProfileSettingsPage() {
               />
 
               {profileType === "fpo" ? (
-                <FpoProfileForm
-                  user={user}
-                  profile={profile}
-                  setupRequired={
-                    setupRequired
-                  }
-                  saving={saving}
-                  exporting={exporting}
-                  savedAt={savedAt}
-                  onSave={saveFpoProfile}
-                  onExport={handleExport}
-                />
+                <>
+                  <FpoProfileForm
+                    user={user}
+                    profile={profile}
+                    setupRequired={setupRequired}
+                    saving={saving}
+                    exporting={exporting}
+                    savedAt={savedAt}
+                    onSave={saveFpoProfile}
+                    onExport={handleExport}
+                  />
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Verification</p>
+                      <h2 className="mt-1 text-lg font-black text-slate-900">Submit your FPO for review</h2>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">Once required profile details are complete, submit them to MaatiTrace administrators for approval.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">{String(verification?.verification_status || "PROFILE_INCOMPLETE").replaceAll("_", " ")}</span>
+                  </div>
+                  {verificationError ? <p className="mt-3 text-sm text-rose-600">{verificationError}</p> : null}
+                  <button type="button" onClick={handleSubmitVerification} disabled={verificationLoading || !profile || Boolean(verification?.verification_status && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(verification.verification_status))} className="mt-4 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+                    {verificationLoading ? "Submitting…" : "Submit for verification"}
+                  </button>
+                  </section>
+                </>
               ) : (
                 <FarmerProfileForm
                   user={user}

@@ -318,6 +318,10 @@ export default function AdminDashboard() {
               <span className="text-sm font-semibold text-gray-800">System Management</span>
             </div>
             <div className="divide-y divide-gray-50">
+              <Link to="/admin/fpo" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <div><p className="text-sm font-semibold text-gray-800">FPO Management</p><p className="text-xs text-gray-500">Verification, provisioning, and FPO configuration</p></div>
+                <p className="text-xs font-bold text-emerald-600">Open</p>
+              </Link>
               <Link to="/admin/system" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
                 <p className="text-sm font-semibold text-gray-800">Feature Engine &amp; pipelines</p>
                 <p className="text-xs text-gray-500">Crop profiles, formulas, raster, analytics, hot stream</p>

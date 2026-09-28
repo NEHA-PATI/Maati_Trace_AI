@@ -38,6 +38,46 @@ def test_signup_normalises_phone_and_email():
     assert request.phone_number == "+919876543210"
 
 
+def test_fpo_signup_requires_authority_and_preserves_basics():
+    request = SignupStartRequest(
+        account_type="fpo",
+        full_name="Neha Pati",
+        email="neha@example.com",
+        phone_number="9876543210",
+        password="correct horse battery staple",
+        consent_terms=True,
+        authorised_fpo_representative=True,
+        fpo={
+            "organisation_name": "Green Growers FPO",
+            "registration_type": "producer_company",
+            "registration_number": "REG-001",
+            "state_code": 21,
+            "district_code": 344,
+        },
+    )
+    assert request.account_type == "fpo"
+    assert request.fpo.organisation_name == "Green Growers FPO"
+
+
+def test_fpo_signup_rejects_missing_authority():
+    with pytest.raises(ValidationError):
+        SignupStartRequest(
+            account_type="fpo",
+            full_name="Neha Pati",
+            email="neha@example.com",
+            phone_number="9876543210",
+            password="correct horse battery staple",
+            consent_terms=True,
+            fpo={
+                "organisation_name": "Green Growers FPO",
+                "registration_type": "producer_company",
+                "registration_number": "REG-001",
+                "state_code": 21,
+                "district_code": 344,
+            },
+        )
+
+
 def test_login_normalises_phone_identifier():
     request = LoginRequest(identifier="9876543210", password="anything")
     assert request.resolved_identifier() == "+919876543210"

@@ -15,6 +15,7 @@ from shared.config.settings import settings
 
 PROCESSING_VERSION = "era5_land_daily_v1"
 DATASET_ID = "reanalysis-era5-land"
+MIN_AREA_SPAN_DEGREES = 0.2
 VARIABLES = [
     "2m_temperature",
     "2m_dewpoint_temperature",
@@ -46,9 +47,25 @@ def _group_days(days: list[date]):
     return grouped
 
 
+def _normalise_era5_dataset(ds: xr.Dataset) -> xr.Dataset:
+    """Remove ERA5's experiment-version coordinate from CDS NetCDF output.
+
+    CDS/ERA5 files can contain an ``expver`` dimension/coordinate when data
+    comes from mixed final/preliminary streams. Xarray then refuses to combine
+    files because the coordinate values conflict. For farm-level daily
+    aggregates we only need the meteorological values, so collapse the expver
+    dimension with skipna and drop any remaining scalar expver coordinate.
+    """
+    if "expver" in ds.dims:
+        ds = ds.mean(dim="expver", skipna=True)
+    if "expver" in ds.variables:
+        ds = ds.drop_vars("expver")
+    return ds
+
+
 def _open_cds_file(path: str) -> xr.Dataset:
     try:
-        return xr.open_dataset(path)
+        return _normalise_era5_dataset(xr.open_dataset(path))
     except Exception:
         # New CDS downloads can occasionally be zip containers despite a NetCDF request.
         import zipfile
@@ -63,7 +80,13 @@ def _open_cds_file(path: str) -> xr.Dataset:
                         nc_files.append(os.path.join(root, name))
             if not nc_files:
                 raise RuntimeError("CDS returned a zip without a NetCDF file")
-            return xr.open_mfdataset(nc_files, combine="by_coords")
+            return xr.open_mfdataset(
+                nc_files,
+                combine="by_coords",
+                compat="override",
+                coords="minimal",
+                preprocess=_normalise_era5_dataset,
+            )
         raise
 
 
@@ -91,6 +114,27 @@ def _find_variable(ds: xr.Dataset, aliases: list[str]) -> xr.DataArray | None:
     return None
 
 
+def _era5_area_from_bbox(bbox: list[float]) -> list[float]:
+    """Return a CDS area [north, west, south, east] large enough for ERA5-Land.
+
+    Farm polygons are often much smaller than the ~0.1 degree ERA5-Land grid.
+    If we ask CDS for the exact farm bbox, MARS can fail with "non-empty area
+    crop/mask" because no model grid point falls inside the tiny rectangle.
+    Padding to a small local window keeps the request near the farm while
+    ensuring at least one ERA5-Land cell is available.
+    """
+    west, south, east, north = bbox
+    lon_center = (west + east) / 2
+    lat_center = (south + north) / 2
+    lon_span = max(east - west, MIN_AREA_SPAN_DEGREES)
+    lat_span = max(north - south, MIN_AREA_SPAN_DEGREES)
+    padded_west = max(-180.0, lon_center - lon_span / 2)
+    padded_east = min(180.0, lon_center + lon_span / 2)
+    padded_south = max(-90.0, lat_center - lat_span / 2)
+    padded_north = min(90.0, lat_center + lat_span / 2)
+    return [padded_north, padded_west, padded_south, padded_east]
+
+
 def process(payload: dict[str, Any]) -> dict[str, Any]:
     if not settings.cds_api_key.strip():
         raise RuntimeError("CDS_API_KEY is required for ERA5-Land")
@@ -104,10 +148,7 @@ def process(payload: dict[str, Any]) -> dict[str, Any]:
             f"ERA5-Land request is limited to {settings.era5_max_days_per_request} days per month"
         )
 
-    north = payload["bbox"][3]
-    west = payload["bbox"][0]
-    south = payload["bbox"][1]
-    east = payload["bbox"][2]
+    area = _era5_area_from_bbox(payload["bbox"])
     client = cdsapi.Client(url=settings.cds_api_url, key=settings.cds_api_key, quiet=True)
 
     datasets: list[xr.Dataset] = []
@@ -125,12 +166,16 @@ def process(payload: dict[str, Any]) -> dict[str, Any]:
                 "time": [f"{hour:02d}:00" for hour in range(24)],
                 "data_format": "netcdf",
                 "download_format": "unarchived",
-                "area": [north, west, south, east],
+                "area": area,
             }
             client.retrieve(DATASET_ID, request, path)
             datasets.append(_open_cds_file(path))
 
-        ds = xr.combine_by_coords(datasets) if len(datasets) > 1 else datasets[0]
+        ds = (
+            xr.combine_by_coords(datasets, compat="override", coords="minimal")
+            if len(datasets) > 1
+            else datasets[0]
+        )
         time_name = _coord_name(ds, ["valid_time", "time"])
         time_values = np.asarray(ds[time_name].values)
 
@@ -208,6 +253,8 @@ def process(payload: dict[str, Any]) -> dict[str, Any]:
             "records": records,
             "metadata": {
                 "v1_scope": "temperature, dewpoint, skin temperature and soil-water layers; accumulated rainfall/flux fields intentionally excluded",
+                "requested_area": area,
+                "min_area_span_degrees": MIN_AREA_SPAN_DEGREES,
             },
         }
     finally:

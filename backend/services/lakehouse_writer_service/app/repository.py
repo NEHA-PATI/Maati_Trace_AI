@@ -60,6 +60,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             district_code,
             block_name,
             block_code,
+            spatial_level,
 
             snapshot_date,
             scene_id,
@@ -114,6 +115,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             nirv,
             optical_resolution_m,
             rededge_swir_resolution_m,
+            native_resolution_m,
             processing_version,
 
             source_assets_used,
@@ -128,6 +130,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             :district_code,
             :block_name,
             :block_code,
+            :spatial_level,
 
             :snapshot_date,
             :scene_id,
@@ -182,6 +185,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             :nirv,
             :optical_resolution_m,
             :rededge_swir_resolution_m,
+            :native_resolution_m,
             :processing_version,
 
             :source_assets_used,
@@ -196,6 +200,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             district_code = EXCLUDED.district_code,
             block_name = EXCLUDED.block_name,
             block_code = EXCLUDED.block_code,
+            spatial_level = EXCLUDED.spatial_level,
 
             scene_datetime = EXCLUDED.scene_datetime,
             scene_cloud_cover = EXCLUDED.scene_cloud_cover,
@@ -222,6 +227,7 @@ def upsert_sentinel2_feature_rows(rows: list[dict[str, Any]]) -> int:
             nirv = EXCLUDED.nirv,
             optical_resolution_m = EXCLUDED.optical_resolution_m,
             rededge_swir_resolution_m = EXCLUDED.rededge_swir_resolution_m,
+            native_resolution_m = EXCLUDED.native_resolution_m,
             processing_version = EXCLUDED.processing_version,
 
             mean_blue = EXCLUDED.mean_blue,

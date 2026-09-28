@@ -33,9 +33,10 @@ async function completeAccountForm(user, email = "farmer@example.com") {
 }
 
 describe("SignupFlow", () => {
-  it("has no public role picker and provides the FPO access route", () => {
+  it("offers farmer and FPO account types", () => {
     renderFlow();
-    expect(screen.queryByText("Registering as")).not.toBeInTheDocument();
+    expect(screen.getByText("Registering as")).toBeInTheDocument();
+    expect(screen.getByText("Farmer Producer Organisation")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Request access" })).toHaveAttribute("href", "/request-fpo-access");
   });
 

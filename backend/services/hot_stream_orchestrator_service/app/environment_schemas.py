@@ -33,6 +33,7 @@ class EnvironmentRefreshRequest(BaseModel):
     max_items_per_dataset: int = Field(default=1, ge=1, le=31)
     max_cloud_cover: float | None = Field(default=40, ge=0, le=100)
     force_refresh: bool = False
+    analysis_mode: str = "manual"
     dataset_options: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -42,6 +43,11 @@ class DatasetStageResult(BaseModel):
     provider: str | None = None
     reason_type: str | None = None
     reason_code: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_seconds: float | None = None
     source_items_found: int = 0
     source_items_processed: int = 0
     postgres_rows_written: int = 0

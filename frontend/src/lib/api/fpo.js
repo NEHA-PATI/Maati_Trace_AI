@@ -1,5 +1,6 @@
 import {
   farmRegistryClient,
+  fpoManagementClient,
   profileClient,
 } from "@/shared/api/serviceClients";
 
@@ -35,6 +36,121 @@ export async function getMyFpo() {
     );
 
   return unwrapFpoProfile(payload);
+}
+
+export function getFpoBootstrapStatus() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/bootstrap-status",
+  );
+}
+
+export function getFpoVerificationStatus() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/verification",
+  );
+}
+
+export function submitFpoVerification() {
+  return fpoManagementClient.request(
+    "/v1/fpo-portal/verification/submit",
+    { method: "POST", body: {} },
+  );
+}
+
+export function getFpoVerificationQueue(status = "") {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fpoManagementClient.request(
+    `/v1/fpo-portal/admin/verification-queue${query}`,
+  );
+}
+
+export function reviewFpoVerification(fpoId, status, note = "") {
+  return fpoManagementClient.request(
+    `/v1/fpo-portal/admin/organizations/${fpoId}/verification`,
+    { method: "PATCH", body: { status, note } },
+  );
+}
+
+export function discoverFpos(query = "") {
+  const suffix = query ? `?query=${encodeURIComponent(query)}` : "";
+  return fpoManagementClient.request(`/v1/fpo-portal/discover${suffix}`);
+}
+
+export function getFarmerFpoRelationships() {
+  return fpoManagementClient.request("/v1/farmer/fpo-relationships");
+}
+
+export function requestFarmerFpoRelationship(fpoId) {
+  return fpoManagementClient.request("/v1/farmer/fpo-relationships", {
+    method: "POST",
+    body: { fpo_id: fpoId },
+  });
+}
+
+export function getFpoRelationships() {
+  return fpoManagementClient.request("/v1/fpo-portal/relationships");
+}
+
+export function decideFpoRelationship(relationshipId, decision) {
+  return fpoManagementClient.request(`/v1/fpo-portal/relationships/${relationshipId}`, {
+    method: "PATCH",
+    body: { decision },
+  });
+}
+
+export function revokeFarmerFpoRelationship(relationshipId) {
+  return fpoManagementClient.request(`/v1/farmer/fpo-relationships/${relationshipId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getFpoEntitlements() {
+  return fpoManagementClient.request("/v1/fpo-portal/entitlements");
+}
+
+export function getFpoPortfolioReport() {
+  return fpoManagementClient.request("/v1/fpo-portal/reports/portfolio");
+}
+
+export function getFpoOperationalAlerts(status = "") {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fpoManagementClient.request(`/v1/fpo-portal/alerts${query}`);
+}
+
+export function acknowledgeFpoAlert(alertId) {
+  return fpoManagementClient.request(`/v1/fpo-portal/alerts/${alertId}/acknowledge`, {
+    method: "PATCH",
+    body: {},
+  });
+}
+
+export function getFpoFeatureCatalogue() {
+  return fpoManagementClient.request("/v1/fpo-portal/admin/features/catalogue");
+}
+
+export function assignFpoClass(fpoId, classCode) {
+  return fpoManagementClient.request(`/v1/fpo-portal/admin/organizations/${fpoId}/class`, {
+    method: "PATCH",
+    body: { class_code: classCode },
+  });
+}
+
+export function createFpoFeatureOverride(fpoId, payload) {
+  return fpoManagementClient.request(`/v1/fpo-portal/admin/organizations/${fpoId}/feature-overrides`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getFpoFeatureOverrides(fpoId) {
+  return fpoManagementClient.request(`/v1/fpo-portal/admin/organizations/${fpoId}/feature-overrides`);
+}
+
+export function runFpoReconciliation() {
+  return fpoManagementClient.request("/v1/fpo-portal/admin/reconciliation/run", {
+    method: "POST",
+    body: {},
+  });
 }
 
 export async function getFpo(fpoId) {
