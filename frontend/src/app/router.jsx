@@ -35,6 +35,8 @@ import FpoFarmIntelligencePage from "@/features/fpo/farmers/FpoFarmIntelligenceP
 import FpoAlertsPage from "@/features/fpo/dashboard/FpoAlertsPage";
 import FpoReportsPage from "@/features/fpo/dashboard/FpoReportsPage";
 import FpoMonitoringPage from "@/features/fpo/dashboard/FpoMonitoringPage";
+import FpoGeographyPage from "@/features/fpo/dashboard/FpoGeographyPage";
+import FpoCropPerformancePage from "@/features/fpo/dashboard/FpoCropPerformancePage";
 import FpoImportsPage from "@/features/fpo/dashboard/FpoImportsPage";
 import FpoDataQualityPage from "@/features/fpo/dashboard/FpoDataQualityPage";
 import {
@@ -174,6 +176,8 @@ export const router = createBrowserRouter(
                 { path: "/fpo/alerts", element: <FpoAlertsPage /> },
                 { path: "/fpo/reports", element: <FpoReportsPage /> },
                 { path: "/fpo/monitoring", element: <FpoMonitoringPage /> },
+                { path: "/fpo/geography", element: <FpoGeographyPage /> },
+                { path: "/fpo/crops", element: <FpoCropPerformancePage /> },
                 { path: "/fpo/imports", element: <FpoImportsPage /> },
                 { path: "/fpo/data-quality", element: <FpoDataQualityPage /> },
                 { path: "/fpo/farmers/segments", element: <FpoSegmentsPage /> },
@@ -223,7 +227,7 @@ export const router = createBrowserRouter(
           children: [{ path: "/my-fpo", element: <MyFpo /> }],
         },
         {
-          element: <ProtectedRoute permission="farmerProfile" />,
+          element: <ProtectedRoute permission="farmerSelfProfile" />,
           children: [
             { path: "/farmer/me", element: <FarmerProfile /> },
             { path: "/farmer/fpo", element: <FarmerFpoPage /> },
@@ -232,8 +236,11 @@ export const router = createBrowserRouter(
               path: "/farmer/imported-onboarding",
               element: <FarmerImportedOnboardingPage />,
             },
-            { path: "/farmers/:farmerId", element: <FarmerProfile /> },
           ],
+        },
+        {
+          element: <ProtectedRoute permission="farmerProfile" />,
+          children: [{ path: "/farmers/:farmerId", element: <FarmerProfile /> }],
         },
         {
           element: <ProtectedRoute permission="landIntelligence" />,

@@ -19,6 +19,7 @@ import {
   requestFarmerFpoRelationship,
   revokeFarmerFpoRelationship,
 } from "@/lib/api/fpo";
+import { useTranslation } from "@/features/i18n";
 
 const statusStyle = {
   ACTIVE: "bg-emerald-50 text-emerald-700",
@@ -30,6 +31,7 @@ const statusStyle = {
 const label = (value) => String(value || "").replaceAll("_", " ");
 
 export default function FarmerFpoPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [farms, setFarms] = useState([]);
   const [fpos, setFpos] = useState([]);
@@ -181,14 +183,14 @@ export default function FarmerFpoPage() {
           to="/farmer/me"
           className="text-xs font-bold text-emerald-700 hover:underline"
         >
-          ← Back to farmer dashboard
+          ← {t("backToDashboard")}
         </Link>
         <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">
-              Farmer workspace
+              {t("farmerWorkspace")}
             </p>
-            <h1 className="mt-2 text-3xl font-black text-slate-950">FPOs</h1>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">{t("fpos")}</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">
               Connect individual farms with approved FPOs. Each connection is
               farm-specific; your other farms remain private.
@@ -217,18 +219,16 @@ export default function FarmerFpoPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-emerald-700" />
-          <h2 className="text-lg font-black text-slate-950">Choose a farm</h2>
+          <h2 className="text-lg font-black text-slate-950">{t("chooseFarm")}</h2>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          The selected farm is the only land that an FPO request can cover.
-        </p>
+          <p className="mt-1 text-sm text-slate-500">{t("selectedFarmOnly")}</p>
         {loading ? (
           <p className="mt-5 text-sm text-slate-500">Loading your farms…</p>
         ) : (
           <div className="mt-5">
             {farms.length ? (
               <>
-                <label htmlFor="fpo-farm-select" className="mb-2 block text-xs font-bold text-slate-600">Choose the farm for this connection</label>
+                <label htmlFor="fpo-farm-select" className="mb-2 block text-xs font-bold text-slate-600">{t("chooseFarmConnection")}</label>
                 <select id="fpo-farm-select" value={selectedFarm} onChange={(event) => setSelectedFarm(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600 md:max-w-2xl">
                   {farms.map((farm) => <option key={farm.farm_id} value={farm.farm_id}>{farm.farm_name || "Unnamed farm"} · {farm.area_acres ?? "—"} acres · {[farm.village_name, farm.district_name].filter(Boolean).join(", ") || "Location pending"}</option>)}
                 </select>
@@ -338,7 +338,7 @@ export default function FarmerFpoPage() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-black text-slate-950">
-              Find an approved FPO
+              {t("findApprovedFpo")}
             </h2>
             <p className="text-sm text-slate-500">
               Requests are created for{" "}
@@ -357,12 +357,12 @@ export default function FarmerFpoPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search FPO or district"
+                placeholder={t("searchFpoDistrict")}
                 className="w-40 border-0 px-2 py-2 text-sm outline-none"
               />
             </div>
             <Button type="submit" size="sm">
-              Search
+              {t("search")}
             </Button>
           </form>
         </div>

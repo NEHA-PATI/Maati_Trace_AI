@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileUp, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileUp, ShieldCheck, Download } from "lucide-react";
 import FpoFeatureGate from "../access/FpoFeatureGate";
 import {
   commitFpoImport,
@@ -23,11 +23,35 @@ async function checksum(file) {
     .join("");
 }
 
+function rowPayload(row) {
+  if (!row?.normalized_payload) return {};
+  return typeof row.normalized_payload === "string"
+    ? JSON.parse(row.normalized_payload)
+    : row.normalized_payload;
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function BoundaryPreview({ geometry }) {
+  const ring = geometry?.type === "Polygon"
+    ? geometry.coordinates?.[0]
+    : geometry?.type === "MultiPolygon" ? geometry.coordinates?.[0]?.[0] : null;
+  const points = Array.isArray(ring) ? ring.filter((point) => Array.isArray(point) && point.length > 1) : [];
+  if (points.length < 3) return <div className="flex h-44 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-xs text-slate-400">A valid farm boundary preview will appear here.</div>;
+  const xs = points.map(([x]) => Number(x)); const ys = points.map(([, y]) => Number(y));
+  const minX = Math.min(...xs); const maxX = Math.max(...xs); const minY = Math.min(...ys); const maxY = Math.max(...ys);
+  const coords = points.map(([x, y]) => `${12 + ((Number(x) - minX) / (maxX - minX || 1)) * 176},${188 - ((Number(y) - minY) / (maxY - minY || 1)) * 176}`).join(" ");
+  return <div className="relative h-44 overflow-hidden rounded-2xl border border-emerald-100 bg-[linear-gradient(#e7f5ed_1px,transparent_1px),linear-gradient(90deg,#e7f5ed_1px,transparent_1px)] bg-[size:22px_22px]"><svg viewBox="0 0 200 200" className="h-full w-full"><polygon points={coords} fill="#34d399" fillOpacity=".3" stroke="#047857" strokeWidth="2.5" /></svg><span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-emerald-800">GeoJSON boundary preview</span></div>;
+}
+
 export default function FpoImportsPage() {
   const [type, setType] = useState("FARMERS");
   const [file, setFile] = useState(null);
   const [selected, setSelected] = useState(null);
   const [message, setMessage] = useState("");
+  const [filter, setFilter] = useState("ALL");
   const qc = useQueryClient();
   const jobs = useQuery({ queryKey: ["fpo-imports"], queryFn: getFpoImports });
   const rows = useQuery({
@@ -79,6 +103,10 @@ export default function FpoImportsPage() {
     () => (rows.data || []).filter((row) => row.row_status === "INVALID"),
     [rows.data],
   );
+  const visibleRows = useMemo(
+    () => (rows.data || []).filter((row) => filter === "ALL" || row.row_status === filter),
+    [filter, rows.data],
+  );
 
   async function downloadTemplate() {
     const template = await getFpoImportTemplate(type);
@@ -90,6 +118,16 @@ export default function FpoImportsPage() {
     link.download = `maati-${type.toLowerCase()}-template-v${template.template_version}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
+  }
+
+  function downloadReport() {
+    const header = ["row_number", "status", "farmer_name", "farm_name", "crop_name", "crop_stage", "planting_date", "errors"];
+    const body = (rows.data || []).map((row) => {
+      const payload = rowPayload(row);
+      return [row.row_number, row.row_status, payload.farmer_name, payload.farm_name, payload.crop_name, payload.crop_stage, payload.planting_date, (row.error_items || []).map((error) => error.message).join(" | ")].map(csvCell).join(",");
+    });
+    const url = URL.createObjectURL(new Blob([[header.map(csvCell).join(","), ...body].join("\n")], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = "maatitrace-import-validation-report.csv"; link.click(); URL.revokeObjectURL(url);
   }
   return (
     <FpoFeatureGate
@@ -105,20 +143,20 @@ export default function FpoImportsPage() {
         </section>
       }
     >
-      <div className="space-y-6">
-        <header>
+      <div className="space-y-6 pb-10">
+        <header className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-7 text-white shadow-xl sm:p-9">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">
             Class B · Growth operations
           </p>
-          <h1 className="mt-2 text-3xl font-black text-slate-950">
-            Bulk onboarding
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+            Bulk onboarding, built for trust
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Upload a versioned CSV or XLSX, verify the checksum, run a dry
-            validation, and inspect row-level outcomes before downstream records
-            are created. Enter crop names; MaatiTrace resolves the canonical
-            crop code automatically.
+            Upload a versioned CSV or XLSX, validate every farm boundary and crop
+            detail, then stage records for consent. No farmer, FPO, farm or
+            external reference is entered by the operator.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-white/10 px-3 py-1.5">Up to 5,000 rows</span><span className="rounded-full bg-white/10 px-3 py-1.5">Dry run required</span><span className="rounded-full bg-emerald-400/20 px-3 py-1.5 text-emerald-200">Consent protected</span></div>
         </header>
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -224,8 +262,9 @@ export default function FpoImportsPage() {
             </div>
           </div>
           <div className="rounded-3xl border border-slate-200 bg-white p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="font-black">Row review</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Step 2 · review</p><h2 className="mt-1 font-black">Row review</h2></div>
+              {selected && <button type="button" onClick={downloadReport} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700"><Download className="h-4 w-4" />Export validation report</button>}
               {selected && invalid.length > 0 && (
                 <span className="flex items-center gap-1 text-xs font-bold text-rose-700">
                   <AlertTriangle className="h-4 w-4" />
@@ -242,8 +281,10 @@ export default function FpoImportsPage() {
                 </button>
               )}
             </div>
-            <div className="mt-4 space-y-2">
-              {(rows.data || []).map((row) => (
+            {selected && <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xl font-black">{rows.data?.length || 0}</p><p className="text-[10px] font-bold uppercase text-slate-400">Total</p></div><div className="rounded-xl bg-emerald-50 p-3"><p className="text-xl font-black text-emerald-700">{(rows.data?.length || 0) - invalid.length}</p><p className="text-[10px] font-bold uppercase text-emerald-700/60">Valid</p></div><div className="rounded-xl bg-rose-50 p-3"><p className="text-xl font-black text-rose-700">{invalid.length}</p><p className="text-[10px] font-bold uppercase text-rose-700/60">Errors</p></div></div>}
+            {selected && <div className="mt-4 flex gap-2">{["ALL", "VALID", "INVALID"].map((value) => <button type="button" key={value} onClick={() => setFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${filter === value ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"}`}>{value === "ALL" ? "All rows" : value === "VALID" ? "Valid" : "Needs correction"}</button>)}</div>}
+            <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_.8fr]"><div className="space-y-2">
+              {visibleRows.map((row) => (
                 <div
                   key={row.import_row_id}
                   className="rounded-xl border border-slate-200 p-3"
@@ -275,7 +316,7 @@ export default function FpoImportsPage() {
                   Select an import to inspect row-level validation.
                 </p>
               )}
-            </div>
+            </div><BoundaryPreview geometry={selected ? rowPayload(visibleRows[0] || rows.data?.[0]).polygon_geojson : null} /></div>
           </div>
         </section>
         {selected && staged.data?.length > 0 && (

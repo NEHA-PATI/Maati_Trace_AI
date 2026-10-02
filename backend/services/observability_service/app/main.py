@@ -39,13 +39,13 @@ def require_admin(authorization: str | None) -> dict:
     try:
         user = load_current_user(authorization)
     except MissingAuthorizationError as exc:
-        raise HTTPException(status_code=401, detail="Authentication is required") from exc
+        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Authentication is required"}) from exc
     except (InvalidAccessTokenError, CurrentUserUnavailableError) as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(status_code=401, detail={"code": "AUTH_INVALID", "message": str(exc)}) from exc
     except PrincipalLookupError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail={"code": "OBSERVABILITY_UNAVAILABLE", "message": str(exc)}) from exc
     if str(user.get("role") or "").lower() != "admin":
-        raise HTTPException(status_code=403, detail="Admin access is required")
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Admin access is required"})
     return user
 
 
@@ -98,5 +98,5 @@ def feature_farm(farm_id: UUID, authorization: str | None = Header(default=None,
     require_admin(authorization)
     result = repo_call(farm_feature_status, farm_id)
     if not result:
-        raise HTTPException(status_code=404, detail="Farm not found")
+        raise HTTPException(status_code=404, detail={"code": "FARM_NOT_FOUND", "message": "Farm not found"})
     return result

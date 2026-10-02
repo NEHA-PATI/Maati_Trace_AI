@@ -5,6 +5,11 @@ export function discoverFpoFarmers(params = {}) {
   return fpoManagementClient.request(`/v1/fpo-portal/farmers${query ? `?${query}` : ""}`);
 }
 
+export function getFpoFarmMonitoring(query = "") {
+  const suffix = query ? `?query=${encodeURIComponent(query)}` : "";
+  return fpoManagementClient.request(`/v1/fpo-portal/farms/monitoring${suffix}`);
+}
+
 export function getFpoFarmer(farmerId) {
   return fpoManagementClient.request(`/v1/fpo/me/farmers/${encodeURIComponent(farmerId)}`);
 }

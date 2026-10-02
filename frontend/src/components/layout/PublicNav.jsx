@@ -5,13 +5,16 @@ import { Bell, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "@/features/auth/context/useAuth";
 import { getAuthenticatedNavigation, PUBLIC_ITEMS, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
 import { LanguageToggle } from "@/features/language";
+import { useTranslation } from "@/features/i18n";
 
 const GET_STARTED_ITEM = {
   to: "/register",
+  labelKey: "getStarted",
   label: "Get Started",
 };
 
 function MaatiLogo() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 md:gap-2.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10 md:h-10 md:w-10">
@@ -19,7 +22,7 @@ function MaatiLogo() {
       </span>
       <div className="leading-tight">
         <div className="text-[15px] font-extrabold text-[var(--mt-ink)] md:text-[17px]">MaatiTrace</div>
-        <div className="text-[9.5px] font-semibold text-[var(--mt-ink-faint)] md:text-[10.5px]">Land Intelligence</div>
+        <div className="text-[9.5px] font-semibold text-[var(--mt-ink-faint)] md:text-[10.5px]">{t("landIntelligence")}</div>
       </div>
     </div>
   );
@@ -29,6 +32,7 @@ export default function PublicNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, initialising, logout, user } = useAuth();
+  const { t } = useTranslation();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -52,7 +56,7 @@ export default function PublicNav() {
     <>
       <header className="mt-surface fixed inset-x-0 top-0 z-50 border-b border-[var(--mt-line)] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-2 px-3 md:h-16 md:gap-3 md:px-4">
-        <Link to="/" aria-label="MaatiTrace home">
+        <Link to="/" aria-label={t("homeAria")}>
           <MaatiLogo />
         </Link>
 
@@ -70,7 +74,7 @@ export default function PublicNav() {
                     : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-paper-warm)]"
                 }`}
               >
-                {item.label}
+                {t(item.labelKey || item.label)}
               </Link>
             );
           })}
@@ -82,8 +86,8 @@ export default function PublicNav() {
             <>
               <Link
                 to="/notifications"
-                aria-label="Notifications"
-                title="Notifications"
+                aria-label={t("notifications")}
+                title={t("notifications")}
                 className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors ${
                   location.pathname === "/notifications"
                     ? "border-[var(--mt-leaf)] bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"
@@ -100,9 +104,9 @@ export default function PublicNav() {
                 className="flex h-10 items-center gap-1.5 rounded-full border border-[var(--mt-line)] bg-white px-3 text-[13px] font-bold text-[var(--mt-ink-soft)] transition-colors hover:bg-[var(--mt-paper-warm)] disabled:cursor-not-allowed disabled:opacity-60 md:h-11 md:px-3.5"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{loggingOut ? "Logging out…" : "Log out"}</span>
+                <span className="hidden sm:inline">{loggingOut ? t("loggingOut") : t("logout")}</span>
               </button>
-              <button type="button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
+              <button type="button" aria-label={mobileMenuOpen ? t("closeMenu") : t("openMenu")} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
                 {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             </>
@@ -122,9 +126,9 @@ export default function PublicNav() {
                 to={GET_STARTED_ITEM.to}
                 className="hidden h-10 items-center whitespace-nowrap rounded-full bg-[var(--mt-leaf)] px-3 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-leaf-deep)] md:flex md:h-11 md:px-4"
               >
-                {GET_STARTED_ITEM.label}
+                {t(GET_STARTED_ITEM.labelKey)}
               </Link>
-              <button type="button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
+              <button type="button" aria-label={mobileMenuOpen ? t("closeMenu") : t("openMenu")} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
                 {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             </>
@@ -139,14 +143,14 @@ export default function PublicNav() {
     </header>
     {mobileMenuOpen ? (
       <div className="fixed inset-x-0 top-14 z-40 border-b border-[var(--mt-line)] bg-white p-3 shadow-lg md:hidden">
-        <nav className="grid gap-1.5" aria-label="Mobile menu">
+        <nav className="grid gap-1.5" aria-label={t("main")}>
           {navItems.map((item) => (
             <Link key={item.to} to={item.to} onClick={() => setMobileMenuOpen(false)} className={`rounded-xl px-4 py-3 text-sm font-bold transition-colors ${isNavigationItemActive(location.pathname, item) ? "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]" : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-leaf-tint)] hover:text-[var(--mt-leaf-deep)]"}`}>
-              {item.label}
+              {t(item.labelKey || item.label)}
             </Link>
           ))}
           <div className="my-1 border-t border-[var(--mt-line)]" />
-          {isAuthenticated ? <Link to="/notifications" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">Notifications</Link> : <><Link to="/login" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">Login</Link><Link to="/register" onClick={() => setMobileMenuOpen(false)} className="rounded-xl bg-[var(--mt-leaf)] px-4 py-3 text-center text-sm font-bold text-white">Get Started</Link></>}
+          {isAuthenticated ? <Link to="/notifications" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">{t("notifications")}</Link> : <><Link to="/login" onClick={() => setMobileMenuOpen(false)} className="rounded-xl border border-[var(--mt-line)] px-4 py-3 text-center text-sm font-bold text-[var(--mt-ink-soft)]">{t("login")}</Link><Link to="/register" onClick={() => setMobileMenuOpen(false)} className="rounded-xl bg-[var(--mt-leaf)] px-4 py-3 text-center text-sm font-bold text-white">{t(GET_STARTED_ITEM.labelKey)}</Link></>}
         </nav>
       </div>
     ) : null}

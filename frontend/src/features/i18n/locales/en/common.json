@@ -1,0 +1,39 @@
+{
+  "language": "Language",
+  "switchToEnglish": "English",
+  "switchToOdia": "ଓଡ଼ିଆ",
+  "back": "Back",
+  "cancel": "Cancel",
+  "close": "Close",
+  "save": "Save",
+  "submit": "Submit",
+  "loading": "Loading…",
+  "show": "Show",
+  "hide": "Hide",
+  "auth": {
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "emailOrPhone": "Email or Indian mobile number",
+    "password": "Password",
+    "useVerifiedAccount": "Use your verified email, Indian mobile number, or Google account.",
+    "newFarmer": "New farmer?",
+    "createAccount": "Create an account",
+    "forgotPassword": "Forgot password?",
+    "fpoAccess": "Representing an FPO? Request access",
+    "or": "or",
+    "googleLoading": "Loading Google sign-in…",
+    "back": "Back"
+  },
+  "errors": {
+    "loginFailed": "Login failed.",
+    "googleSignInFailed": "Google sign-in failed.",
+    "requestFailed": "The request failed.",
+    "requestTimeout": "The request timed out.",
+    "network": "A network error occurred. Please try again.",
+    "invalidCredentials": "The email/mobile number or password is incorrect."
+  },
+  "validation": {
+    "emailOrPhone": "Enter your email or mobile number.",
+    "password": "Enter your password."
+  }
+}

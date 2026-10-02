@@ -54,6 +54,7 @@ from services.fpo_management_service.app.service import (
     farmer_directory,
     farmer_detail,
     farmer_farms,
+    farm_monitoring,
     farmer_farm_intelligence,
     create_farmer_support_ticket,
     farmer_support_tickets,
@@ -1570,6 +1571,17 @@ async def read_fpo_farmer_farms(farmer_id: UUID, user=Depends(current_user)):
         raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can read farmer farms."})
     try:
         return await run_in_threadpool(farmer_farms, user["user_id"], farmer_id)
+    except ValueError as exc:
+        raise fpo_domain_error(exc, "FPO_FARM_ACCESS_DENIED") from exc
+
+
+@app.get("/v1/fpo-portal/farms/monitoring")
+@app.get("/v1/fpo/me/farms/monitoring")
+async def read_fpo_farm_monitoring(query: str | None = None, user=Depends(current_user)):
+    if user.get("role") not in {"fpo", "admin"}:
+        raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can read farm monitoring."})
+    try:
+        return {"items": await run_in_threadpool(farm_monitoring, user["user_id"], query)}
     except ValueError as exc:
         raise fpo_domain_error(exc, "FPO_FARM_ACCESS_DENIED") from exc
 

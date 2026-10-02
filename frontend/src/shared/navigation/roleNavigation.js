@@ -1,34 +1,34 @@
 import { ROLES } from "@/shared/rbac/permissions";
 
 const PUBLIC_ITEMS = [
-  { to: "/", label: "Home", end: true },
-  { to: "/our-method", label: "Our Method" },
-  { to: "/use-cases", label: "Use Cases" },
-  { to: "/plans", label: "Plans" },
+  { to: "/", labelKey: "home", label: "Home", end: true },
+  { to: "/our-method", labelKey: "ourMethod", label: "Our Method" },
+  { to: "/use-cases", labelKey: "useCases", label: "Use Cases" },
+  { to: "/plans", labelKey: "plans", label: "Plans" },
 ];
 
 const ROLE_ITEMS = {
   [ROLES.FARMER]: [
-    { to: "/farmer/me", label: "Dashboard", end: true },
-    { to: "/my-crops/language", label: "My Crop" },
-    { to: "/farmer/fpo", label: "FPOs" },
-    { to: "/settings", label: "Profile", end: true },
-    { to: "/farm-register", label: "Register" },
+    { to: "/farmer/me", labelKey: "dashboard", label: "Dashboard", end: true },
+    { to: "/my-crops/language", labelKey: "myCrop", label: "My Crop" },
+    { to: "/farmer/fpo", labelKey: "fpos", label: "FPOs" },
+    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
+    { to: "/farm-register", labelKey: "register", label: "Register" },
   ],
   [ROLES.FPO]: [
-    { to: "/fpo/overview", label: "FPO Workspace" },
-    { to: "/fpo/farmers", label: "Farmers" },
-    { to: "/fpo/monitoring", label: "Monitoring" },
-    { to: "/fpo/reports", label: "Reports" },
-    { to: "/settings", label: "Profile", end: true },
+    { to: "/fpo/overview", labelKey: "fpoWorkspace", label: "FPO Workspace" },
+    { to: "/fpo/farmers", labelKey: "farmers", label: "Farmers" },
+    { to: "/fpo/monitoring", labelKey: "monitoring", label: "Monitoring" },
+    { to: "/fpo/reports", labelKey: "reports", label: "Reports" },
+    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
   ],
   [ROLES.ADMIN]: [
-    { to: "/admin", label: "Admin Dashboard", end: true },
-    { to: "/admin/fpo-access", label: "FPO Access" },
-    { to: "/admin/fpo", label: "FPO Management" },
-    { to: "/admin/crop-observation", label: "Crop Operations" },
-    { to: "/admin/system", label: "System" },
-    { to: "/settings", label: "Profile", end: true },
+    { to: "/admin", labelKey: "adminDashboard", label: "Admin Dashboard", end: true },
+    { to: "/admin/fpo-access", labelKey: "fpoAccess", label: "FPO Access" },
+    { to: "/admin/fpo", labelKey: "fpoManagement", label: "FPO Management" },
+    { to: "/admin/crop-observation", labelKey: "cropOperations", label: "Crop Operations" },
+    { to: "/admin/system", labelKey: "system", label: "System" },
+    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
   ],
 };
 

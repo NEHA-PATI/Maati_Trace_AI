@@ -1,0 +1,39 @@
+{
+  "language": "ଭାଷା",
+  "switchToEnglish": "English",
+  "switchToOdia": "ଓଡ଼ିଆ",
+  "back": "ପଛକୁ",
+  "cancel": "ବାତିଲ କରନ୍ତୁ",
+  "close": "ବନ୍ଦ କରନ୍ତୁ",
+  "save": "ସଂରକ୍ଷଣ କରନ୍ତୁ",
+  "submit": "ଦାଖଲ କରନ୍ତୁ",
+  "loading": "ଲୋଡ୍ ହେଉଛି…",
+  "show": "ଦେଖାନ୍ତୁ",
+  "hide": "ଲୁଚାନ୍ତୁ",
+  "auth": {
+    "signIn": "ସାଇନ୍ ଇନ୍ କରନ୍ତୁ",
+    "signingIn": "ସାଇନ୍ ଇନ୍ ହେଉଛି…",
+    "emailOrPhone": "ଇମେଲ୍ କିମ୍ବା ଭାରତୀୟ ମୋବାଇଲ୍ ନମ୍ବର",
+    "password": "ପାସୱାର୍ଡ",
+    "useVerifiedAccount": "ଆପଣଙ୍କର ଯାଞ୍ଚ ହୋଇଥିବା ଇମେଲ୍, ଭାରତୀୟ ମୋବାଇଲ୍ ନମ୍ବର କିମ୍ବା Google ଖାତା ବ୍ୟବହାର କରନ୍ତୁ।",
+    "newFarmer": "ନୂଆ ଚାଷୀ?",
+    "createAccount": "ଖାତା ଖୋଲନ୍ତୁ",
+    "forgotPassword": "ପାସୱାର୍ଡ ଭୁଲିଗଲେ କି?",
+    "fpoAccess": "FPO ପ୍ରତିନିଧି? ପ୍ରବେଶ ଅନୁରୋଧ କରନ୍ତୁ",
+    "or": "କିମ୍ବା",
+    "googleLoading": "Google ସାଇନ୍ ଇନ୍ ଲୋଡ୍ ହେଉଛି…",
+    "back": "ପଛକୁ"
+  },
+  "errors": {
+    "loginFailed": "ଲଗଇନ୍ ବିଫଳ ହେଲା।",
+    "googleSignInFailed": "Google ସାଇନ୍ ଇନ୍ ବିଫଳ ହେଲା।",
+    "requestFailed": "ଅନୁରୋଧ ବିଫଳ ହେଲା।",
+    "requestTimeout": "ଅନୁରୋଧର ସମୟ ସମାପ୍ତ ହେଲା।",
+    "network": "ନେଟୱର୍କ ସମସ୍ୟା ହୋଇଛି। ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।",
+    "invalidCredentials": "ଇମେଲ୍/ମୋବାଇଲ୍ ନମ୍ବର କିମ୍ବା ପାସୱାର୍ଡ ଭୁଲ୍।"
+  },
+  "validation": {
+    "emailOrPhone": "ଆପଣଙ୍କର ଇମେଲ୍ କିମ୍ବା ମୋବାଇଲ୍ ନମ୍ବର ଲେଖନ୍ତୁ।",
+    "password": "ଆପଣଙ୍କର ପାସୱାର୍ଡ ଲେଖନ୍ତୁ।"
+  }
+}

@@ -44,13 +44,15 @@ import {
   getFarmerImportedOnboardingRecord,
   linkFarmerImportedFarm,
 } from "@/lib/api/fpo";
+import { useTranslation } from "@/features/i18n";
+import { locationDisplayName } from "@/features/i18n/locationTranslations";
 
 const STEPS = [
-  { num: "01", label: "Location", icon: MapPin },
-  { num: "02", label: "Farmer", icon: User },
-  { num: "03", label: "Boundary", icon: Hexagon },
-  { num: "04", label: "Review", icon: FileText },
-  { num: "05", label: "Done", icon: Check },
+  { num: "01", labelKey: "locationStep", icon: MapPin },
+  { num: "02", labelKey: "farmerStep", icon: User },
+  { num: "03", labelKey: "boundaryStep", icon: Hexagon },
+  { num: "04", labelKey: "reviewStep", icon: FileText },
+  { num: "05", labelKey: "doneStep", icon: Check },
 ];
 
 const EMPTY_FORM = {
@@ -81,6 +83,7 @@ function isValidLocationName(value) {
 
 export default function FarmRegister() {
   const navigate = useNavigate();
+  const { t, locale } = useTranslation();
   const [searchParams] = useSearchParams();
   const stagedRecordId = searchParams.get("staged_record_id");
   const user = getStoredUser();
@@ -559,7 +562,7 @@ export default function FarmRegister() {
                   ) : (
                     <Icon className="h-3.5 w-3.5" />
                   )}
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="hidden sm:inline">{t(item.labelKey)}</span>
                 </span>
               </button>
             );
@@ -642,18 +645,18 @@ export default function FarmRegister() {
                       />
                     </div>
                     <span className="font-bold text-gray-800">
-                      Location Selection
+                      {t("locationSelection")}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label className={labelClass}>State</Label>
+                      <Label className={labelClass}>{t("state")}</Label>
                       <Select
                         value={formData.state_name}
                         onValueChange={(value) => update("state_name", value)}
                       >
                         <SelectTrigger className={inputClass}>
-                          <SelectValue placeholder="Select state" />
+                          <SelectValue placeholder={t("selectState")} />
                         </SelectTrigger>
                         <SelectContent
                           side="bottom"
@@ -669,14 +672,14 @@ export default function FarmRegister() {
                               key={state.state_name}
                               value={state.state_name}
                             >
-                              {state.state_name}
+                              {state.state_name === "Odisha" && locale === "or-IN" ? "ଓଡ଼ିଶା" : state.state_name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className={labelClass}>District</Label>
+                      <Label className={labelClass}>{t("district")}</Label>
                       <Select
                         value={formData.district_name}
                         onValueChange={(value) =>
@@ -684,7 +687,7 @@ export default function FarmRegister() {
                         }
                       >
                         <SelectTrigger className={inputClass}>
-                          <SelectValue placeholder="Select district" />
+                          <SelectValue placeholder={t("selectDistrict")} />
                         </SelectTrigger>
                         <SelectContent
                           side="bottom"
@@ -697,14 +700,14 @@ export default function FarmRegister() {
                               key={`${district.district_code}-${district.district_name}`}
                               value={district.district_name}
                             >
-                              {district.district_name}
+                              {locationDisplayName(district.district_name, locale)}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className={labelClass}>Block</Label>
+                      <Label className={labelClass}>{t("block")}</Label>
                       <Select
                         value={String(formData.block_code || "")}
                         onValueChange={(value) => {
@@ -717,10 +720,10 @@ export default function FarmRegister() {
                         }}
                       >
                         <SelectTrigger className={inputClass}>
-                          <SelectValue placeholder="Select block">
+                          <SelectValue placeholder={t("selectBlock")}>
                             {formData.block_name
-                              ? `${formData.block_name} (${formData.block_code})`
-                              : "Select block"}
+                              ? `${locationDisplayName(formData.block_name, locale)} (${formData.block_code})`
+                              : t("selectBlock")}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent
@@ -734,18 +737,18 @@ export default function FarmRegister() {
                               key={block.block_code}
                               value={String(block.block_code)}
                             >
-                              {block.block_name} ({block.block_code})
+                              {locationDisplayName(block.block_name, locale)} ({block.block_code})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className={labelClass}>Village</Label>
+                      <Label className={labelClass}>{t("village")}</Label>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                         <Input
-                          placeholder="Village name..."
+                          placeholder={t("villageName")}
                           value={formData.village_name}
                           onChange={(e) =>
                             update("village_name", e.target.value)
@@ -764,8 +767,8 @@ export default function FarmRegister() {
                       className="h-10 rounded-xl border-emerald-200 text-sm font-semibold text-emerald-700"
                     >
                       {locationResolving
-                        ? "Finding location…"
-                        : "Find village on map"}
+                        ? t("findingLocation")
+                        : t("findVillageOnMap")}
                     </Button>
                     {resolvedMapLocation ? (
                       <span className="text-sm font-semibold text-emerald-700">
@@ -783,19 +786,19 @@ export default function FarmRegister() {
                       <User className="h-4 w-4 text-white" strokeWidth={2.5} />
                     </div>
                     <span className="font-bold text-gray-800">
-                      Farmer Linkage
+                      {t("farmerLinkage")}
                     </span>
                   </div>
                   {user?.role === "farmer" && !linkedFarmer ? (
                     <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
-                      Complete your farmer profile first.
+                      {t("completeFarmerProfile")}
                       <div className="mt-3">
                         <Link to="/farmer/me" className="inline-flex">
                           <Button
                             size="sm"
                             className="h-9 rounded-xl bg-amber-500 text-white hover:bg-amber-600"
                           >
-                            Go to Farmer Profile
+                            {t("goToFarmerProfile")}
                           </Button>
                         </Link>
                       </div>
@@ -803,9 +806,9 @@ export default function FarmRegister() {
                   ) : (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label className={labelClass}>Farmer Name</Label>
+                        <Label className={labelClass}>{t("farmerName")}</Label>
                         <Input
-                          placeholder="Enter full name..."
+                          placeholder={t("enterFullName")}
                           value={formData.farmer_name}
                           onChange={(e) =>
                             update("farmer_name", e.target.value)
@@ -815,9 +818,9 @@ export default function FarmRegister() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className={labelClass}>Farmer ID</Label>
+                        <Label className={labelClass}>{t("farmerId")}</Label>
                         <Input
-                          placeholder="Paste existing farmer ID"
+                          placeholder={t("pasteFarmerId")}
                           value={formData.farmer_id}
                           onChange={(e) => update("farmer_id", e.target.value)}
                           className={inputClass}
@@ -825,9 +828,9 @@ export default function FarmRegister() {
                         />
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
-                        <Label className={labelClass}>Farm Name</Label>
+                        <Label className={labelClass}>{t("farmName")}</Label>
                         <Input
-                          placeholder="Farm name"
+                          placeholder={t("farmName")}
                           value={formData.farm_name}
                           onChange={(e) => update("farm_name", e.target.value)}
                           className={inputClass}
@@ -835,7 +838,7 @@ export default function FarmRegister() {
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label className={labelClass}>
-                          Crop grown on this farm{" "}
+                          {t("cropGrown")}{" "}
                           <span className="text-rose-500">*</span>
                         </Label>
                         <Select
@@ -880,7 +883,7 @@ export default function FarmRegister() {
                           <span className="text-slate-400">(optional)</span>
                         </Label>
                         <Input
-                          placeholder="Local cultivar / variety"
+                          placeholder={t("localCultivar")}
                           value={formData.crop_variety}
                           onChange={(e) =>
                             update("crop_variety", e.target.value)
@@ -894,7 +897,7 @@ export default function FarmRegister() {
                           <span className="text-slate-400">(optional)</span>
                         </Label>
                         <Input
-                          placeholder="e.g. vegetative / flowering"
+                          placeholder={t("growthStage")}
                           value={formData.crop_stage}
                           onChange={(e) => update("crop_stage", e.target.value)}
                           className={inputClass}
@@ -978,49 +981,49 @@ export default function FarmRegister() {
                       />
                     </div>
                     <span className="font-bold text-gray-800">
-                      Review & Confirm
+                      {t("reviewConfirm")}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "State", value: formData.state_name },
+                      { labelKey: "state", value: formData.state_name },
                       {
-                        label: "District",
+                        labelKey: "district",
                         value: formData.district_name || "-",
                       },
-                      { label: "Block", value: formData.block_name || "-" },
+                      { labelKey: "block", value: formData.block_name || "-" },
                       {
-                        label: "Farmer",
+                        labelKey: "farmerStep",
                         value:
                           formData.farmer_name ||
                           linkedFarmer?.full_name ||
                           "-",
                       },
                       {
-                        label: "Farmer ID",
+                        labelKey: "farmerId",
                         value:
                           formData.farmer_id ||
                           linkedFarmer?.farmer_id ||
                           "New",
                       },
                       {
-                        label: "Survey No.",
+                        labelKey: "surveyNo",
                         value: formData.survey_number || "-",
                       },
-                      { label: "Village", value: formData.village_name || "-" },
+                      { labelKey: "village", value: formData.village_name || "-" },
                       {
-                        label: "Boundary",
+                        labelKey: "boundaryStep",
                         value: boundarySummary.valid
                           ? `${boundarySummary.acres.toFixed(2)} acre · ${boundarySummary.pointCount} corners`
                           : "Pending",
                       },
                     ].map((item) => (
                       <div
-                        key={item.label}
+                        key={item.labelKey}
                         className="rounded-2xl border border-gray-100 bg-gray-50 p-3"
                       >
                         <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                          {item.label}
+                          {t(item.labelKey)}
                         </span>
                         <span className="text-sm font-bold text-gray-800">
                           {item.value}
@@ -1078,31 +1081,31 @@ export default function FarmRegister() {
                   </MotionDiv>
                   <div>
                     <h2 className="text-2xl font-black text-gray-900">
-                      Farm Registered!
+                      {t("farmRegistered")}
                     </h2>
                     <p className="mt-1 text-sm text-gray-400">
-                      Land registered. Analysis started or completed.
+                      {t("landRegistered")}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-left">
                     {[
-                      { label: "Farm ID", value: registeredFarm.farm_id },
-                      { label: "Status", value: "Analysis completed" },
+                      { labelKey: "farmId", value: registeredFarm.farm_id },
+                      { labelKey: "status", value: t("analysisCompleted") },
                       {
-                        label: "Survey Number",
-                        value: registeredFarm.survey_number || "Pending",
+                        labelKey: "surveyNumber",
+                        value: registeredFarm.survey_number || t("pending"),
                       },
                       {
-                        label: "H3 Cells",
-                        value: `${registeredFarm.h3_cell_count || 0} generated`,
+                        labelKey: "h3Cells",
+                        value: `${registeredFarm.h3_cell_count || 0} ${t("generated")}`,
                       },
                     ].map((item) => (
                       <div
-                        key={item.label}
+                        key={item.labelKey}
                         className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3"
                       >
                         <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-widest text-emerald-400">
-                          {item.label}
+                          {t(item.labelKey)}
                         </span>
                         <span className="text-sm font-bold text-gray-800">
                           {item.value}
@@ -1120,7 +1123,7 @@ export default function FarmRegister() {
                       }
                       className="h-11 flex-1 rounded-2xl bg-emerald-500 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600"
                     >
-                      View Intelligence
+                      {t("viewIntelligence")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Button>
                     <Button
@@ -1140,7 +1143,7 @@ export default function FarmRegister() {
                       }}
                       className="h-11 flex-1 rounded-2xl border-gray-200 text-sm font-semibold"
                     >
-                      Register Another
+                      {t("registerAnother")}
                     </Button>
                   </div>
                 </MotionDiv>

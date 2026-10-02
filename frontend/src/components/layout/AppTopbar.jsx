@@ -5,8 +5,10 @@ import { Bell, LogOut } from "lucide-react";
 import { useAuth } from "@/features/auth/context/useAuth";
 import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
 import { LanguageToggle } from "@/features/language";
+import { useTranslation } from "@/features/i18n";
 
 function MaatiLogo() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10">
@@ -14,7 +16,7 @@ function MaatiLogo() {
       </span>
       <div className="leading-tight">
         <div className="text-[17px] font-extrabold text-[var(--mt-ink)]">MaatiTrace</div>
-        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">Land Intelligence</div>
+        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">{t("landIntelligence")}</div>
       </div>
     </div>
   );
@@ -24,6 +26,7 @@ export default function AppTopbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const { t } = useTranslation();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const navItems = getAuthenticatedNavigation(user?.role);
@@ -44,7 +47,7 @@ export default function AppTopbar() {
   return (
     <header className="mt-surface fixed inset-x-0 top-0 z-50 border-b border-[var(--mt-line)] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-3 px-4">
-        <Link to="/" aria-label="MaatiTrace home">
+        <Link to="/" aria-label={t("homeAria")}>
           <MaatiLogo />
         </Link>
 
@@ -63,7 +66,7 @@ export default function AppTopbar() {
                     : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-paper-warm)]"
                 }`}
               >
-                {item.label}
+                {t(item.labelKey || item.label)}
               </NavLink>
             );
           })}
@@ -73,8 +76,8 @@ export default function AppTopbar() {
           <LanguageToggle />
           <Link
             to="/notifications"
-            aria-label="Notifications"
-            title="Notifications"
+            aria-label={t("notifications")}
+            title={t("notifications")}
             className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors ${
               location.pathname === "/notifications"
                 ? "border-[var(--mt-leaf)] bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"
@@ -91,7 +94,7 @@ export default function AppTopbar() {
             className="flex h-11 items-center gap-1.5 rounded-full border border-[var(--mt-line)] bg-white px-3.5 text-[13px] font-bold text-[var(--mt-ink-soft)] transition-colors hover:bg-[var(--mt-paper-warm)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">{loggingOut ? "Logging out…" : "Log out"}</span>
+            <span className="hidden sm:inline">{loggingOut ? t("loggingOut") : t("logout")}</span>
           </button>
         </div>
       </div>

@@ -59,6 +59,7 @@ from services.fpo_management_service.app.repository import (
     get_fpo_access_context,
     get_fpo_farmer_detail,
     list_fpo_farmer_farms,
+    list_fpo_farm_monitoring,
     authorize_fpo_farm_intelligence,
     create_support_ticket,
     list_support_tickets,
@@ -474,6 +475,11 @@ def farmer_farms(user_id, farmer_id):
         return list_fpo_farmer_farms(conn, user_id=user_id, farmer_id=farmer_id)
 
 
+def farm_monitoring(user_id, query=None):
+    with engine.begin() as conn:
+        return list_fpo_farm_monitoring(conn, user_id=user_id, query=query)
+
+
 def farmer_farm_intelligence(user_id, farmer_id, farm_id):
     with engine.begin() as conn:
         farm = authorize_fpo_farm_intelligence(conn, user_id=user_id, farmer_id=farmer_id, farm_id=farm_id)
@@ -485,6 +491,9 @@ def farmer_farm_intelligence(user_id, farmer_id, farm_id):
                 "latest": client.get(f"{base}/v1/analytics/farms/{farm_id}/sentinel2/latest"),
                 "h3_cells": client.get(f"{base}/v1/analytics/farms/{farm_id}/h3-cells"),
                 "grid_values": client.get(f"{base}/v1/analytics/farms/{farm_id}/grid-values/latest"),
+                "grid_calculations": client.get(f"{base}/v1/analytics/farms/{farm_id}/grid-calculations/latest"),
+                "calculations": client.get(f"{base}/v1/analytics/farms/{farm_id}/calculations/latest?scope=farm"),
+                "calculation_history": client.get(f"{base}/v1/analytics/farms/{farm_id}/calculations/latest?scope=farm&latest_only=false"),
             }
     except httpx.HTTPError as exc:
         raise ValueError("FPO_INTELLIGENCE_UNAVAILABLE") from exc

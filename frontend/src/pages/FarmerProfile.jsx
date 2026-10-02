@@ -19,6 +19,7 @@ import {
   hasCachedFarmerProfile,
 } from "@/lib/api/farmer";
 import { getStoredUser } from "@/features/auth/session";
+import { useTranslation } from "@/features/i18n";
 
 const DEFAULT_FARMER = {
   id: "FR-000",
@@ -37,6 +38,7 @@ const DEFAULT_FARMER = {
 };
 
 function PhotoModal({ onClose, onSave }) {
+  const { t } = useTranslation();
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [dragging, setDragging] = useState(false);
@@ -79,8 +81,8 @@ function PhotoModal({ onClose, onSave }) {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
             <Camera className="h-6 w-6 text-emerald-500" strokeWidth={2.5} />
           </div>
-          <h3 className="text-base font-bold text-gray-800">Upload Profile Photo</h3>
-          <p className="mt-1 text-xs text-gray-400">JPG, PNG or WEBP Â· Max 5 MB</p>
+          <h3 className="text-base font-bold text-gray-800">{t("uploadProfilePhoto")}</h3>
+          <p className="mt-1 text-xs text-gray-400">JPG, PNG or WEBP · Max 5 MB</p>
         </div>
 
         <div
@@ -103,7 +105,7 @@ function PhotoModal({ onClose, onSave }) {
                 <Upload className="h-5 w-5 text-gray-400" strokeWidth={2.5} />
               </div>
               <span className="text-center text-xs text-gray-400">
-                Drag and drop or <span className="font-semibold text-emerald-500">browse</span>
+                {t("dragAndDrop")} <span className="font-semibold text-emerald-500">{t("browse")}</span>
               </span>
             </>
           )}
@@ -112,7 +114,7 @@ function PhotoModal({ onClose, onSave }) {
 
         <div className="mt-5 flex gap-3">
           <button onClick={onClose} className="flex-1 rounded-2xl border border-gray-200 py-2.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50">
-            Cancel
+            {t("cancel")}
           </button>
           <button
             onClick={() => preview && onSave(preview)}
@@ -120,7 +122,7 @@ function PhotoModal({ onClose, onSave }) {
             className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-emerald-500 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Save Photo
+            {t("savePhoto")}
           </button>
         </div>
       </motion.div>
@@ -133,9 +135,10 @@ function SkeletonBlock({ className = "" }) {
 }
 
 function FarmerDashboardSkeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="mt-surface mt-skeleton-enter mx-auto max-w-[1180px] space-y-4 p-4 md:p-6" role="status" aria-label="Loading dashboard">
-      <span className="sr-only">Loading your dashboard</span>
+    <div className="mt-surface mt-skeleton-enter mx-auto max-w-[1180px] space-y-4 p-4 md:p-6" role="status" aria-label={t("dashboard")}>
+      <span className="sr-only">{t("loadingDashboard")}</span>
 
       <div className="space-y-2">
         <SkeletonBlock className="h-7 w-64 rounded-lg" />
@@ -198,6 +201,7 @@ function FarmerDashboardSkeleton() {
 }
 
 export default function FarmerProfile() {
+  const { t } = useTranslation();
   const { farmerId } = useParams();
   const location = useLocation();
   const user = getStoredUser();
@@ -353,9 +357,9 @@ export default function FarmerProfile() {
       </AnimatePresence>
 
       <div>
-        <h1 className="text-[22px] font-extrabold text-[var(--mt-ink)]">Welcome back, {firstName}</h1>
+        <h1 className="text-[22px] font-extrabold text-[var(--mt-ink)]">{t("welcomeBack")}, {firstName}</h1>
         <p className="mt-0.5 text-[13px] font-semibold text-[var(--mt-ink-soft)]">
-          Here&rsquo;s how your farms are doing today
+          {t("farmsDoingToday")}
         </p>
       </div>
 
@@ -383,8 +387,8 @@ export default function FarmerProfile() {
             <button
               onClick={() => setShowPhotoModal(true)}
               className="absolute -bottom-0.5 -right-0.5 flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-white bg-[var(--mt-leaf)] text-white"
-              aria-label="Change profile photo"
-              title="Change profile photo"
+              aria-label={t("changeProfilePhoto")}
+              title={t("changeProfilePhoto")}
             >
               {farmer.photo ? <Camera className="h-3.5 w-3.5" strokeWidth={2.6} /> : <Plus className="h-3.5 w-3.5" strokeWidth={3} />}
             </button>
@@ -395,7 +399,7 @@ export default function FarmerProfile() {
               <span className="text-[18px] font-extrabold leading-tight text-[var(--mt-ink)] sm:text-[21px]">{farmer.name}</span>
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mt-leaf)] px-2.5 py-1 text-[11.5px] font-bold text-white">
                 <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2.6} />
-                Registered
+                {t("registered")}
               </span>
             </div>
             <div className="mt-2 flex items-start gap-1.5 text-[13px] font-semibold leading-5 text-[var(--mt-ink-soft)]">
@@ -410,17 +414,17 @@ export default function FarmerProfile() {
 
         <div className="grid grid-cols-2 gap-3 border-t border-[var(--mt-line)] pt-4 md:flex md:w-auto md:gap-8 md:border-0 md:px-1 md:pt-0">
           <div>
-            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">Phone</div>
+            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">{t("phone")}</div>
             <div className="mt-1 flex items-center gap-1.5 text-[14px] font-bold text-[var(--mt-ink)]">
               <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--mt-leaf)]" strokeWidth={2.4} />
               <span className="truncate">{farmer.phone}</span>
             </div>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">ID Card</div>
+            <div className="text-[11px] font-bold text-[var(--mt-ink-faint)]">{t("idCard")}</div>
             <div className="mt-1 flex items-center gap-1.5 text-[14px] font-bold text-[var(--mt-ink)]">
               <BadgeCheck className="h-3.5 w-3.5 text-[var(--mt-leaf)]" strokeWidth={2.6} />
-              Verified
+              {t("verified")}
             </div>
           </div>
         </div>
@@ -432,12 +436,12 @@ export default function FarmerProfile() {
               className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--mt-leaf)] px-4 text-[13.5px] font-bold text-white"
             >
               <Phone className="h-4 w-4" strokeWidth={2.4} />
-              Call Me
+              {t("callMe")}
             </a>
           ) : (
             <span className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--mt-paper-warm)] px-4 text-[13.5px] font-bold text-[var(--mt-ink-faint)]">
               <Phone className="h-4 w-4" strokeWidth={2.4} />
-              No number
+              {t("noNumber")}
             </span>
           )}
           <Link
@@ -445,13 +449,13 @@ export default function FarmerProfile() {
             className="flex h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[var(--mt-leaf)]/25 bg-white px-4 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]"
           >
             <Pencil className="h-4 w-4" strokeWidth={2.4} />
-            Edit Profile
+            {t("editProfile")}
           </Link>
           <Link
             to="/farmer/fpo"
             className="flex h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[var(--mt-leaf)]/25 bg-[var(--mt-paper-warm)] px-4 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]"
           >
-            {farmer.fpoName === "Independent farmer" ? "Find an FPO" : "Manage FPO"}
+            {farmer.fpoName === "Independent farmer" ? t("findFpo") : t("manageFpo")}
           </Link>
         </div>
       </motion.section>
@@ -459,10 +463,10 @@ export default function FarmerProfile() {
       <StatStrip
         desktopColumnsClass="lg:grid-cols-4"
         items={[
-          { label: "Your Farms", value: farms.length, icon: MapPin },
-          { label: "Total Land", value: totalArea.toFixed(1), unit: "ac", icon: Hexagon },
-          { label: "Plant Health", value: healthLabel, icon: Leaf },
-          { label: "Last Check", value: lastCheck, icon: Calendar },
+          { label: t("yourFarms"), value: farms.length, icon: MapPin },
+          { label: t("totalLand"), value: totalArea.toFixed(1), unit: "ac", icon: Hexagon },
+          { label: t("plantHealth"), value: healthLabel, icon: Leaf },
+          { label: t("lastCheck"), value: lastCheck, icon: Calendar },
         ]}
       />
 
@@ -488,7 +492,7 @@ export default function FarmerProfile() {
         <div className="flex items-center justify-between px-5 py-4">
           <span className="flex items-center gap-2 text-[16px] font-extrabold text-[var(--mt-ink)]">
             <MapPin className="h-[18px] w-[18px]" strokeWidth={2.1} />
-            Farm Pointers
+            {t("farmPointers")}
           </span>
           <span className="text-[12.5px] font-semibold text-[var(--mt-ink-soft)]">
             {farms.length === 1 ? "1 farm" : `${farms.length} farms`}
@@ -498,7 +502,7 @@ export default function FarmerProfile() {
           <FarmPointerMap
             farms={farms.map((farmItem) => ({
               farm_id: farmItem.id,
-              farm_name: farmItem.farmName || farmItem.surveyNumber || "Registered farm",
+              farm_name: farmItem.farmName || farmItem.surveyNumber || t("registeredFarm"),
               farmer_id: farmer.id,
               fpo_id: farmer.fpoId,
               village_name: farmItem.village,
@@ -523,7 +527,7 @@ export default function FarmerProfile() {
             showBoundaries
             height={420}
             userRole={user?.role}
-            emptyMessage="No farms linked to this farmer yet."
+            emptyMessage={t("noLinkedFarms")}
           />
         </div>
       </div>
@@ -531,7 +535,7 @@ export default function FarmerProfile() {
       <div className="flex items-center justify-between pt-2">
         <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-[var(--mt-ink)]">
           <MapPin className="h-[18px] w-[18px]" strokeWidth={2.1} />
-          Your Farms
+          {t("yourFarms")}
           <span className="rounded-full bg-[var(--mt-leaf-tint)] px-2.5 py-0.5 text-[12px] font-extrabold text-[var(--mt-leaf-deep)]">
             {farms.length}
           </span>
@@ -541,7 +545,7 @@ export default function FarmerProfile() {
           className="flex h-11 items-center gap-1.5 rounded-full bg-[var(--mt-leaf)] px-4 text-[13.5px] font-bold text-white"
         >
           <Plus className="h-4 w-4" strokeWidth={2.6} />
-          Add Farm
+          {t("addFarm")}
         </Link>
       </div>
 
@@ -559,18 +563,18 @@ export default function FarmerProfile() {
       </div>
       {!loading && !error && farms.length === 0 && (
         <div className="rounded-[var(--mt-radius-md)] border border-dashed border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
-          No farms are linked to you yet. Tap &ldquo;Add Farm&rdquo; to register your first one.
+          {t("noFarmsYet")}
         </div>
       )}
 
       <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-5">
-        <span className="mb-4 block text-[13px] font-extrabold text-[var(--mt-ink)]">Average Farm Health</span>
+        <span className="mb-4 block text-[13px] font-extrabold text-[var(--mt-ink)]">{t("averageFarmHealth")}</span>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[13px]">
               <span className="flex items-center gap-1.5 font-bold text-[var(--mt-ink-soft)]">
                 <Leaf className="h-4 w-4 text-[var(--mt-leaf)]" strokeWidth={2.4} />
-                Green cover
+                {t("greenCover")}
               </span>
               <span className="font-extrabold text-[var(--mt-leaf-deep)]">{avgNdvi.toFixed(2)}</span>
             </div>
@@ -587,7 +591,7 @@ export default function FarmerProfile() {
             <div className="flex items-center justify-between text-[13px]">
               <span className="flex items-center gap-1.5 font-bold text-[var(--mt-ink-soft)]">
                 <Droplets className="h-4 w-4 text-[var(--mt-sky-text)]" strokeWidth={2.4} />
-                Soil water
+                {t("soilWater")}
               </span>
               <span className="font-extrabold text-[var(--mt-sky-text)]">{avgMoisture.toFixed(2)}</span>
             </div>

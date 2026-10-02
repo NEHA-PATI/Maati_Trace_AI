@@ -1820,13 +1820,19 @@ def get_fpo_farmer_detail(conn: Connection, *, user_id: UUID | str, farmer_id: U
     require_fpo_feature(conn, user_id=user_id, feature_key="FARMER_DETAIL")
     row = conn.execute(text("""
         SELECT r.relationship_id, r.fpo_id, r.status AS relationship_status,
-               fp.farmer_id, fp.full_name, fp.state_name, fp.district_name,
-               fp.block_name, fp.village_name, fp.pincode, fp.profile_version,
+               fp.farmer_id, fp.full_name, u.email,
+               NULLIF(COALESCE(fp.phone_number, u.phone_number, ''), '') AS phone_number,
+               COALESCE(fp.profile_image_url, u.profile_image_url) AS profile_image_url,
+               fp.gender, fp.aadhaar_last4, fp.kyc_status,
+               fp.state_name, fp.district_name, fp.block_name, fp.village_name,
+               fp.total_landholding_acres, fp.cultivated_area_acres,
+               fp.primary_crop, fp.profile_version,
                c.consent_id, c.policy_code, c.policy_version, c.purpose,
                c.scopes, c.language_code, c.captured_at, c.expires_at
         FROM public.fpo_farmer_relationships r
         JOIN public.fpo_organizations o ON o.fpo_id = r.fpo_id AND o.auth_user_id = :user_id
         JOIN public.farmer_profiles fp ON fp.farmer_id = r.farmer_profile_id
+        LEFT JOIN public.users u ON u.user_id = fp.user_id
         LEFT JOIN LATERAL (
             SELECT * FROM public.fpo_farmer_relationship_consents
             WHERE relationship_id = r.relationship_id AND revoked_at IS NULL
@@ -1836,6 +1842,7 @@ def get_fpo_farmer_detail(conn: Connection, *, user_id: UUID | str, farmer_id: U
         WHERE fp.farmer_id = :farmer_id AND r.status = 'ACTIVE'
           AND r.farm_id IS NOT NULL AND 'PROFILE_READ'=ANY(c.scopes)
           AND 'FARM_READ'=ANY(c.scopes)
+          AND 'CONTACT_DIRECT_READ'=ANY(c.scopes)
         LIMIT 1
     """), {"user_id": str(user_id), "farmer_id": str(farmer_id)}).mappings().first()
     if not row:
@@ -1886,11 +1893,87 @@ def list_fpo_farmer_farms(conn: Connection, *, user_id: UUID | str, farmer_id: U
     return [dict(row) for row in rows]
 
 
+def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: str | None = None) -> list[dict[str, Any]]:
+    """Return consent-scoped farms for the FPO monitoring workspace."""
+    org = get_fpo_access_context(conn, user_id=user_id)
+    require_fpo_feature(conn, user_id=user_id, feature_key="FARM_PORTFOLIO_READ")
+    rows = conn.execute(text("""
+        WITH permitted AS (
+            SELECT DISTINCT ON (f.farm_id)
+                   f.farm_id, f.farmer_id, f.farm_name, f.state_name, f.district_name,
+                   f.block_name, f.village_name, f.crop_code, f.crop_name, f.crop_stage,
+                   f.area_acres, f.updated_at
+            FROM public.farms f
+            JOIN public.fpo_farmer_relationships r
+              ON r.farm_id=f.farm_id AND r.fpo_id=:fpo_id AND r.status='ACTIVE'
+            JOIN public.fpo_farmer_relationship_consents c
+              ON c.relationship_id=r.relationship_id
+             AND c.revoked_at IS NULL
+             AND (c.expires_at IS NULL OR c.expires_at > now())
+             AND 'FARM_READ'=ANY(c.scopes)
+            WHERE f.is_active=TRUE
+              AND (:query IS NULL OR lower(f.farm_name) LIKE lower(:pattern)
+                   OR lower(COALESCE(f.crop_name,'')) LIKE lower(:pattern)
+                   OR lower(COALESCE(f.village_name,'')) LIKE lower(:pattern)
+                   OR EXISTS (
+                       SELECT 1 FROM public.fpo_farmer_portfolio search_fp
+                       WHERE search_fp.fpo_id=:fpo_id
+                         AND search_fp.farmer_id=f.farmer_id
+                         AND lower(COALESCE(search_fp.farmer_name,'')) LIKE lower(:pattern)
+                   ))
+            ORDER BY f.farm_id, c.captured_at DESC
+        ), latest_predictions AS (
+            SELECT p.*
+            FROM public.farm_calculated_predictions p
+            JOIN (SELECT farm_id, MAX(result_date) AS result_date
+                  FROM public.farm_calculated_predictions
+                  WHERE result_scope='farm' GROUP BY farm_id) latest
+              ON latest.farm_id=p.farm_id AND latest.result_date=p.result_date
+            WHERE p.result_scope='farm'
+        ), prediction_rollup AS (
+            SELECT farm_id, MAX(result_date) AS latest_analysis_date,
+                   jsonb_agg(jsonb_build_object(
+                     'prediction_key', prediction_key, 'display_name', display_name,
+                     'score', score, 'status_label', status_label, 'result_date', result_date
+                   ) ORDER BY prediction_key) AS predictions,
+                   CASE WHEN bool_or(status_label='critical') THEN 'CRITICAL'
+                        WHEN bool_or(status_label IN ('high','attention','poor')) THEN 'NEEDS_ATTENTION'
+                        WHEN bool_or(status_label IN ('watch','fair')) THEN 'WATCH'
+                        WHEN COUNT(*) > 0 THEN 'NORMAL' ELSE 'NO_DATA' END AS overall_status
+            FROM latest_predictions GROUP BY farm_id
+        ), alert_rollup AS (
+            SELECT farm_id, COUNT(*)::integer AS open_alert_count,
+                   MAX(severity) AS highest_alert_severity
+            FROM public.fpo_operational_alerts
+            WHERE fpo_id=:fpo_id AND status IN ('OPEN','ACKNOWLEDGED','IN_PROGRESS')
+            GROUP BY farm_id
+        ), observations AS (
+            SELECT farm_id, MAX(snapshot_date) AS latest_observation_date
+            FROM public.h3_sentinel2_features GROUP BY farm_id
+        )
+        SELECT p.farm_id, p.farmer_id, COALESCE(fp.farmer_name, 'Farmer') AS farmer_name, p.farm_name, p.state_name, p.district_name,
+               p.block_name, p.village_name, p.crop_code, p.crop_name, p.crop_stage,
+               p.area_acres, p.updated_at, pr.latest_analysis_date, o.latest_observation_date,
+               COALESCE(pr.overall_status, 'NO_DATA') AS overall_status,
+               COALESCE(ar.open_alert_count, 0) AS open_alert_count,
+               ar.highest_alert_severity, COALESCE(pr.predictions, '[]'::jsonb) AS predictions
+        FROM permitted p
+        LEFT JOIN public.fpo_farmer_portfolio fp ON fp.fpo_id=:fpo_id AND fp.farmer_id=p.farmer_id
+        LEFT JOIN prediction_rollup pr ON pr.farm_id=p.farm_id
+        LEFT JOIN alert_rollup ar ON ar.farm_id=p.farm_id
+        LEFT JOIN observations o ON o.farm_id=p.farm_id
+        ORDER BY p.farm_name;
+    """), {"fpo_id": str(org["fpo_id"]), "query": query, "pattern": f"%{query}%" if query else "%"}).mappings().all()
+    record_sensitive_access(conn, fpo_id=org["fpo_id"], actor_user_id=user_id, farmer_id=None, operation="FARM_MONITORING_READ", scopes=["FARM_READ"])
+    return [dict(row) for row in rows]
+
+
 def authorize_fpo_farm_intelligence(conn: Connection, *, user_id: UUID | str, farmer_id: UUID | str, farm_id: UUID | str) -> dict[str, Any]:
     org = get_fpo_access_context(conn, user_id=user_id)
     entitlements = require_fpo_feature(conn, user_id=user_id, feature_key="LAND_INTELLIGENCE_BASIC")
     row = conn.execute(text("""
-        SELECT f.farm_id, f.farmer_id, f.farm_name, f.crop_name, f.crop_stage, f.polygon_geojson,
+        SELECT f.farm_id, f.farmer_id, f.farm_name, f.crop_name, f.crop_stage, f.area_acres,
+               f.state_name, f.district_name, f.block_name, f.village_name, f.polygon_geojson,
                r.relationship_id, c.scopes
         FROM public.farms f
         JOIN public.fpo_farmer_relationships r
