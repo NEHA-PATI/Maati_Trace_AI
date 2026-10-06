@@ -119,6 +119,7 @@ class Settings(BaseSettings):
     analytics_query_service_url: str = "http://localhost:8011"
     observability_service_url: str = "http://localhost:8014"
     crop_observation_service_url: str = "http://localhost:8015"
+    ml_acquisition_service_url: str = "http://localhost:8017"
 
     # API gateway upstream connection pool
     gateway_upstream_timeout_seconds: float = 180.0

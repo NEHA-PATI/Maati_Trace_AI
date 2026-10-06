@@ -51,3 +51,6 @@ backend/.data/
 *.parquet
 *.zip
 *.example
+
+*ml_acquisition_service/
+admin.sql

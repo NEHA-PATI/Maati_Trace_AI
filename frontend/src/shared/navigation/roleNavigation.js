@@ -28,6 +28,7 @@ const ROLE_ITEMS = {
     { to: "/admin/fpo", labelKey: "fpoManagement", label: "FPO Management" },
     { to: "/admin/crop-observation", labelKey: "cropOperations", label: "Crop Operations" },
     { to: "/admin/system", labelKey: "system", label: "System" },
+    { to: "/admin/data-acquisition", labelKey: "dataAcquisition", label: "Data Acquisition" },
     { to: "/settings", labelKey: "profile", label: "Profile", end: true },
   ],
 };

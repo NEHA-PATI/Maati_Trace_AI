@@ -61,6 +61,7 @@ import FpoProvisioningRoute from "@/features/fpo/access/FpoProvisioningRoute";
 
 import AdminDashboard from "@/pages/AdminDashboard";
 import SystemManagementPage from "@/pages/SystemManagementPage";
+import HistoricalAcquisitionPage from "@/pages/HistoricalAcquisitionPage";
 import BulkUpload from "@/pages/BulkUpload";
 import FarmRegister from "@/pages/FarmRegister";
 import FarmerProfile from "@/pages/FarmerProfile";
@@ -112,6 +113,7 @@ export const router = createBrowserRouter(
               element: <FpoVerificationWorkspacePage />,
             },
             { path: "/admin/system", element: <SystemManagementPage /> },
+            { path: "/admin/data-acquisition", element: <HistoricalAcquisitionPage /> },
             {
               path: "/admin/feature-processing",
               element: <SystemManagementPage />,

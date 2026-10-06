@@ -326,6 +326,10 @@ export default function AdminDashboard() {
                 <p className="text-sm font-semibold text-gray-800">Feature Engine &amp; pipelines</p>
                 <p className="text-xs text-gray-500">Crop profiles, formulas, raster, analytics, hot stream</p>
               </Link>
+              <Link to="/admin/data-acquisition" className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50">
+                <div><p className="text-sm font-semibold text-gray-800">Data Acquisition</p><p className="text-xs text-gray-500">Phase 1 historical source campaigns and raw archive</p></div>
+                <p className="text-xs font-bold text-emerald-600">Open</p>
+              </Link>
             </div>
           </div>
 

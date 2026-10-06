@@ -37,6 +37,7 @@ ROUTE_TARGETS = {
     "analytics": settings.analytics_query_service_url,
     "observability": settings.observability_service_url,
     "crop-observations": settings.crop_observation_service_url,
+    "historical-acquisition": settings.ml_acquisition_service_url,
 }
 
 HEALTH_ROUTE_TARGETS = {
@@ -53,6 +54,7 @@ HEALTH_ROUTE_TARGETS = {
     "analytics": settings.analytics_query_service_url,
     "observability": settings.observability_service_url,
     "crop-observations": settings.crop_observation_service_url,
+    "historical-acquisition": settings.ml_acquisition_service_url,
 }
 
 
