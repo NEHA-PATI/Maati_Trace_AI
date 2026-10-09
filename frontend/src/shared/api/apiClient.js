@@ -252,8 +252,4 @@ export function cancelRefreshAccessSession() {
   refreshController = null;
 }
 
-<<<<<<< HEAD
 export const apiClient = Object.freeze({ request: execute });
-=======
-export const apiClient = Object.freeze({ request: execute });
->>>>>>> bbf9afe543354f83cfb52a6865fff0645e539559

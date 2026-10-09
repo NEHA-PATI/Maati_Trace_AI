@@ -2,35 +2,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Users, MapPin, AlertTriangle,
-  Activity, Database, Satellite, Layers,
-  CheckCircle, XCircle, RefreshCw,
+  Layers,
+  CheckCircle, XCircle, LoaderCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import NotificationStack from "@/components/ui-custom/NotificationStack";
-import VerificationStamp from "@/components/ui-custom/VerificationStamp";
 import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
-import { getAllServiceHealth } from "@/lib/api/health";
 import { getFpoFarmers, getFpoFarms, getFpos } from "@/lib/api/fpo";
 import { getFarms } from "@/lib/api/farm";
 
-const SERVICE_ICON_MAP = {
-  location: MapPin,
-  farmers: Database,
-  farms: Database,
-  fpos: Users,
-  h3: Layers,
-  stac: Satellite,
-  raster: Layers,
-  analytics: Activity,
-  "farm-analysis": Layers,
-  "hot-stream": Layers,
-  auth: Users,
-};
-
 export default function AdminDashboard() {
-  const [routesPayload, setRoutesPayload] = useState(null);
   const [fpos, setFpos] = useState([]);
   const [farms, setFarms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,8 +25,7 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       try {
-        const [healthResult, fpoList, farmList] = await Promise.all([
-          getAllServiceHealth(),
+        const [fpoList, farmList] = await Promise.all([
           getFpos().catch(() => []),
           getFarms().catch(() => []),
         ]);
@@ -60,7 +41,6 @@ export default function AdminDashboard() {
         );
 
         if (cancelled) return;
-        setRoutesPayload(healthResult);
         setFpos(enrichedFpos);
         setFarms(Array.isArray(farmList) ? farmList : []);
       } catch (err) {
@@ -78,16 +58,6 @@ export default function AdminDashboard() {
       cancelled = true;
     };
   }, []);
-
-  const services = useMemo(() => {
-    const services = routesPayload || {};
-    return Object.entries(services).map(([name, target]) => ({
-      name,
-      target: target?.environment ? target.environment : target?.error ? "unhealthy" : "live",
-      status: target?.status === "live" ? "healthy" : target?.status === "unhealthy" ? "pending" : target?.status === "ready" ? "healthy" : "healthy",
-      icon: SERVICE_ICON_MAP[name] || Database,
-    }));
-  }, [routesPayload]);
 
   const totals = useMemo(() => {
     const farmers = fpos.reduce((sum, fpo) => sum + (fpo.farmers?.length || 0), 0);
@@ -119,28 +89,45 @@ export default function AdminDashboard() {
   }, [fpos]);
 
   const recentProcessing = [
-    { batch: "Gateway", farms: totals.farms, status: routesPayload ? "completed" : "pending", time: "Live", failed: 0 },
+    { batch: "Gateway", farms: totals.farms, status: "completed", time: "Available", failed: 0 },
     { batch: "Analytics", farms: totals.farmers, status: "completed", time: "Linked", failed: 0 },
     { batch: "Grid", farms: 0, status: "pending", time: "Endpoint pending", failed: 0 },
     { batch: "Raster", farms: 0, status: "pending", time: "Endpoint pending", failed: 0 },
   ];
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
+    <div className="min-h-screen bg-[#f8faf9]">
+      <main className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Admin Command Center</h1>
           <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-gray-400">Platform-wide overview - MaatiTrace Operations</p>
         </div>
-        <Button size="sm" variant="outline" className="h-9 rounded-xl border-gray-200 text-xs font-semibold hover:bg-gray-50" onClick={() => window.location.reload()}>
-          <RefreshCw className="mr-1 h-3 w-3 text-blue-500" />
-          Refresh
-        </Button>
       </div>
 
       {loading && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-sm">
-          Loading admin dashboard...
+        <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <motion.div
+              className="absolute inset-0 rounded-full border-4 border-emerald-100 border-t-emerald-500"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+            />
+            <motion.div
+              className="absolute h-7 w-7 rounded-full bg-emerald-50"
+              animate={{ scale: [1, 1.22, 1], opacity: [0.65, 1, 0.65] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+              className="relative"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+            >
+              <LoaderCircle className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+            </motion.div>
+          </div>
+          <p className="mt-4 text-sm font-bold text-slate-700">Loading admin dashboard</p>
+          <p className="mt-1 text-xs text-slate-400">Loading your operational overview...</p>
         </div>
       )}
 
@@ -155,45 +142,8 @@ export default function AdminDashboard() {
         { label: "Registered Farmers", value: totals.farmers, icon: Users },
         { label: "Total Farms", value: totals.farms, icon: MapPin },
         { label: "Total Area", value: totals.hectares.toFixed(1), unit: "ac", icon: Layers },
-        { label: "Failed Jobs", value: services.filter((service) => service.status !== "healthy").length, icon: AlertTriangle, sub: "Pending routes" },
+        { label: "Pending Jobs", value: 0, icon: AlertTriangle, sub: "No job data" },
       ]} />
-
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-          <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <Activity className="h-4 w-4 text-emerald-500" />
-            Service Health
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Gateway Route Inventory</span>
-        </div>
-        <div className="grid grid-cols-1 divide-x divide-gray-50 md:grid-cols-5">
-          {services.map((service, index) => {
-            const Icon = service.icon;
-            const isHealthy = service.status === "healthy";
-            return (
-              <motion.div
-                key={`${service.name}-${index}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="p-4"
-              >
-                <div className="mb-2 flex items-center gap-2">
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isHealthy ? "bg-emerald-50" : "bg-amber-50"}`}>
-                    <Icon className={`h-3.5 w-3.5 ${isHealthy ? "text-emerald-500" : "text-amber-500"}`} />
-                  </div>
-                  <div className={`h-1.5 w-1.5 rounded-full ${isHealthy ? "bg-emerald-400" : "bg-amber-400"}`} />
-                </div>
-                <p className="mb-1 text-[10px] font-semibold capitalize leading-tight text-gray-700">{service.name.replaceAll("-", " ")}</p>
-                <div className="flex items-center justify-between">
-                  <span className="max-w-[120px] truncate text-[9px] text-gray-400">{service.target || "Unavailable"}</span>
-                  <VerificationStamp label={service.status.toUpperCase()} type={isHealthy ? "success" : "warning"} compact />
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
@@ -357,6 +307,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+      </main>
     </div>
   );
 }

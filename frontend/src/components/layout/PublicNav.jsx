@@ -5,6 +5,7 @@ import { Bell, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "@/features/auth/context/useAuth";
 import { getAuthenticatedNavigation, PUBLIC_ITEMS, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
 import { LanguageToggle } from "@/features/language";
+import LogoutConfirmModal from "@/features/auth/components/LogoutConfirmModal";
 
 const GET_STARTED_ITEM = {
   to: "/register",
@@ -32,8 +33,10 @@ export default function PublicNav() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const navItems = isAuthenticated ? getAuthenticatedNavigation(user?.role) : PUBLIC_ITEMS;
+  const logoDestination = String(user?.role || "").toLowerCase() === "admin" ? "/admin" : "/";
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -52,7 +55,7 @@ export default function PublicNav() {
     <>
       <header className="mt-surface fixed inset-x-0 top-0 z-50 border-b border-[var(--mt-line)] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-2 px-3 md:h-16 md:gap-3 md:px-4">
-        <Link to="/" aria-label="MaatiTrace home">
+        <Link to={logoDestination} aria-label="MaatiTrace home">
           <MaatiLogo />
         </Link>
 
@@ -95,7 +98,7 @@ export default function PublicNav() {
               </Link>
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={() => setConfirmLogout(true)}
                 disabled={loggingOut}
                 className="flex h-10 items-center gap-1.5 rounded-full border border-[var(--mt-line)] bg-white px-3 text-[13px] font-bold text-[var(--mt-ink-soft)] transition-colors hover:bg-[var(--mt-paper-warm)] disabled:cursor-not-allowed disabled:opacity-60 md:h-11 md:px-3.5"
               >
@@ -136,6 +139,7 @@ export default function PublicNav() {
           {logoutError}
         </p>
       ) : null}
+      <LogoutConfirmModal open={confirmLogout} loading={loggingOut} onCancel={() => setConfirmLogout(false)} onConfirm={handleLogout} />
     </header>
     {mobileMenuOpen ? (
       <div className="fixed inset-x-0 top-14 z-40 border-b border-[var(--mt-line)] bg-white p-3 shadow-lg md:hidden">

@@ -472,7 +472,7 @@ export default function LandIntelligence() {
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {calculatedReadingsForInterpretation.map(({ metric, result }) => (
-              <div key={metric.key} className="rounded-xl border border-emerald-100 bg-white p-2.5">
+              <div key={metric.key} className={`rounded-xl border p-2.5 ${result.surfaceClass}`}>
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-[11px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</span>
                   <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${result.className}`}>{result.label}</span>
@@ -500,6 +500,35 @@ export default function LandIntelligence() {
       )}
     </>
   );
+
+  if (loading) {
+    return (
+      <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid min-h-[70vh] place-items-center p-6">
+        <div className="w-full max-w-3xl overflow-hidden rounded-[var(--mt-radius-md)] border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-emerald-50 p-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-teal-700 text-white shadow-lg shadow-teal-700/20">
+              <span className="absolute inset-0 animate-ping rounded-2xl bg-teal-400/30" />
+              <Sprout className="relative h-6 w-6" strokeWidth={2.1} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-extrabold text-slate-900">Checking your field</p>
+                <span className="flex gap-1" aria-hidden="true">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600" />
+                </span>
+              </div>
+              <p className="mt-1 text-xs font-medium text-slate-500">Analysing satellite signals and preparing your field insights.</p>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-teal-100">
+                <div className="h-full w-2/5 animate-[pulse_1.8s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Motion.div>
+    );
+  }
 
   return (
     <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-surface">
@@ -560,11 +589,30 @@ export default function LandIntelligence() {
         </button>
       </header>
 
-      <div className="mx-auto max-w-[1320px] space-y-4 p-4 md:p-6">
+      <div className="w-full space-y-4 p-[0.4cm]">
 
         {loading && (
-          <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-6 text-sm font-semibold text-[var(--mt-ink-soft)]">
-            Checking your field…
+          <div className="overflow-hidden rounded-[var(--mt-radius-md)] border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-emerald-50 p-5 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-teal-700 text-white shadow-lg shadow-teal-700/20">
+                <span className="absolute inset-0 animate-ping rounded-2xl bg-teal-400/30" />
+                <Sprout className="relative h-6 w-6" strokeWidth={2.1} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-extrabold text-slate-900">Checking your field</p>
+                  <span className="flex gap-1" aria-hidden="true">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600 [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600 [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal-600" />
+                  </span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-slate-500">Analysing satellite signals and preparing your field insights.</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-teal-100">
+                  <div className="h-full w-2/5 animate-[pulse_1.8s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
+                </div>
+              </div>
+            </div>
           </div>
         )}
         {error && (
@@ -579,79 +627,41 @@ export default function LandIntelligence() {
         )}
 
         {/* ── hero ─────────────────────────────────────────────────────── */}
+        <div className="grid items-stretch gap-4 overflow-hidden rounded-[var(--mt-radius-lg)] border border-teal-100 bg-white p-4 shadow-sm md:p-5 lg:grid-cols-2">
         <Reveal>
           <section
-            className="relative overflow-hidden rounded-[var(--mt-radius-lg)] p-5 md:p-7"
-            style={{ background: "linear-gradient(135deg,#EAF3DD,#DCEDCB)" }}
+            className="relative h-full min-h-[280px] overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 via-white to-teal-50 p-4 md:border-r md:border-teal-100 md:p-5"
           >
-            <div className="relative z-10">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 text-[11.5px] font-extrabold text-[var(--mt-leaf-deep)]">
+            <div className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-amber-200/45 blur-2xl" />
+            <div className="pointer-events-none absolute -left-16 top-20 h-40 w-40 rounded-full bg-teal-200/35 blur-3xl" />
+            <div className="pointer-events-none absolute right-12 top-10 h-2 w-2 rounded-full bg-amber-500/70 shadow-[18px_22px_0_#0f766e,42px_4px_0_#f59e0b,68px_28px_0_#99c97b]" />
+            <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/80 px-3.5 py-1.5 text-[11.5px] font-extrabold tracking-wide text-emerald-900 shadow-sm backdrop-blur-sm">
                 <MapPin className="h-3.5 w-3.5" strokeWidth={2.4} />
                 Field Check
               </span>
-              <h1 className="mt-3 text-[24px] font-extrabold text-[var(--mt-ink)] md:text-[27px]">{farm?.farm_name || "Your farm"}</h1>
-              <div className="mt-1 flex items-center gap-1.5 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]">
+              <h1 className="mt-3 text-[24px] font-extrabold leading-tight tracking-[-0.02em] text-slate-900 md:text-[27px]">{farm?.farm_name || "Your farm"}</h1>
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-[13.5px] font-bold text-teal-800">
                 <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
                 <span className="truncate">{locationLine}</span>
               </div>
-              <div className="mt-3.5 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-[var(--mt-ink)]">
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/85 px-3.5 py-1.5 text-[12.5px] font-bold text-slate-800 shadow-sm backdrop-blur-sm">
                   <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} />
                   {latestSceneDate ? `Checked ${formatDate(latestSceneDate)}` : "Not checked yet"}
                 </span>
               </div>
             </div>
             <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-90" viewBox="0 0 1000 70" preserveAspectRatio="none" aria-hidden>
-              <path d="M0 70V35 Q150 12 350 30 T700 20 T1000 35V70Z" fill="#CFE3B8" />
-              <path d="M0 70V50 Q250 35 500 50 T1000 46V70Z" fill="#B7D89D" />
+              <path d="M0 70V35 Q150 12 350 30 T700 20 T1000 35V70Z" fill="#C7E5B0" />
+              <path d="M0 70V50 Q250 35 500 50 T1000 46V70Z" fill="#9DCE83" />
             </svg>
           </section>
         </Reveal>
 
         {/* ── priority banner ──────────────────────────────────────────── */}
-        {user?.role === "farmer" ? <Reveal delay={0.04}><section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700">Farm sharing</p><h2 className="mt-1 text-base font-extrabold text-[var(--mt-ink)]">FPO connections for this farm</h2><p className="mt-1 text-sm text-slate-600">Connections are limited to this land; your other farms stay private.</p></div><Link to={`/farmer/fpo?farm_id=${encodeURIComponent(farmId)}`} className="inline-flex items-center rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-900">Manage FPOs</Link></div><div className="mt-3 flex flex-wrap gap-2">{farmFpoRelationships.length ? farmFpoRelationships.map((relationship) => <Link key={relationship.relationship_id} to={`/farmer/farms/${farmId}/fpo/${relationship.relationship_id}`} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800 hover:border-emerald-400 hover:bg-emerald-50"><span>{relationship.fpo_name || "FPO"}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${relationship.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : relationship.status === "PENDING_FPO_ACCEPTANCE" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{String(relationship.status || "").replaceAll("_", " ")}</span></Link>) : <p className="text-sm text-slate-500">No FPO connection for this farm yet. Find an approved FPO to send a consent-based request.</p>}</div></section></Reveal> : null}
-
-        <Reveal delay={0.08}>
-          <section className="rounded-[var(--mt-radius-md)] border border-emerald-100 bg-white p-4 md:p-5">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Calculated crop intelligence</p>
-                <h2 className="mt-1 text-[16.5px] font-extrabold text-[var(--mt-ink)]">
-                  {farm?.crop_name || farm?.crop_code || "Configured crop"}
-                </h2>
-              </div>
-              {latestSceneDate && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold text-emerald-700">Latest {formatDate(latestSceneDate)}</span>}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {farmCalculatedReadings.map(({ metric, result }) => {
-                const Icon = CALCULATED_METRIC_ICONS[metric.key] || Activity;
-                return (
-                  <button
-                    key={metric.key}
-                    type="button"
-                    onClick={() => setSelectedParameter(metric.key)}
-                    className={`min-h-[132px] rounded-2xl border p-3 text-left transition ${result.surfaceClass} ${selectedParameter === metric.key ? "ring-2 ring-emerald-300" : "hover:brightness-95"}`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/80">
-                        <Icon className="h-4 w-4" style={{ color: result.color }} strokeWidth={2.2} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-bold leading-tight text-[var(--mt-ink)]">{metricDisplayName(metric, metricContent)}</p>
-                        <StatusBadge result={result} short className="mt-1" />
-                      </div>
-                    </div>
-                    <p className={`mt-3 line-clamp-3 text-[11px] font-bold leading-snug ${result.textClass}`}>{result.paragraph || result.headline}</p>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Field interpretation</p>
-              <p className="mt-1 text-[13px] font-semibold leading-relaxed text-slate-800">{calculatedFieldInterpretationText}</p>
-            </div>
-          </section>
-        </Reveal>
+        {user?.role === "farmer" ? <Reveal delay={0.04} className="h-full"><section className="h-full rounded-2xl bg-gradient-to-br from-teal-50/70 via-white to-emerald-50/40 p-4 md:p-5"><div className="flex h-full flex-col"><div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal-700 text-white shadow-sm"><Sprout className="h-5 w-5" strokeWidth={2.2} /></span><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-teal-700">Farm sharing</p><h2 className="mt-1 text-[17px] font-extrabold leading-tight text-slate-900">FPO connections for this farm</h2><p className="mt-1 max-w-md text-[13px] leading-5 text-slate-600">Connect this farm with trusted support while keeping your other land private.</p></div></div><div className="flex flex-wrap gap-2"><Link to={`/farmer/fpo?farm_id=${encodeURIComponent(farmId)}`} className="inline-flex w-fit items-center justify-center rounded-xl border border-teal-700 bg-teal-700 px-3.5 py-2 text-[13px] font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-teal-800 hover:shadow-md">Manage FPOs</Link><Link to={`/farmer/fpo?farm_id=${encodeURIComponent(farmId)}`} className="inline-flex w-fit items-center justify-center rounded-xl border border-teal-200 bg-white px-3.5 py-2 text-[13px] font-bold text-teal-800 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:bg-teal-50 hover:shadow-md">Connect FPO</Link></div></div><div className="mt-5 border-t border-teal-200/70 pt-4">{farmFpoRelationships.length ? <div className="flex flex-wrap gap-2">{farmFpoRelationships.map((relationship) => <Link key={relationship.relationship_id} to={`/farmer/farms/${farmId}/fpo/${relationship.relationship_id}`} className="inline-flex items-center gap-2 rounded-xl border border-teal-100 bg-white/85 px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition hover:border-teal-300 hover:bg-white"><span>{relationship.fpo_name || "FPO"}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${relationship.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : relationship.status === "PENDING_FPO_ACCEPTANCE" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{String(relationship.status || "").replaceAll("_", " ")}</span></Link>)}</div> : <div className="flex items-start gap-3 rounded-xl border border-dashed border-teal-200 bg-white/70 px-3.5 py-3"><span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-teal-100 text-teal-700"><Sparkles className="h-3.5 w-3.5" /></span><div><p className="text-[13px] font-bold text-slate-800">No FPO connected yet</p><p className="mt-0.5 text-[12px] leading-5 text-slate-600">Find an approved FPO to send a consent-based request for this farm.</p></div></div>}</div></div></section></Reveal> : null}
+        </div>
 
         {/* ── crop-specific calculated intelligence ────────────────────── */}
         {/* ── map + selected cell ──────────────────────────────────────── */}

@@ -10,7 +10,7 @@ export function ProfileGrid({
   children,
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 sm:grid-cols-2">
       {children}
     </div>
   );
@@ -36,10 +36,10 @@ export function FieldLabel({
   required = false,
 }) {
   return (
-    <span className="mt-font-mono mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+    <span className="mt-font-mono mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7F8D79]">
       {children}
       {required ? (
-        <span className="rounded-full bg-[color:var(--mt-harvest-soft)] px-2 py-0.5 text-[9px] font-bold tracking-[0.1em] text-[color:var(--mt-harvest)]">
+          <span className="rounded-full bg-[#FFF3D8] px-2 py-0.5 text-[9px] font-bold tracking-[0.1em] text-[#8A6729]">
           Required
         </span>
       ) : null}
@@ -48,7 +48,7 @@ export function FieldLabel({
 }
 
 const fieldSurface =
-  "w-full rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition-all duration-200 ease-out placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-[color:var(--mt-forest)] focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.12)] hover:border-slate-300";
+  "w-full rounded-xl border border-[#E3E8DE] bg-[#F8FAF6] px-3.5 py-3 text-sm text-[#1D2117] outline-none transition-all duration-200 ease-out placeholder:text-[#9AA397] focus:-translate-y-[1px] focus:border-[#7FA66A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(127,166,106,0.14)] hover:border-[#C9D8BD]";
 
 export const ProfileInput = forwardRef(
   function ProfileInput(
@@ -175,7 +175,7 @@ export function ReadOnlyValue({
   return (
     <div>
       <FieldLabel>{label}</FieldLabel>
-      <div className="mt-font-mono flex items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3.5 py-3 text-sm font-semibold text-slate-600">
+      <div className="mt-font-mono flex items-center justify-between rounded-xl border border-dashed border-[#CCD8C7] bg-[#F8FAF6] px-3.5 py-3 text-sm font-semibold text-[#687064]">
         {value || "Not available"}
       </div>
     </div>
@@ -233,30 +233,30 @@ export function ProfileSection({
     <section
       id={id}
       ref={ref}
-      className={`group/section scroll-mt-24 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition-all duration-300 hover:shadow-[0_18px_50px_rgba(15,23,42,0.08)] ${
+      className={`group/section scroll-mt-24 overflow-hidden rounded-[1.5rem] border border-[#E3E8DE] bg-white shadow-[0_4px_14px_rgba(43,61,35,0.04)] transition-all duration-300 hover:shadow-[0_18px_50px_rgba(43,61,35,0.08)] ${
         visible
           ? "mt-reveal mt-reveal-in"
           : "mt-reveal"
       }`}
     >
-      <div className="relative border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-4">
+      <div className="relative border-b border-[#E9EDE5] bg-gradient-to-r from-[#F7FAF4] to-white px-5 py-4">
         <span
           className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--mt-forest)] to-[color:var(--mt-harvest)] opacity-0 transition-opacity duration-300 group-hover/section:opacity-100"
           aria-hidden="true"
         />
         <div className="flex items-center gap-3">
           {Icon ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--mt-forest-deep)] shadow-[0_6px_16px_rgba(16,185,129,0.2)] transition-transform duration-300 group-hover/section:scale-105">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#4B6B3A] shadow-[0_6px_16px_rgba(75,107,58,0.2)] transition-transform duration-300 group-hover/section:scale-105">
               <Icon className="h-5 w-5 text-white" />
             </div>
           ) : null}
           <div>
             {eyebrow ? (
-              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.26em] text-[color:var(--mt-harvest)]">
+              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.26em] text-[#9A762D]">
                 {eyebrow}
               </p>
             ) : null}
-            <h2 className="mt-font-display text-lg font-semibold text-slate-950">
+            <h2 className="mt-font-display text-lg font-semibold text-[#1D2117]">
               {title}
             </h2>
           </div>

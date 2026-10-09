@@ -107,6 +107,11 @@ export default function FarmRegister() {
   const [validationWarning, setValidationWarning] = useState("");
   const [backendErrorDetail, setBackendErrorDetail] = useState("");
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+  }, []);
+
   const update = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (
@@ -518,7 +523,7 @@ export default function FarmRegister() {
       style={{ fontFamily: "'Poppins', sans-serif" }}
     >
       <div
-        className={`mx-auto flex w-full flex-1 flex-col justify-center px-6 py-10 lg:px-12 ${step === 2 ? "max-w-[1600px]" : "max-w-2xl"}`}
+        className={`mx-auto flex w-full flex-1 flex-col justify-start px-6 py-10 lg:px-12 ${step === 2 ? "max-w-[1600px]" : "max-w-2xl"}`}
       >
         <MotionDiv
           initial={{ opacity: 0, y: -16 }}
@@ -690,7 +695,8 @@ export default function FarmRegister() {
                           side="bottom"
                           sideOffset={6}
                           collisionPadding={12}
-                          className="max-h-[min(60vh,22rem)]"
+                          avoidCollisions={false}
+                          className="w-[min(320px,calc(100vw-1.5rem))] max-h-[calc(var(--radix-select-content-available-height)-12px)]"
                         >
                           {districts.map((district) => (
                             <SelectItem
@@ -727,7 +733,8 @@ export default function FarmRegister() {
                           side="bottom"
                           sideOffset={6}
                           collisionPadding={12}
-                          className="max-h-[min(60vh,22rem)]"
+                          avoidCollisions={false}
+                          className="w-[min(320px,calc(100vw-1.5rem))] max-h-[calc(var(--radix-select-content-available-height)-12px)]"
                         >
                           {blocks.map((block) => (
                             <SelectItem
@@ -855,7 +862,8 @@ export default function FarmRegister() {
                             side="bottom"
                             sideOffset={6}
                             collisionPadding={12}
-                            className="max-h-[min(60vh,22rem)]"
+                            avoidCollisions={false}
+                            className="w-[min(320px,calc(100vw-1.5rem))] max-h-[calc(var(--radix-select-content-available-height)-12px)]"
                           >
                             {cropProfiles.map((crop) => (
                               <SelectItem

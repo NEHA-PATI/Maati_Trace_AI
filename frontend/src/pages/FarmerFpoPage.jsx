@@ -3,9 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   FileText,
   LifeBuoy,
-  MapPin,
   Search,
   ShieldCheck,
+  Sprout,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -175,21 +175,22 @@ export default function FarmerFpoPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-24 md:p-8">
+    <div className="min-h-screen bg-[#F6F7F2] px-4 pb-24 pt-5 md:px-8 md:py-8">
+      <div className="mx-auto max-w-[1320px] space-y-6">
       <header>
         <Link
           to="/farmer/me"
-          className="text-xs font-bold text-emerald-700 hover:underline"
+          className="text-xs font-bold text-[#4B6B3A] hover:underline"
         >
           ← Back to farmer dashboard
         </Link>
         <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6E8A5D]">
               Farmer workspace
             </p>
-            <h1 className="mt-2 text-3xl font-black text-slate-950">FPOs</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            <h1 className="mt-2 text-3xl font-black text-[#1D2117]">Connect with an FPO</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#687064]">
               Connect individual farms with approved FPOs. Each connection is
               farm-specific; your other farms remain private.
             </p>
@@ -200,7 +201,7 @@ export default function FarmerFpoPage() {
         </div>
         <Link
           to="/farmer/imported-onboarding"
-          className="mt-4 inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 hover:bg-emerald-100"
+          className="mt-4 inline-flex items-center rounded-xl border border-[#CFE2C4] bg-[#EEF6E9] px-4 py-2.5 text-sm font-black text-[#4B6B3A] hover:bg-[#E1F1D6]"
         >
           Review imported onboarding information
         </Link>
@@ -214,16 +215,18 @@ export default function FarmerFpoPage() {
         </div>
       ) : null}
       {notice ? <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">{notice}</div> : null}
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <section className="rounded-[24px] border border-[#E3E8DE] bg-white p-5 shadow-[0_10px_30px_rgba(43,61,35,0.05)] md:p-6">
         <div className="flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-emerald-700" />
-          <h2 className="text-lg font-black text-slate-950">Choose a farm</h2>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#E1F1D6] text-[#4B6B3A]"><Sprout className="h-5 w-5" /></span>
+          <div><h2 className="text-lg font-black text-[#1D2117]">Choose a farm</h2><p className="text-xs font-medium text-[#8A9684]">One farm per connection</p></div>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-3 text-sm text-[#687064]">
           The selected farm is the only land that an FPO request can cover.
         </p>
         {loading ? (
-          <p className="mt-5 text-sm text-slate-500">Loading your farms…</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2" aria-label="Loading farms">
+            {[1, 2].map((item) => <div key={item} className="animate-pulse rounded-2xl border border-[#E3E8DE] bg-[#F8FAF6] p-4"><div className="h-4 w-2/3 rounded bg-[#DDE8D8]" /><div className="mt-3 h-3 w-1/2 rounded bg-[#E7EEE3]" /><div className="mt-5 h-9 w-full rounded-xl bg-[#E7EEE3]" /></div>)}
+          </div>
         ) : (
           <div className="mt-5">
             {farms.length ? (
@@ -245,13 +248,13 @@ export default function FarmerFpoPage() {
         )}
       </section>
       {selected ? (
-        <section className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5 md:p-6">
+        <section className="rounded-[24px] border border-[#CFE2C4] bg-[#EEF6E9] p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6E8A5D]">
                 Selected farm
               </p>
-              <h2 className="mt-1 text-xl font-black text-slate-950">
+              <h2 className="mt-1 text-xl font-black text-[#1D2117]">
                 {selected.farm_name || "Unnamed farm"}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
@@ -260,12 +263,12 @@ export default function FarmerFpoPage() {
                 {selected.district_name || "District pending"}
               </p>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-800">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#4B6B3A]">
               Farm-only sharing
             </span>
           </div>
-          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-white p-4 text-sm text-slate-600">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-[#DCE8D5] bg-white p-4 text-sm text-[#687064]">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#4B6B3A]" />
             <p>
               This connection does not grant access to your other farms. You can
               revoke this farm’s access at any time.
@@ -273,7 +276,7 @@ export default function FarmerFpoPage() {
           </div>
         </section>
       ) : null}
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <section className="rounded-[24px] border border-[#E3E8DE] bg-white p-5 shadow-[0_10px_30px_rgba(43,61,35,0.05)] md:p-6">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-black text-slate-950">
@@ -334,7 +337,7 @@ export default function FarmerFpoPage() {
           )}
         </div>
       </section>
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <section className="rounded-[24px] border border-[#E3E8DE] bg-white p-5 shadow-[0_10px_30px_rgba(43,61,35,0.05)] md:p-6">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-black text-slate-950">
@@ -371,7 +374,7 @@ export default function FarmerFpoPage() {
             fpos.map((fpo) => (
               <article
                 key={fpo.fpo_id}
-                className="rounded-2xl border border-slate-200 p-4"
+                className="group rounded-2xl border border-[#E3E8DE] bg-[#FBFCF8] p-4 transition hover:-translate-y-0.5 hover:border-[#B8CEA9] hover:bg-white hover:shadow-[0_10px_24px_rgba(43,61,35,0.08)]"
               >
                 <p className="font-bold text-slate-900">
                   {fpo.fpo_name || fpo.display_name || "FPO"}
@@ -460,6 +463,7 @@ export default function FarmerFpoPage() {
         </div>
       ) : null}
       {connectTarget ? <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="fpo-consent-title" className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Review data sharing</p><h2 id="fpo-consent-title" className="mt-1 text-xl font-black text-slate-950">Connect {selected?.farm_name || "this farm"} to {connectTarget.fpo_name || connectTarget.display_name}</h2></div><button type="button" aria-label="Close" onClick={() => setConnectTarget(null)} className="rounded-full p-2 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700"><p><b>Farm:</b> {selected?.farm_name || "Unnamed farm"} · {selected?.area_acres ?? "—"} acres</p><p className="mt-1"><b>Location:</b> {[selected?.village_name, selected?.block_name, selected?.district_name, selected?.state_name].filter(Boolean).join(", ") || "Not provided"}</p><p className="mt-1"><b>FPO:</b> {connectTarget.public_fpo_id || ""} {connectTarget.district_name ? `· ${connectTarget.district_name}` : ""}</p></div>{consentPolicy ? <div className="mt-4"><h3 className="font-bold text-slate-900">{consentPolicy.title || "FPO data-sharing consent"}</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{consentPolicy.content}</p><div className="mt-3 rounded-xl border border-slate-200 p-4"><p className="text-xs font-black uppercase text-slate-500">Required access</p><p className="mt-2 text-sm text-slate-700">{(consentPolicy.mandatory_scopes || []).join(", ") || "No required scopes listed"}</p>{consentPolicy.optional_scopes?.length ? <div className="mt-4"><p className="text-xs font-black uppercase text-slate-500">Optional sharing (you choose)</p><div className="mt-2 space-y-2">{consentPolicy.optional_scopes.map((scope) => <label key={scope} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={optionalScopes.includes(scope)} onChange={(event) => setOptionalScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{label(scope)}</label>)}</div></div> : null}</div></div> : null}<label className="mt-4 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"><input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} className="mt-1" /><span>I have read this policy and explicitly consent to share only this farm's data with this FPO for the listed purposes. I understand I can cancel this request or revoke access later.</span></label><div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setConnectTarget(null)}>Go back</Button><Button onClick={submitRequest} disabled={!consentAccepted || Boolean(working)}>{working ? "Sending…" : "Confirm and send request"}</Button></div></section></div> : null}
+      </div>
     </div>
   );
 }

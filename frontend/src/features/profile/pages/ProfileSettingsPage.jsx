@@ -9,11 +9,11 @@ import {
   ChevronLeft,
   Download,
   FileText,
-  MapPin,
+  MapPinned,
   ShieldCheck,
-  Shield,
-  User,
-  Wheat,
+  Fingerprint,
+  UserRound,
+  Sprout,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -38,20 +38,20 @@ import {
 } from "@/features/profile/profileMappers";
 
 const FARMER_NAV = [
-  { id: "account", label: "Account", icon: User },
-  { id: "identity", label: "Identity", icon: Shield },
-  { id: "location", label: "Location", icon: MapPin },
-  { id: "role", label: "Role Details", icon: Wheat },
-  { id: "consent", label: "Consent", icon: Check },
+  { id: "account", label: "Account", icon: UserRound },
+  { id: "identity", label: "Identity", icon: Fingerprint },
+  { id: "location", label: "Location", icon: MapPinned },
+  { id: "role", label: "Role Details", icon: Sprout },
+  { id: "consent", label: "Consent", icon: ShieldCheck },
   { id: "export", label: "Export", icon: Download },
 ];
 
 const FPO_NAV = [
   { id: "organisation", label: "Organisation", icon: Building2 },
-  { id: "contact", label: "Contact", icon: User },
-  { id: "location", label: "Location", icon: MapPin },
-  { id: "operations", label: "Operations", icon: Wheat },
-  { id: "verification", label: "Verification", icon: Shield },
+  { id: "contact", label: "Contact", icon: UserRound },
+  { id: "location", label: "Location", icon: MapPinned },
+  { id: "operations", label: "Operations", icon: Sprout },
+  { id: "verification", label: "Verification", icon: ShieldCheck },
   { id: "export", label: "Export", icon: FileText },
 ];
 
@@ -63,9 +63,9 @@ function ProfileMissingFields({
       <Motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3 rounded-[1.25rem] border border-emerald-100 bg-[color:var(--mt-forest-soft)] p-4 text-sm font-semibold text-emerald-900"
+        className="flex items-center gap-3 rounded-2xl border border-[#CFE2C4] bg-[#EEF6E9] p-4 text-sm font-semibold text-[#33492A]"
       >
-        <ShieldCheck className="h-5 w-5 shrink-0 text-[color:var(--mt-forest)]" />
+        <ShieldCheck className="h-5 w-5 shrink-0 text-[#4B6B3A]" />
         Required profile fields are complete. The percentage can still
         increase as optional details are filled.
       </Motion.div>
@@ -76,7 +76,7 @@ function ProfileMissingFields({
     <Motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-[1.25rem] border border-amber-200 bg-[color:var(--mt-harvest-soft)] p-4 text-sm text-amber-950"
+      className="rounded-2xl border border-[#EAD9B7] bg-[#FFF8E9] p-4 text-sm text-[#5F4A27]"
     >
       <p className="mt-font-display font-semibold">
         Required fields still missing
@@ -90,7 +90,7 @@ function ProfileMissingFields({
             transition={{
               delay: index * 0.05,
             }}
-            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm"
+            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#7A5A24] shadow-sm"
           >
             {readableFieldName(field)}
           </Motion.span>
@@ -205,8 +205,8 @@ export function ProfileSettingsPage() {
   };
 
   return (
-    <div className="mt-font-body min-h-screen px-4 py-6 text-slate-900 md:px-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mt-font-body min-h-screen bg-[#F6F7F2] px-4 py-6 text-[#1D2117] md:px-6 lg:py-8">
+      <div className="mx-auto max-w-[1440px]">
         <div className="space-y-5">
           <button
             type="button"
@@ -228,15 +228,15 @@ export function ProfileSettingsPage() {
             }
           />
 
-          <div className="grid gap-5 lg:grid-cols-[250px_1fr]">
-            <div className="lg:sticky lg:top-5 lg:self-start">
+          <div className="grid gap-4 lg:grid-cols-[190px_1fr]">
+            <div className="lg:sticky lg:top-20 lg:z-20 lg:self-start">
               <ProfileNavigation
                 items={nav}
                 activeSection={activeSection}
                 onSelect={scrollTo}
               />
               <div
-                className="mt-fade-up mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-500 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+                className="mt-fade-up mt-4 rounded-2xl border border-[#E3E8DE] bg-white p-4 text-xs leading-5 text-[#687064] shadow-[0_4px_14px_rgba(43,61,35,0.04)]"
                 style={{ "--mt-d": "120ms" }}
               >
                 <p className="mt-font-mono mb-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -267,17 +267,17 @@ export function ProfileSettingsPage() {
                     onSave={saveFpoProfile}
                     onExport={handleExport}
                   />
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <section className="rounded-2xl border border-[#E3E8DE] bg-white p-5 shadow-[0_4px_14px_rgba(43,61,35,0.04)]">
                   <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Verification</p>
-                      <h2 className="mt-1 text-lg font-black text-slate-900">Submit your FPO for review</h2>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">Once required profile details are complete, submit them to MaatiTrace administrators for approval.</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8A9A84]">Verification</p>
+                      <h2 className="mt-1 text-lg font-black text-[#1D2117]">Submit your FPO for review</h2>
+                      <p className="mt-1 text-sm leading-6 text-[#687064]">Once required profile details are complete, submit them to MaatiTrace administrators for approval.</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">{String(verification?.verification_status || "PROFILE_INCOMPLETE").replaceAll("_", " ")}</span>
+                    <span className="rounded-full bg-[#F1F5EF] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-[#58734B]">{String(verification?.verification_status || "PROFILE_INCOMPLETE").replaceAll("_", " ")}</span>
                   </div>
                   {verificationError ? <p className="mt-3 text-sm text-rose-600">{verificationError}</p> : null}
-                  <button type="button" onClick={handleSubmitVerification} disabled={verificationLoading || !profile || Boolean(verification?.verification_status && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(verification.verification_status))} className="mt-4 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+                  <button type="button" onClick={handleSubmitVerification} disabled={verificationLoading || !profile || Boolean(verification?.verification_status && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(verification.verification_status))} className="mt-4 rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A] disabled:cursor-not-allowed disabled:opacity-50">
                     {verificationLoading ? "Submitting…" : "Submit for verification"}
                   </button>
                   </section>

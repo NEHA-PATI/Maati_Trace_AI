@@ -58,9 +58,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
 
-  --font-heading: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -147,19 +147,31 @@
   --mt-tap: 48px;
 }
 
-/* Farmer-facing screens use the single Noto Sans family (Odia + English) */
+/* Keep Poppins consistent across farmer-facing screens while retaining Odia fallback. */
 .mt-surface,
 .mt-surface h1,
 .mt-surface h2,
 .mt-surface h3,
 .mt-surface h4 {
-  font-family: 'Noto Sans', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Poppins', 'Noto Sans Oriya', 'Noto Sans', ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
 }
 
 .mt-tabbar-safe {
   padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
 }
+
+/* Authenticated pages should use the available canvas instead of a narrow
+   centered shell; inner cards and dialogs keep their own width constraints. */
+.app-main > .mx-auto,
+.app-main > div > .mx-auto {
+  max-width: none;
+}
+
+.app-main > div > .language-page-container {
+  max-width: 760px;
+}
+
 @media (min-width: 768px) {
   .mt-tabbar-safe { padding-bottom: 0; }
 }
@@ -179,6 +191,13 @@ body {
   font-family: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 h1,

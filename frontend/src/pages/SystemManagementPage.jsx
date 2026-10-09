@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Activity, Database, Play, Plus, RefreshCw, Save, Satellite,
   Sprout, Layers, Server,
@@ -344,7 +344,8 @@ function RunTable({ runs }) {
 }
 
 export default function SystemManagementPage() {
-  const [domain, setDomain] = useState("feature-engine");
+  const [searchParams] = useSearchParams();
+  const [domain, setDomain] = useState(() => searchParams.get("domain") || "feature-engine");
   const [feTab, setFeTab] = useState("overview");
 
   const [summary, setSummary] = useState({});
@@ -432,13 +433,13 @@ export default function SystemManagementPage() {
         <Button variant="outline" size="sm" onClick={load} className="rounded-xl"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
       </div>
 
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+      <div className="flex w-full flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-sm" role="tablist" aria-label="System management sections">
         {DOMAINS.map((def) => {
           const key = def[0];
           const label = def[1];
           const Icon = def[2];
           return (
-            <button key={key} onClick={() => setDomain(key)} className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold ${domain === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+            <button key={key} type="button" role="tab" aria-selected={domain === key} onClick={() => setDomain(key)} className={`flex min-w-[150px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${domain === key ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}>
               <Icon className="h-4 w-4" />{label}
             </button>
           );
@@ -454,9 +455,9 @@ export default function SystemManagementPage() {
           <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
             Refresh reloads telemetry only — it does <strong>not</strong> re-run satellite ingestion or feature engineering. Published profile/formula versions are immutable; clone a new version to change production behaviour.
           </div>
-          <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+          <div className="flex w-full flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-sm" role="tablist" aria-label="Feature engine sections">
             {FE_TABS.map(([key, label]) => (
-              <button key={key} onClick={() => setFeTab(key)} className={`rounded-xl px-4 py-2 text-xs font-semibold ${feTab === key ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>{label}</button>
+              <button key={key} type="button" role="tab" aria-selected={feTab === key} onClick={() => setFeTab(key)} className={`min-w-[150px] flex-1 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${feTab === key ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}>{label}</button>
             ))}
           </div>
 

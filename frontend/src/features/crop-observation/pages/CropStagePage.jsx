@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, ChevronRight, History, Loader2 } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, CloudSun, Flower2, History, Loader2, Sprout } from "lucide-react";
 
 import Bilingual from "@/features/crop-observation/components/Bilingual";
 import CropStatusSelector from "@/features/crop-observation/components/CropStatusSelector";
@@ -49,6 +49,7 @@ export default function CropStagePage() {
       <HistoryTimeline items={screen.recent_history} locale={locale} />
     </section>
   ) : null;
+  const hasHistory = Boolean(screen.recent_history?.length);
 
   return (
     <MobileScreen
@@ -64,19 +65,23 @@ export default function CropStagePage() {
       )}
       contentClassName="px-0 pt-0"
     >
-      <StageTabs tabs={screen.stage_tabs} onSelect={(code) => navigate(`/my-crops/${farmId}/${cropCycleId}/${code}`, { replace: true })} />
+      <StageTabs activeStageCode={stageCode} tabs={screen.stage_tabs} onSelect={(code) => navigate(`/my-crops/${farmId}/${cropCycleId}/${code}`, { replace: true })} />
 
-      <div className="grid gap-6 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-6">
+      <div className={cn("grid gap-6 px-4 py-4 sm:px-5 lg:px-6", hasHistory && "lg:grid-cols-[minmax(0,1fr)_340px]")}>
         <div className="space-y-5">
-          <div className="relative min-h-[190px] overflow-hidden rounded-[22px] bg-[#4B6B3A] p-5 text-white shadow-sm lg:min-h-[260px]">
-            {screen.stage.image_url ? (
-              <img src={systemMediaUrl(screen.stage.image_url)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45" loading="eager" />
-            ) : <div className="absolute inset-0 bg-[linear-gradient(145deg,#7FA66A,#4B6B3A)]" />}
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(29,33,23,0.08),rgba(29,33,23,0.65))]" />
+          <div className="relative min-h-[240px] overflow-hidden rounded-[24px] bg-[#214D27] p-5 text-white shadow-[0_12px_28px_rgba(43,61,35,0.16)] sm:p-6 lg:min-h-[300px]">
+            <img src={screen.stage.image_url ? systemMediaUrl(screen.stage.image_url) : "/mycrop1.png"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-85" loading="eager" />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,55,25,0.92)_0%,rgba(26,66,29,0.76)_37%,rgba(25,67,29,0.12)_72%,rgba(25,67,29,0.04)_100%)]" />
             <div className="absolute right-4 top-4"><StageInstructionAudio src={systemMediaUrl(screen.stage.instruction_audio_url)} locale={locale} /></div>
-            <div className="relative flex min-h-[150px] flex-col justify-end lg:min-h-[220px]">
-              <Bilingual as="div" className="mt-5 text-[22px] font-black leading-tight lg:text-3xl" primaryText={screen.stage.name} />
-              {screen.stage.short_description ? <p className="mt-2 max-w-[720px] text-sm font-medium leading-6 text-white/95">{screen.stage.short_description}</p> : null}
+            <div className="relative flex min-h-[205px] flex-col justify-end lg:min-h-[260px]">
+              <span className="mb-3 inline-flex w-fit items-center gap-2 rounded-full bg-[#4D9A48] px-4 py-2 text-xs font-black text-white shadow-sm"><Flower2 className="h-4 w-4" /> Current Stage</span>
+              <Bilingual as="div" className="text-[30px] font-black leading-tight sm:text-4xl" primaryText={screen.stage.name} />
+              {screen.stage.short_description ? <p className="mt-2 max-w-[640px] text-sm font-medium leading-6 text-white/90 sm:text-base">{screen.stage.short_description}</p> : null}
+              <div className="mt-4 grid max-w-[760px] grid-cols-1 gap-2 sm:grid-cols-3">
+                <HeroInfo icon={Sprout} label="Key Activity" text="Monitor crop growth and field health" />
+                <HeroInfo icon={CloudSun} label="Ideal Conditions" text="Healthy soil, light and moisture" />
+                <HeroInfo icon={CalendarDays} label="Expected Duration" text="Monitor through this stage" />
+              </div>
             </div>
           </div>
 
@@ -101,8 +106,8 @@ export default function CropStagePage() {
                   const meta = PRACTICE_META[practice.practice_code];
                   const logged = todayAnswersByPractice.has(practice.practice_code);
                   return (
-                    <button key={practice.practice_code} type="button" onClick={() => setActivePractice(practice)} disabled={practice.fields.length === 0} className={cn("flex min-h-[78px] w-full items-center gap-3 rounded-2xl border bg-[#FBFCF8] px-3 py-3 text-left transition active:scale-[0.99] disabled:opacity-40", logged ? "border-[#AFC99F]" : "border-[#E9E7DC]") }>
-                      <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl bg-[#E1F1D6] text-[#33492A]"><PracticeIcon className="h-5 w-5" /></span>
+                    <button key={practice.practice_code} type="button" onClick={() => setActivePractice(practice)} disabled={practice.fields.length === 0} className={cn("group flex min-h-[78px] w-full items-center gap-3 rounded-2xl border bg-[#FBFCF8] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm active:scale-[0.99] disabled:opacity-40", logged ? "border-[#AFC99F]" : "border-[#E9E7DC]") }>
+                      <span className={cn("grid h-[46px] w-[46px] shrink-0 place-items-center rounded-2xl text-white shadow-sm", practice.practice_code === "pest_management" ? "bg-[#D97706]" : practice.practice_code === "nutrient_management" ? "bg-[#2563EB]" : practice.practice_code === "nursery_management" ? "bg-[#0F766E]" : practice.practice_code === "weed_management" ? "bg-[#65A30D]" : practice.practice_code === "harvest_management" ? "bg-[#CA8A04]" : "bg-[#4B6B3A]")}><PracticeIcon className="h-5 w-5" /></span>
                       <span className="min-w-0 flex-1">
                         <Bilingual as="span" className="block truncate text-[15px] font-bold text-[#1D2117]" primaryText={practice.name} />
                         <span className="mt-0.5 block text-xs font-medium text-[#5B6055]">{logged ? primary(STRINGS.loggedToday, locale) : primary(meta, locale) || primary(STRINGS.newUpdate, locale)}</span>
@@ -116,13 +121,22 @@ export default function CropStagePage() {
           ) : null}
         </div>
 
-        <aside className="hidden lg:block"><div className="sticky top-5">{history}</div></aside>
+        {hasHistory ? <aside className="hidden lg:block"><div className="sticky top-5">{history}</div></aside> : null}
       </div>
 
       {activePractice ? (
         <PracticeSheet practice={activePractice} cropCycleId={cropCycleId} stageCode={stageCode} locale={locale} practiceObservationId={todayAnswersByPractice.get(activePractice.practice_code)?.practice_observation_id} initialAnswers={todayAnswersByPractice.get(activePractice.practice_code)?.answers || {}} onClose={() => setActivePractice(null)} onSaved={() => { setActivePractice(null); reload({ revalidateOnly: true }); }} />
       ) : null}
     </MobileScreen>
+  );
+}
+
+function HeroInfo({ icon: Icon, label, text }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-white/20 bg-black/15 px-3 py-3 backdrop-blur-sm">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#4D9A48] text-white"><Icon className="h-5 w-5" /></span>
+      <span className="min-w-0"><span className="block text-xs font-black text-white">{label}</span><span className="mt-0.5 block text-[11px] leading-4 text-white/75">{text}</span></span>
+    </div>
   );
 }
 

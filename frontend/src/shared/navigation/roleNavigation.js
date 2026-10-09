@@ -24,11 +24,6 @@ const ROLE_ITEMS = {
   ],
   [ROLES.ADMIN]: [
     { to: "/admin", label: "Admin Dashboard", end: true },
-    { to: "/admin/fpo-access", label: "FPO Access" },
-    { to: "/admin/fpo", label: "FPO Management" },
-    { to: "/admin/crop-observation", label: "Crop Operations" },
-    { to: "/admin/system", label: "System" },
-    { to: "/settings", label: "Profile", end: true },
   ],
 };
 
@@ -37,7 +32,9 @@ export function getRoleNavigation(role) {
 }
 
 export function getAuthenticatedNavigation(role) {
-  return [...getRoleNavigation(role), ...PUBLIC_ITEMS];
+  return role === ROLES.ADMIN
+    ? getRoleNavigation(role)
+    : [...getRoleNavigation(role), ...PUBLIC_ITEMS];
 }
 
 export function isNavigationItemActive(pathname, item) {

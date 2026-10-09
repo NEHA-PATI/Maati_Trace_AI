@@ -4,7 +4,7 @@ import {
   Bell, AlertTriangle, Info, CheckCircle, ChevronRight,
   Leaf, Droplets, Satellite, MapPin, User
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 // Farm map snapshot thumbnail (real satellite/field imagery)
 const FARM_THUMBNAILS = {
@@ -124,20 +124,24 @@ export default function Notifications() {
           <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Notifications</h1>
           <p className="mt-0.5 whitespace-nowrap text-xs leading-4 text-gray-400">Alerts, predictions and system updates</p>
         </div>
-        <div className="flex w-full items-center justify-between gap-1 rounded-xl bg-gray-100 p-1">
+        <div className="flex w-full items-center gap-1 rounded-2xl border border-gray-200/80 bg-gray-100/80 p-1.5" role="tablist" aria-label="Notification priority">
           {["all", "high", "medium", "low"].map(f => (
             <button
               key={f}
+              type="button"
               onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-lg text-[11px] font-medium capitalize transition-all ${
+              role="tab"
+              aria-selected={filter === f}
+              className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold capitalize transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 ${
                 filter === f
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-400 hover:text-gray-700"
+                  ? "text-gray-900"
+                  : "text-gray-500 hover:bg-white/60 hover:text-gray-800"
               }`}
             >
-              {f}
+              {filter === f && <motion.span layoutId="notification-tab" className="absolute inset-0 -z-0 rounded-xl bg-white shadow-sm" transition={{ type: "spring", stiffness: 420, damping: 32 }} />}
+              <span className="relative z-10">{f}</span>
               {f === "high" && (
-                <span className="ml-1 w-1.5 h-1.5 bg-red-400 rounded-full inline-block align-middle" />
+                <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-red-400" />
               )}
             </button>
           ))}
@@ -145,14 +149,15 @@ export default function Notifications() {
       </div>
 
       {/* Notification cards */}
-      <div className="space-y-3">
-        {filtered.map((n, i) => {
+      <AnimatePresence mode="wait">
+        <motion.div key={filter} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="space-y-3" role="tabpanel">
+          {filtered.map((n, i) => {
           const Icon = n.icon;
           const cfg = PRIORITY_CONFIG[n.priority];
           const thumb = n.farmId ? FARM_THUMBNAILS[n.farmId] : null;
           const showFarmerIcon = n.notifType === "fpo";
 
-          return (
+            return (
             <motion.div
               key={n.id}
               initial={{ opacity: 0, y: 12 }}
@@ -224,9 +229,11 @@ export default function Notifications() {
                 </div>
               </div>
             </motion.div>
-          );
-        })}
-      </div>
+            );
+          })}
+          {!filtered.length && <p className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">No notifications in this priority.</p>}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

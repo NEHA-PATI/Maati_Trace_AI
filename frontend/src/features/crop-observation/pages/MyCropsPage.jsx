@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Grid2X2, List, User } from "lucide-react";
+import { Grid2X2, List, User, Sprout } from "lucide-react";
 
 import {
   attachCropToFarm,
@@ -128,14 +128,15 @@ export default function MyCropsPage() {
   );
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#F6F7F2] pb-[calc(92px+env(safe-area-inset-bottom))]">
-      <div className="mx-auto w-full max-w-[1320px] px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
-        <header className="flex items-start justify-between gap-4 rounded-[22px] border border-[#E3E8DE] bg-white p-4 shadow-sm sm:p-5">
+    <div className="min-h-[calc(100vh-4rem)] bg-[#F3F6EF] pb-[calc(92px+env(safe-area-inset-bottom))]">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 lg:px-10 lg:py-7">
+        <header className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[26px] border border-[#DCE8D6] bg-[#EAF3E4] p-5 shadow-[0_12px_30px_rgba(43,61,35,0.08)] sm:p-7">
           <div className="min-w-0">
-            <p className="text-sm font-bold text-[#4B6B3A]">{primary(STRINGS.myCrop, locale)}</p>
-            <h1 className="mt-1 truncate text-[22px] font-black text-[#1D2117] sm:text-3xl">
+            <div className="flex items-center gap-2 text-sm font-bold text-[#426333]"><Sprout className="h-4 w-4" />{primary(STRINGS.myCrop, locale)}</div>
+            <h1 className="mt-1 truncate text-[25px] font-black tracking-[-0.03em] text-[#1D2117] sm:text-4xl">
               {primary(STRINGS.hello, locale)}{farmerName ? `, ${farmerName}` : ""}
             </h1>
+            <p className="mt-1 hidden text-xs font-medium text-[#687A60] sm:block">Your crop health journey starts here.</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <LanguageToggle locale={locale} setLocale={setLocale} />
@@ -146,20 +147,20 @@ export default function MyCropsPage() {
         </header>
 
         <section className="mt-7">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-[#E0E8DB] bg-white/70 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
             <div>
-              <p className="text-xl font-black text-[#1D2117]">{primary(STRINGS.myCrops, locale)}</p>
+              <div className="flex items-center gap-2"><p className="text-xl font-black text-[#1D2117]">{primary(STRINGS.myCrops, locale)}</p><span className="rounded-full bg-[#E1F1D6] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#426333]">Field view</span></div>
               <p className="mt-1 text-sm font-medium text-[#5B6055]">{primary(STRINGS.chooseCrop, locale)}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => changeViewMode("cards")} aria-pressed={viewMode === "cards"} className="inline-flex h-10 items-center gap-1 rounded-lg border bg-white px-2.5 text-xs font-bold"><Grid2X2 className="h-3.5 w-3.5" />{primary(STRINGS.cards, locale)}</button>
-              <button type="button" onClick={() => changeViewMode("list")} aria-pressed={viewMode === "list"} className="inline-flex h-10 items-center gap-1 rounded-lg border bg-white px-2.5 text-xs font-bold"><List className="h-3.5 w-3.5" />{primary(STRINGS.list, locale)}</button>
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-[#F3F6EF] p-1 sm:justify-end">
+              <button type="button" onClick={() => changeViewMode("cards")} aria-pressed={viewMode === "cards"} className={`inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-bold transition ${viewMode === "cards" ? "bg-white text-[#33492A] shadow-sm" : "text-[#687A60]"}`}><Grid2X2 className="h-3.5 w-3.5" />{primary(STRINGS.cards, locale)}</button>
+              <button type="button" onClick={() => changeViewMode("list")} aria-pressed={viewMode === "list"} className={`inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-bold transition ${viewMode === "list" ? "bg-white text-[#33492A] shadow-sm" : "text-[#687A60]"}`}><List className="h-3.5 w-3.5" />{primary(STRINGS.list, locale)}</button>
             </div>
             {farms.length > 1 ? (
               <select
                 value={farmId}
                 onChange={(event) => setFarmId(event.target.value)}
-                className="h-11 min-w-[240px] rounded-xl border border-[#DCE3D7] bg-white px-3 text-sm font-semibold text-[#1D2117]"
+                className="h-11 min-w-[240px] rounded-xl border border-[#DCE3D7] bg-white px-3 text-sm font-semibold text-[#1D2117] shadow-sm"
               >
                 {farms.map((farm) => (
                   <option key={farm.farm_id} value={farm.farm_id}>{farm.farm_name}</option>
@@ -190,7 +191,7 @@ export default function MyCropsPage() {
                   onSelect={handleSelectCrop}
                 />
               ))}
-              {otherCrops.length ? <p className="col-span-full mt-4 text-sm font-black uppercase tracking-wide text-[#5B6055]">{primary(STRINGS.otherCrops, locale)}</p> : null}
+              {otherCrops.length ? <div className="col-span-full mt-5 flex items-center gap-3"><p className="text-sm font-black uppercase tracking-[0.08em] text-[#52604D]">{primary(STRINGS.otherCrops, locale)}</p><span className="h-px flex-1 bg-[#DDE5D7]" aria-hidden="true" /></div> : null}
               {otherCrops.map((crop) => (
                 <CropCard key={crop.crop_code} crop={crop} locale={locale} attached={false} disabled={busyCropCode === crop.crop_code} onSelect={() => setPendingCrop(crop)} />
               ))}

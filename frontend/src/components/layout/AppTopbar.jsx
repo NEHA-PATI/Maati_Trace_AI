@@ -5,6 +5,7 @@ import { Bell, LogOut } from "lucide-react";
 import { useAuth } from "@/features/auth/context/useAuth";
 import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
 import { LanguageToggle } from "@/features/language";
+import LogoutConfirmModal from "@/features/auth/components/LogoutConfirmModal";
 
 function MaatiLogo() {
   return (
@@ -26,7 +27,10 @@ export default function AppTopbar() {
   const { logout, user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
-  const navItems = getAuthenticatedNavigation(user?.role);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const navItems = isAdmin ? [] : getAuthenticatedNavigation(user?.role);
+  const logoDestination = isAdmin ? "/admin" : "/";
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -44,7 +48,7 @@ export default function AppTopbar() {
   return (
     <header className="mt-surface fixed inset-x-0 top-0 z-50 border-b border-[var(--mt-line)] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-3 px-4">
-        <Link to="/" aria-label="MaatiTrace home">
+        <Link to={logoDestination} aria-label="MaatiTrace home">
           <MaatiLogo />
         </Link>
 
@@ -86,11 +90,11 @@ export default function AppTopbar() {
           </Link>
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setConfirmLogout(true)}
             disabled={loggingOut}
             className="flex h-11 items-center gap-1.5 rounded-full border border-[var(--mt-line)] bg-white px-3.5 text-[13px] font-bold text-[var(--mt-ink-soft)] transition-colors hover:bg-[var(--mt-paper-warm)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
+            <LogOut className="h-4 w-4 text-rose-500" aria-hidden="true" />
             <span className="hidden sm:inline">{loggingOut ? "Logging out…" : "Log out"}</span>
           </button>
         </div>
@@ -100,6 +104,7 @@ export default function AppTopbar() {
           {logoutError}
         </p>
       ) : null}
+      <LogoutConfirmModal open={confirmLogout} loading={loggingOut} onCancel={() => setConfirmLogout(false)} onConfirm={handleLogout} />
     </header>
   );
 }

@@ -16,7 +16,13 @@ export default function LoginPage() {
 
   const redirectAfterLogin = useCallback((user) => {
     const requestedPath = location.state?.from?.pathname;
-    navigate(requestedPath || getDefaultRouteForRole(user?.role), { replace: true });
+    const role = String(user?.role || "").toLowerCase();
+    const isAdminPath = requestedPath === "/admin" || requestedPath?.startsWith("/admin/");
+    const destination = role === "admin"
+      ? (isAdminPath ? requestedPath : getDefaultRouteForRole(role))
+      : (requestedPath || getDefaultRouteForRole(role));
+
+    navigate(destination, { replace: true });
   }, [location.state, navigate]);
 
   async function handlePasswordLogin(values) {

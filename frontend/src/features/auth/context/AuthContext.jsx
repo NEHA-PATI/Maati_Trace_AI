@@ -17,9 +17,23 @@ import { logger } from "@/shared/logging/logger";
 export const AuthContext = createContext(null);
 let bootstrapPromise = null;
 
+async function refreshWithRetry() {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await authApi.refresh({ timeoutMs: 8000 });
+    } catch (error) {
+      lastError = error;
+      if (error?.status === 401 || attempt === 1) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+  }
+  throw lastError;
+}
+
 function bootstrapSession() {
   if (!bootstrapPromise) {
-    bootstrapPromise = authApi.refresh({ timeoutMs: 8000 }).finally(() => {
+    bootstrapPromise = refreshWithRetry().finally(() => {
       bootstrapPromise = null;
     });
   }

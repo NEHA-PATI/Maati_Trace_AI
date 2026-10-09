@@ -32,7 +32,7 @@
 }
 
 .mt-font-display {
-  font-family: "Fraunces", ui-serif, Georgia, serif;
+  font-family: "Poppins", "Noto Sans Oriya", ui-sans-serif, system-ui, sans-serif;
   font-optical-sizing: auto;
   font-feature-settings: "ss02" 1;
 }
@@ -43,7 +43,7 @@
 }
 
 .mt-font-body {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Poppins", "Noto Sans Oriya", ui-sans-serif, system-ui, sans-serif;
 }
 
 @keyframes mt-fade-up {
