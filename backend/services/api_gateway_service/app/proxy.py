@@ -163,6 +163,7 @@ async def _proxy_request(
     request: Request,
     *,
     method: str | None = None,
+    service_context: dict[str, str] | None = None,
 ) -> Response:
     body = await request.body()
 
@@ -170,6 +171,9 @@ async def _proxy_request(
         "host",
         "content-length",
         "connection",
+        "x-ml-service-key",
+        "x-ml-actor-id",
+        "x-ml-actor-role",
     }
 
     headers: dict[str, str] = {
@@ -177,6 +181,22 @@ async def _proxy_request(
         for key, value in request.headers.items()
         if key.lower() not in excluded_headers
     }
+
+    if service_context is not None:
+        # Backend 2 receives only the gateway identity/context, never the browser's
+        # bearer token or session cookies.
+        headers.pop("authorization", None)
+        headers.pop("cookie", None)
+        headers.pop("x-csrf-token", None)
+        if not settings.ml_service_key:
+            raise GatewayProxyError("ML service authentication is not configured")
+        headers.update(
+            {
+                "X-ML-Service-Key": settings.ml_service_key,
+                "X-ML-Actor-ID": service_context["user_id"],
+                "X-ML-Actor-Role": service_context["role"],
+            }
+        )
 
     client = _get_upstream_client(request)
     try:
@@ -197,10 +217,15 @@ async def proxy_health_request(service_name: str, check: str, request: Request) 
     return await _proxy_request(target_url, request, method="GET")
 
 
-async def proxy_request(prefix: str, rest_path: str, request: Request) -> Response:
+async def proxy_request(
+    prefix: str,
+    rest_path: str,
+    request: Request,
+    service_context: dict[str, str] | None = None,
+) -> Response:
     target_url = _build_target_url(
         prefix=prefix,
         rest_path=rest_path,
         query_string=request.scope.get("query_string", b""),
     )
-    return await _proxy_request(target_url, request)
+    return await _proxy_request(target_url, request, service_context=service_context)

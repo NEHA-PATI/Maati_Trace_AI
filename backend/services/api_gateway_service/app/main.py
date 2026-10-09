@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from services.api_gateway_service.app.proxy import (
     UPSTREAM_CLIENT_STATE_KEY,
@@ -14,6 +15,8 @@ from services.api_gateway_service.app.proxy import (
 from services.api_gateway_service.app.schemas import HealthResponse
 from shared.config.settings import settings
 from shared.logging.json_logging import configure_json_logging
+from services.auth_service.app.dependencies import require_roles
+from services.auth_service.app.errors import AuthError
 
 SERVICE_NAME = "api_gateway_service"
 
@@ -43,6 +46,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(AuthError)
+async def auth_error_handler(_request: Request, exc: AuthError) -> JSONResponse:
+    """Return authentication failures as 401/403 instead of an unhandled 500."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail()},
+    )
 
 
 @app.get("/health/live", response_model=HealthResponse)
@@ -83,6 +95,30 @@ async def service_health(service_name: str, check: str, request: Request):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"code": "API_GATEWAY_PROXY_ERROR", "message": str(exc)},
+        ) from exc
+
+
+@app.api_route(
+    "/api/historical-acquisition/{rest_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def historical_acquisition_proxy(
+    rest_path: str,
+    request: Request,
+    principal: dict[str, str] = Depends(require_roles("admin")),
+):
+    """Authorize in Backend 1, then call ML with a gateway-owned identity."""
+    try:
+        return await proxy_request(
+            prefix="historical-acquisition",
+            rest_path=rest_path,
+            request=request,
+            service_context=principal,
+        )
+    except GatewayProxyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "ML_GATEWAY_PROXY_ERROR", "message": str(exc)},
         ) from exc
 
 

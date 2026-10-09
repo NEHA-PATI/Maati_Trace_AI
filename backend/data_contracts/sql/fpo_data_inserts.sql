@@ -949,3 +949,10 @@ SELECT pg_catalog.setval('public.fpo_public_number_seq', 100415, true);
 -- PostgreSQL database dump complete
 --
 
+-- The demo FPO uses the reserved `.local` email domain, which violates the
+-- API's EmailStr response contract. Remove it from the restored dataset.
+DELETE FROM public.fpo_users
+WHERE fpo_id = 'd13cdfbe-857c-4d46-b3fe-c53329a6c95e';
+
+DELETE FROM public.fpos
+WHERE fpo_id = 'd13cdfbe-857c-4d46-b3fe-c53329a6c95e';

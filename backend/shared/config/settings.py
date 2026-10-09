@@ -120,6 +120,8 @@ class Settings(BaseSettings):
     observability_service_url: str = "http://localhost:8014"
     crop_observation_service_url: str = "http://localhost:8015"
     ml_acquisition_service_url: str = "http://localhost:8017"
+    # Dedicated Backend 1 -> ML service credential. Never expose this to the browser.
+    ml_service_key: str = ""
 
     # API gateway upstream connection pool
     gateway_upstream_timeout_seconds: float = 180.0
