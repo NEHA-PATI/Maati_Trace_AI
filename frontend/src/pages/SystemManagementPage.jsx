@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft, Activity, Database, Play, Plus, RefreshCw, Save, Satellite,
-  Sprout, Layers, Server,
+  Play, Plus, RefreshCw, Save, Sprout, Server,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import LoadingState from "@/components/ui/LoadingState";
 import {
   cloneCropConfiguration,
   cloneCropProfile,
@@ -34,14 +34,6 @@ import {
 } from "@/lib/api/featureProcessingAdmin";
 import { materializeFarmIntelligence } from "@/lib/api/analytics";
 import { getAllServiceHealth } from "@/lib/api/health";
-
-const DOMAINS = [
-  ["feature-engine", "Feature Engine", Sprout],
-  ["raster", "Raster Management", Satellite],
-  ["farm-registry", "Farm Registry", Database],
-  ["analytics", "Analytics", Activity],
-  ["hot-stream", "Hot Stream", Layers],
-];
 
 const FE_TABS = [
   ["overview", "Overview"],
@@ -237,7 +229,7 @@ function FormulaEditor({ formula, components, onSaved }) {
         <div><Label className="text-xs">Execution order</Label><Input disabled={!canEdit} type="number" value={form.execution_order} onChange={(e) => update("execution_order", e.target.value)} /></div>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-        <strong>Allowed safe component keys:</strong> {components.map((c) => c.component_key).join(", ")} plus <code>prediction:&lt;key&gt;</code> and <code>prediction_inverse:&lt;key&gt;</code>.
+        <strong>Available formula components:</strong> {components.length || 0}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <JsonField label="Component weights JSON (must sum to 1.0)" value={form.component_weights} disabled={!canEdit} onChange={(v) => update("component_weights", v)} rows={9} />
@@ -322,7 +314,7 @@ function RunTable({ runs }) {
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="w-full text-xs">
         <thead className="bg-slate-50">
-          <tr>{["Farm", "Job", "Stage", "Status", "Started", "Finished", "Error"].map((h) => <th key={h} className="px-3 py-2 text-left text-slate-400">{h}</th>)}</tr>
+          <tr>{["Farm", "Job", "Stage", "Status", "Started", "Finished", "Attention"].map((h) => <th key={h} className="px-3 py-2 text-left text-slate-400">{h}</th>)}</tr>
         </thead>
         <tbody>
           {runs.map((run) => (
@@ -333,7 +325,7 @@ function RunTable({ runs }) {
               <td className="px-3 py-2 font-semibold">{run.status}</td>
               <td className="px-3 py-2">{formatDate(run.started_at)}</td>
               <td className="px-3 py-2">{formatDate(run.finished_at)}</td>
-              <td className="max-w-[320px] truncate px-3 py-2 text-rose-600">{run.error_message || "--"}</td>
+              <td className={`px-3 py-2 font-semibold ${run.error_message ? "text-rose-600" : "text-slate-400"}`}>{run.error_message ? "Needs attention" : "--"}</td>
             </tr>
           ))}
           {!runs.length && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">No runs recorded.</td></tr>}
@@ -344,8 +336,16 @@ function RunTable({ runs }) {
 }
 
 export default function SystemManagementPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [domain, setDomain] = useState(() => searchParams.get("domain") || "feature-engine");
+  const pathDomain = {
+    "/admin/feature-engine": "feature-engine",
+    "/admin/raster-management": "raster",
+    "/admin/farm-registry": "farm-registry",
+    "/admin/analytics": "analytics",
+    "/admin/hot-stream": "hot-stream",
+  }[location.pathname];
+  const [domain, setDomain] = useState(() => pathDomain || searchParams.get("domain") || "feature-engine");
   const [feTab, setFeTab] = useState("overview");
 
   const [summary, setSummary] = useState({});
@@ -401,6 +401,10 @@ export default function SystemManagementPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (pathDomain) setDomain(pathDomain);
+  }, [pathDomain]);
+
   const activeProfiles = useMemo(() => profiles.filter((p) => p.is_active), [profiles]);
   const sourceByKey = useMemo(() => Object.fromEntries(sources.map((s) => [s.dataset_key, s])), [sources]);
   const runsFor = (types) => runs.filter((r) => types.includes(r.job_type));
@@ -423,41 +427,22 @@ export default function SystemManagementPage() {
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link to="/admin"><Button variant="outline" size="sm" className="rounded-xl"><ArrowLeft className="mr-1 h-4 w-4" />Admin</Button></Link>
-          <div>
+        <div>
             <h1 className="text-xl font-bold text-slate-800">System Management</h1>
             <p className="text-xs text-slate-500">Configure and monitor the platform without touching code.</p>
-          </div>
         </div>
         <Button variant="outline" size="sm" onClick={load} className="rounded-xl"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
       </div>
 
-      <div className="flex w-full flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-sm" role="tablist" aria-label="System management sections">
-        {DOMAINS.map((def) => {
-          const key = def[0];
-          const label = def[1];
-          const Icon = def[2];
-          return (
-            <button key={key} type="button" role="tab" aria-selected={domain === key} onClick={() => setDomain(key)} className={`flex min-w-[150px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${domain === key ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}>
-              <Icon className="h-4 w-4" />{label}
-            </button>
-          );
-        })}
-      </div>
-
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
-      {loading && <div className="rounded-xl border bg-white p-5 text-sm text-slate-500">Loading…</div>}
+      {loading && <div className="rounded-xl border bg-white p-5 text-sm text-slate-500"><LoadingState label="Loading system data…" /></div>}
 
       {/* ---------------- FEATURE ENGINE ---------------- */}
       {!loading && domain === "feature-engine" && (
         <>
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-            Refresh reloads telemetry only — it does <strong>not</strong> re-run satellite ingestion or feature engineering. Published profile/formula versions are immutable; clone a new version to change production behaviour.
-          </div>
-          <div className="flex w-full flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-sm" role="tablist" aria-label="Feature engine sections">
+          <div className="flex w-full flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" role="tablist" aria-label="Feature engine sections">
             {FE_TABS.map(([key, label]) => (
-              <button key={key} type="button" role="tab" aria-selected={feTab === key} onClick={() => setFeTab(key)} className={`min-w-[150px] flex-1 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${feTab === key ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}>{label}</button>
+              <button key={key} type="button" role="tab" aria-selected={feTab === key} onClick={() => setFeTab(key)} className={`min-w-[120px] flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${feTab === key ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}>{label}</button>
             ))}
           </div>
 
@@ -655,7 +640,7 @@ export default function SystemManagementPage() {
                   </div>
                 ))}
               </div>
-              {!metricContent.length && <div className="rounded-2xl border border-slate-100 bg-white p-5 text-sm text-slate-500">No content rows are available. Apply migration <code>20260910_01_crop_intelligence_metric_content.sql</code>.</div>}
+              {!metricContent.length && <div className="rounded-2xl border border-slate-100 bg-white p-5 text-sm text-slate-500">No metric content is available yet.</div>}
               {editingContent && <MetricContentEditor content={editingContent} onSaved={() => { setEditingContent(null); load(); }} />}
             </div>
           )}
@@ -691,7 +676,7 @@ export default function SystemManagementPage() {
           </div>
           <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Configuration</p>
-            <p className="mt-1">Per-adapter parameters (cloud thresholds, provider, collection ids, max scenes, resampling) are set on each ingestion request and in the dataset registry. A no-code editor for adapter defaults is a follow-up — the registry currently lives in <code>raster_processor_service/app/processors/</code> and <code>hot_stream_orchestrator_service/app/environment_schemas.py</code>.</p>
+            <p className="mt-1">Raster data sources and processing settings are managed by the platform and used automatically during analysis.</p>
           </div>
           <RunTable runs={runsFor(["environment_refresh", "farm_analysis_materialize", "sentinel2_history_backfill"])} />
         </div>
@@ -703,7 +688,7 @@ export default function SystemManagementPage() {
           <ServiceHealthStrip health={{ registry: health.registry, profile: health.profile, location: health.location, boundary: health.boundary }} />
           <div className="rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Crop identity for farms</p>
-            <p className="mt-1 text-xs">New farms select a crop at registration from the active published crop profiles below. Each farm's <code>crop_code</code> drives its feature profile, temporal windows and formula set.</p>
+            <p className="mt-1 text-xs">New farms use the active crop profiles below to keep registration and analysis settings consistent.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {activeProfiles.map((p) => <span key={p.crop_code} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{p.crop_name} · {p.profile_version}</span>)}
               {!activeProfiles.length && <span className="text-xs text-rose-600">No active crop profiles — publish one in the Feature Engine tab.</span>}
@@ -711,7 +696,7 @@ export default function SystemManagementPage() {
           </div>
           <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Configuration</p>
-            <p className="mt-1">H3 resolution, area limits and polygon vertex caps are in <code>shared/config/settings.py</code>. Location master data is managed in the district-boundary service. A no-code editor for these limits is a follow-up.</p>
+            <p className="mt-1">Farm boundaries and location data are managed automatically by the platform.</p>
           </div>
         </div>
       )}
@@ -728,7 +713,7 @@ export default function SystemManagementPage() {
           </div>
           <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Configuration</p>
-            <p className="mt-1">Analytics behaviour (usable-scene cloud ceiling, grid size, weighting) is derived from the feature-engine crop profiles and formula registry configured in the Feature Engine tab. Raw Sentinel-2 mosaic/trends thresholds live in <code>analytics_query_service/app/repository.py</code>.</p>
+            <p className="mt-1">Analytics uses the active crop profiles and published formulas to calculate reliable farm insights.</p>
           </div>
           <RunTable runs={runsFor(["feature_processing", "crop_formula_processing"])} />
         </div>
@@ -738,7 +723,7 @@ export default function SystemManagementPage() {
       {!loading && domain === "hot-stream" && (
         <div className="space-y-4">
           <ServiceHealthStrip health={{ orchestrator: health.orchestrator, raster: health.raster, lakehouse: health.lakehouse, stac: health.stac }} />
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
+          {false && <div className="rounded-2xl border border-slate-100 bg-white p-4 text-xs text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-800">Orchestration endpoints</p>
             <p className="mt-1 text-[11px]">Normal farmer traffic uses <code>POST /v1/hot-stream/farms/&#123;id&#125;/run-latest-analysis</code> and polls <code>GET /v1/hot-stream/farms/&#123;id&#125;/analysis-status</code>. The routes below are operator diagnostics/backfills.</p>
             <ul className="mt-2 list-inside list-disc space-y-1">
@@ -747,7 +732,7 @@ export default function SystemManagementPage() {
               <li><code>POST /v1/hot-stream/farms/&#123;id&#125;/environment-refresh</code> — operator dataset-stage retry; Sentinel-2 is included</li>
             </ul>
             <p className="mt-2">Scheduling cadence is operational config; a no-code scheduler UI is a follow-up.</p>
-          </div>
+          </div>}
           <RunTable runs={runsFor(["farm_latest_analysis", "farm_analysis_materialize", "environment_refresh", "sentinel2_history_backfill"])} />
         </div>
       )}

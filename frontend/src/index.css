@@ -319,6 +319,125 @@ h6 {
 /* Leaflet maps: clamp the map's internal z-index (panes ~400, controls ~800)
    into its own stacking context so tiles / markers / zoom buttons can never
    paint over the fixed navbar or bottom tab bar (both z-50). */
+.service-health-enter {
+  animation: service-health-rise 420ms ease-out both;
+}
+
+.loading-progress-bar {
+  animation: loading-progress 1.25s ease-in-out infinite;
+}
+
+div.divide-y.divide-slate-100 > p.p-8.text-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+div.divide-y.divide-slate-100 > p.p-8.text-center::before {
+  content: "";
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 3px solid #d1fae5;
+  border-top-color: #059669;
+  border-radius: 9999px;
+  animation: loading-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+
+@keyframes loading-progress {
+  0% { transform: translateX(-110%); }
+  50% { transform: translateX(80%); }
+  100% { transform: translateX(220%); }
+}
+
+.min-h-full article {
+  animation: service-health-rise 420ms ease-out both;
+  min-height: 182px;
+  padding: 1.25rem;
+  transition: transform 300ms ease, box-shadow 300ms ease;
+}
+
+.min-h-full article:nth-child(4n + 1) { background-color: #eff6ff; border-color: #bfdbfe; }
+.min-h-full article:nth-child(4n + 2) { background-color: #f5f3ff; border-color: #ddd6fe; }
+.min-h-full article:nth-child(4n + 3) { background-color: #fff7ed; border-color: #fed7aa; }
+.min-h-full article:nth-child(4n + 4) { background-color: #f0fdf4; border-color: #bbf7d0; }
+.min-h-full article:nth-child(1) { background-color: #eff6ff; border-color: #bfdbfe; }
+.min-h-full article:nth-child(2) { background-color: #f5f3ff; border-color: #ddd6fe; }
+.min-h-full article:nth-child(3) { background-color: #fff7ed; border-color: #fed7aa; }
+.min-h-full article:nth-child(4) { background-color: #f0fdf4; border-color: #bbf7d0; }
+.min-h-full article:nth-child(5) { background-color: #fdf2f8; border-color: #fbcfe8; }
+.min-h-full article:nth-child(6) { background-color: #ecfeff; border-color: #a5f3fc; }
+.min-h-full article:nth-child(7) { background-color: #fefce8; border-color: #fde68a; }
+.min-h-full article:nth-child(8) { background-color: #fff1f2; border-color: #fecdd3; }
+.min-h-full article:nth-child(9) { background-color: #f0fdfa; border-color: #99f6e4; }
+.min-h-full article:nth-child(10) { background-color: #f8fafc; border-color: #cbd5e1; }
+.min-h-full article:nth-child(1) > div:first-child > div:first-child { color: #2563eb; background-color: #dbeafe; }
+.min-h-full article:nth-child(2) > div:first-child > div:first-child { color: #7c3aed; background-color: #ede9fe; }
+.min-h-full article:nth-child(3) > div:first-child > div:first-child { color: #ea580c; background-color: #ffedd5; }
+.min-h-full article:nth-child(4) > div:first-child > div:first-child { color: #059669; background-color: #d1fae5; }
+.min-h-full article:nth-child(5) > div:first-child > div:first-child { color: #db2777; background-color: #fce7f3; }
+.min-h-full article:nth-child(6) > div:first-child > div:first-child { color: #0891b2; background-color: #cffafe; }
+.min-h-full article:nth-child(7) > div:first-child > div:first-child { color: #ca8a04; background-color: #fef9c3; }
+.min-h-full article:nth-child(8) > div:first-child > div:first-child { color: #e11d48; background-color: #ffe4e6; }
+.min-h-full article:nth-child(9) > div:first-child > div:first-child { color: #0f766e; background-color: #ccfbf1; }
+.min-h-full article:nth-child(10) > div:first-child > div:first-child { color: #475569; background-color: #e2e8f0; }
+
+.min-h-full article:hover {
+  transform: translateY(-4px);
+}
+
+.min-h-full header.bg-gradient-to-br {
+  background-image: none;
+  background-color: #ffffff;
+  width: 100%;
+  padding: 1.5rem;
+  margin-inline: 0;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 14px rgb(15 23 42 / 0.06);
+}
+
+.min-h-full header.bg-gradient-to-br .text-slate-300 {
+  color: #64748b;
+}
+
+.min-h-full header.bg-gradient-to-br h1 {
+  margin-top: 0.5rem;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+}
+
+.min-h-full header.bg-gradient-to-br h1 + p {
+  margin-top: 0.5rem;
+  line-height: 1.5rem;
+}
+
+.min-h-full header.bg-gradient-to-br > div {
+  gap: 1.25rem;
+}
+
+.min-h-full header.bg-gradient-to-br .bg-white\/10 {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.min-h-full header.bg-gradient-to-br .bg-white\/10 {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
+@keyframes service-health-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .leaflet-container {
   position: relative;
   z-index: 0;
