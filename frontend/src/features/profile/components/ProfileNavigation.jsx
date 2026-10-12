@@ -6,15 +6,27 @@ export function ProfileNavigation({
   onSelect,
 }) {
   return (
-    <aside className="mt-fade-up rounded-[1.5rem] border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
-      <p className="mt-font-mono px-3 pb-2.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+    <aside className="mt-fade-up rounded-[1.25rem] border border-[#E3E8DE] bg-white p-1.5 shadow-[0_10px_24px_rgba(43,61,35,0.06)]">
+      <p className="mt-font-mono px-2 pb-1 text-[8px] font-semibold uppercase tracking-[0.16em] text-[#91A087]">
         Sections
       </p>
-      <nav className="flex flex-col gap-1">
+      <nav className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:flex lg:flex-col lg:gap-0.5">
         {items.map((item) => {
           const Icon = item.icon;
           const active =
             activeSection === item.id;
+          const iconColor = {
+            account: "text-[#0F9F75]",
+            organisation: "text-[#0F9F75]",
+            identity: "text-[#7C3AED]",
+            contact: "text-[#2563EB]",
+            location: "text-[#E06B2D]",
+            role: "text-[#65A30D]",
+            operations: "text-[#CA8A04]",
+            consent: "text-[#DB2777]",
+            verification: "text-[#0891B2]",
+            export: "text-[#EA580C]",
+          }[item.id] || "text-[#4B6B3A]";
 
           return (
             <button
@@ -28,10 +40,10 @@ export function ProfileNavigation({
                   ? "true"
                   : undefined
               }
-              className={`relative flex w-full items-center gap-3 overflow-hidden rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition-all duration-200 ${
+              className={`relative flex min-w-0 w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-2 text-left text-xs font-semibold transition-all duration-200 ${
                 active
                   ? "text-white shadow-[0_8px_18px_rgba(5,150,105,0.22)]"
-                  : "text-slate-500 hover:translate-x-0.5 hover:bg-emerald-50/70 hover:text-emerald-800"
+                  : "text-[#687064] hover:translate-x-0.5 hover:bg-[#F2F7EE] hover:text-[#4B6B3A]"
               }`}
             >
               {active ? (
@@ -46,10 +58,10 @@ export function ProfileNavigation({
                   aria-hidden="true"
                 />
               ) : null}
-              <span className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-white/15" : "bg-slate-100"}`}>
-                <Icon className="h-4 w-4" />
+              <span className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${active ? "bg-white/15" : "bg-[#F1F5EF]"}`}>
+                <Icon className={`h-3.5 w-3.5 ${active ? "text-white" : iconColor}`} strokeWidth={2.1} />
               </span>
-              <span className="relative z-10 whitespace-nowrap">
+              <span className="relative z-10 truncate">
                 {item.label}
               </span>
             </button>

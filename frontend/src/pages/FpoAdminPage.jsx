@@ -501,13 +501,15 @@ export default function FpoAdminPage() {
         </Button>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex w-full gap-3 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-1.5" role="tablist" aria-label="FPO administration sections">
         {TABS.map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => setTab(value)}
-            className={`border-b-2 px-4 py-3 text-sm font-bold capitalize ${tab === value ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500"}`}
+            role="tab"
+            aria-selected={tab === value}
+            className={`min-w-[140px] flex-1 rounded-xl px-5 py-2.5 text-sm font-bold capitalize transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${tab === value ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-emerald-700"}`}
           >
             {value}
           </button>

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export default function MobileScreen({ onBack, title, subtitle, right, children, contentClassName }) {
   return (
     <div className="min-h-screen bg-[#F6F7F2]">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col bg-white lg:my-5 lg:min-h-[calc(100vh-2.5rem)] lg:overflow-hidden lg:rounded-[24px] lg:border lg:border-[#E3E8DE] lg:shadow-sm">
+      <div className="mx-auto flex min-h-screen w-full flex-col bg-white lg:min-h-screen lg:overflow-hidden">
         <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-[#E9E7DC] bg-white px-3 py-3 sm:px-5 lg:static">
           {onBack ? (
             <button

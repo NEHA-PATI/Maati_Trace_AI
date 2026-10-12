@@ -19,9 +19,12 @@ export default function LoginPage() {
 
   const redirectAfterLogin = useCallback((user) => {
     const requestedPath = location.state?.from?.pathname;
-    const destination = requestedPath && canAccess(user, requestedPath)
-      ? requestedPath
-      : getDefaultRouteForRole(user?.role);
+    const role = String(user?.role || "").toLowerCase();
+    const isAdminPath = requestedPath === "/admin" || requestedPath?.startsWith("/admin/");
+    const destination = role === "admin"
+      ? (isAdminPath ? requestedPath : getDefaultRouteForRole(role))
+      : (requestedPath || getDefaultRouteForRole(role));
+
     navigate(destination, { replace: true });
   }, [location.state, navigate]);
 

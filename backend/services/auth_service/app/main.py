@@ -190,6 +190,7 @@ def _auth_response(issued: IssuedSession) -> AuthResponse:
 
 def _set_session_cookies(response: Response, issued: IssuedSession) -> None:
     config = get_auth_config()
+    response.headers["Cache-Control"] = "no-store"
     max_age = config.refresh_token_expire_days * 86400
     response.set_cookie(
         key=config.refresh_cookie_name,

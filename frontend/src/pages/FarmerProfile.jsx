@@ -137,8 +137,8 @@ function SkeletonBlock({ className = "" }) {
 function FarmerDashboardSkeleton() {
   const { t } = useTranslation();
   return (
-    <div className="mt-surface mt-skeleton-enter mx-auto max-w-[1180px] space-y-4 p-4 md:p-6" role="status" aria-label={t("dashboard")}>
-      <span className="sr-only">{t("loadingDashboard")}</span>
+    <div className="mt-surface mt-skeleton-enter w-full space-y-4 p-4 md:p-6" role="status" aria-label="Loading dashboard">
+      <span className="sr-only">Loading your dashboard</span>
 
       <div className="space-y-2">
         <SkeletonBlock className="h-7 w-64 rounded-lg" />
@@ -349,7 +349,7 @@ export default function FarmerProfile() {
   }
 
   return (
-    <div className="mt-surface mx-auto max-w-[1180px] space-y-4 p-4 md:p-6">
+    <div className="mt-surface w-full space-y-4 p-4 md:p-6">
       <AnimatePresence>
         {showPhotoModal && (
           <PhotoModal onClose={() => setShowPhotoModal(false)} onSave={handleSavePhoto} />

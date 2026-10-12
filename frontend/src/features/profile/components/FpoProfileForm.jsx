@@ -189,7 +189,7 @@ export function FpoProfileForm({
       className="space-y-5"
     >
       {setupRequired ? (
-        <div className="mt-fade-up flex items-start gap-3 rounded-[1.25rem] border border-amber-200 bg-[color:var(--mt-harvest-soft)] p-4 text-sm leading-6 text-amber-950">
+        <div className="mt-fade-up flex items-start gap-3 rounded-2xl border border-[#EAD9B7] bg-[#FFF8E9] p-4 text-sm leading-6 text-[#5F4A27]">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             This account is not linked to an FPO profile yet. Fill the
@@ -342,12 +342,12 @@ export function FpoProfileForm({
             )}
           />
         </ProfileGrid>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#CFE2C4] bg-[#EEF6E9] p-4">
           <div>
-            <p className="font-bold text-emerald-950">Verification documents</p>
-            <p className="mt-1 text-sm text-emerald-800">Upload registration evidence and submit it for administrator review.</p>
+            <p className="font-bold text-[#33492A]">Verification documents</p>
+            <p className="mt-1 text-sm text-[#58734B]">Upload registration evidence and submit it for administrator review.</p>
           </div>
-          <Link to="/fpo/verification" className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800">Manage documents</Link>
+          <Link to="/fpo/verification" className="rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A]">Manage documents</Link>
         </div>
       </ProfileSection>
 

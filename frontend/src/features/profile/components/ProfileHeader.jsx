@@ -48,18 +48,18 @@ export function ProfileHeader({
         duration: 0.5,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.07)]"
+      className="relative overflow-hidden rounded-[1.5rem] border border-[#E3E8DE] bg-white shadow-[0_12px_32px_rgba(43,61,35,0.07)]"
     >
       <div
-        className="absolute inset-x-0 top-0 h-1 bg-emerald-500"
+        className="absolute inset-x-0 top-0 h-1 bg-[#7FA66A]"
         aria-hidden="true"
       />
       <div
-        className="absolute right-5 top-5 h-20 w-20 rounded-full bg-emerald-50"
+        className="absolute right-5 top-5 h-20 w-20 rounded-full bg-[#F0F7EB]"
         aria-hidden="true"
       />
       <div
-        className="absolute bottom-0 left-0 h-16 w-16 rounded-full bg-emerald-50"
+        className="absolute bottom-0 left-0 h-16 w-16 rounded-full bg-[#F0F7EB]"
         aria-hidden="true"
       />
       <div
@@ -67,12 +67,12 @@ export function ProfileHeader({
         aria-hidden="true"
       />
 
-      <div className="relative p-5 sm:p-6">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
+      <div className="relative p-4 sm:p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
             <div className="relative shrink-0">
               <div
-                className="absolute inset-0 rounded-2xl bg-emerald-400/30 blur-lg"
+                className="absolute inset-0 rounded-2xl bg-[#AFC99F]/35 blur-lg"
                 aria-hidden="true"
               />
               <Motion.div
@@ -84,25 +84,25 @@ export function ProfileHeader({
                   stiffness: 300,
                   damping: 22,
                 }}
-                className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.35rem] bg-emerald-500 shadow-[0_10px_22px_rgba(16,185,129,0.25)]"
+                className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#4B6B3A] shadow-[0_10px_22px_rgba(75,107,58,0.24)]"
               >
-                <AvatarIcon className="h-8 w-8 text-white" />
+                <AvatarIcon className="h-7 w-7 text-white" />
               </Motion.div>
             </div>
             <div>
-              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-700">
+              <p className="mt-font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-[#6E8A5D]">
                 Profile settings
               </p>
-              <h1 className="mt-font-display mt-0.5 text-[1.75rem] font-semibold leading-tight text-slate-950">
+              <h1 className="mt-font-display mt-0.5 text-[1.75rem] font-semibold leading-tight text-[#1D2117]">
                 {title}
               </h1>
-              <p className="mt-1 text-sm text-slate-500/90">
+              <p className="mt-1 text-sm text-[#687064]">
                 {subtitle}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 border-t border-emerald-900/10 pt-4 md:border-t-0 md:pt-0">
+          <div className="flex items-center gap-3 border-t border-[#E3E8DE] pt-4 md:border-t-0 md:pt-0">
             <GrowthRing
               value={completionPercentage}
             />

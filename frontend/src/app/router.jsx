@@ -60,6 +60,8 @@ import FpoVerificationWorkspacePage from "@/pages/FpoVerificationWorkspacePage";
 import FpoProvisioningRoute from "@/features/fpo/access/FpoProvisioningRoute";
 
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminFpoRegistryPage from "@/pages/AdminFpoRegistryPage";
+import AdminServiceHealthPage from "@/pages/AdminServiceHealthPage";
 import SystemManagementPage from "@/pages/SystemManagementPage";
 import HistoricalAcquisitionPage from "@/pages/HistoricalAcquisitionPage";
 import BulkUpload from "@/pages/BulkUpload";
@@ -108,6 +110,8 @@ export const router = createBrowserRouter(
             { path: "/admin", element: <AdminDashboard /> },
             { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
             { path: "/admin/fpo", element: <FpoAdminPage /> },
+            { path: "/admin/fpo-registry", element: <AdminFpoRegistryPage /> },
+            { path: "/admin/service-health", element: <AdminServiceHealthPage /> },
             {
               path: "/admin/fpo/verification",
               element: <FpoVerificationWorkspacePage />,

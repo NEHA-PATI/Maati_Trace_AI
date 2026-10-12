@@ -23,13 +23,7 @@ const ROLE_ITEMS = {
     { to: "/settings", labelKey: "profile", label: "Profile", end: true },
   ],
   [ROLES.ADMIN]: [
-    { to: "/admin", labelKey: "adminDashboard", label: "Admin Dashboard", end: true },
-    { to: "/admin/fpo-access", labelKey: "fpoAccess", label: "FPO Access" },
-    { to: "/admin/fpo", labelKey: "fpoManagement", label: "FPO Management" },
-    { to: "/admin/crop-observation", labelKey: "cropOperations", label: "Crop Operations" },
-    { to: "/admin/system", labelKey: "system", label: "System" },
-    { to: "/admin/data-acquisition", labelKey: "dataAcquisition", label: "Data Acquisition" },
-    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
+    { to: "/admin", label: "Admin Dashboard", end: true },
   ],
 };
 
@@ -38,7 +32,9 @@ export function getRoleNavigation(role) {
 }
 
 export function getAuthenticatedNavigation(role) {
-  return [...getRoleNavigation(role), ...PUBLIC_ITEMS];
+  return role === ROLES.ADMIN
+    ? getRoleNavigation(role)
+    : [...getRoleNavigation(role), ...PUBLIC_ITEMS];
 }
 
 export function isNavigationItemActive(pathname, item) {
