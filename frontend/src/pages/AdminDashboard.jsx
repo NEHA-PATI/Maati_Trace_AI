@@ -97,7 +97,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#f8faf9]">
       <main className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Admin Command Center</h1>
           <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-gray-400">Platform-wide overview - MaatiTrace Operations</p>
@@ -174,7 +174,7 @@ export default function AdminDashboard() {
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full min-w-[680px] text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80">
                     {["District", "FPOs", "Farmers", "Farms", "Area", "Coverage"].map((header) => (
