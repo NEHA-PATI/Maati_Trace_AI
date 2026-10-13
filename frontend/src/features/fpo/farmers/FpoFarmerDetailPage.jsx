@@ -24,8 +24,7 @@ export default function FpoFarmerDetailPage() {
 
   const item = farmer.data || {};
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
         <Link to="/fpo/farmers" className="text-sm font-medium text-emerald-700 hover:underline">
           ← Back to farmers
         </Link>
@@ -84,7 +83,6 @@ export default function FpoFarmerDetailPage() {
             <p className="mt-6 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">No farms are available for this active relationship.</p>
           )}
         </section>
-      </div>
     </div>
   );
 }

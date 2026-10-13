@@ -61,7 +61,7 @@
   --font-heading: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: 'Poppins', 'Noto Sans Oriya', ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
@@ -191,6 +191,13 @@ body {
   font-family: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Application-wide typography */
+html,
+body,
+#root {
+  font-family: 'Poppins', 'Noto Sans Oriya', 'Noto Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
 button,

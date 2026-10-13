@@ -143,14 +143,14 @@ export default function FpoImportsPage() {
             </p>
           </div>
         </section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-6">
-          <div className="flex flex-wrap items-end gap-4">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 md:p-6">
+          <div className="grid items-end gap-4 lg:grid-cols-[minmax(180px,0.7fr)_auto_minmax(280px,1.2fr)_auto]">
             <label className="text-sm font-bold text-slate-700">
               Import type
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="mt-2 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                className="mt-2 block h-12 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
               >
                 <option>FARMERS</option>
                 <option>FARMS</option>
@@ -166,23 +166,23 @@ export default function FpoImportsPage() {
                   ),
                 )
               }
-              className="rounded-xl border border-emerald-200 px-4 py-2.5 text-sm font-black text-emerald-800 hover:bg-emerald-50"
+              className="h-12 rounded-xl border border-emerald-200 px-5 text-sm font-black text-emerald-800 transition-colors hover:bg-emerald-50"
             >
               Download template
             </button>
-            <label className="text-sm font-bold text-slate-700">
-              CSV or XLSX file
+            <label className="min-w-0 text-sm font-bold text-slate-700">
+              <span className="flex items-center gap-2">CSV or XLSX file <span className="text-xs font-medium text-slate-400">(max 5,000 rows)</span></span>
               <input
                 type="file"
                 accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="mt-2 block max-w-xs text-sm"
+                className="mt-2 block h-12 w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm font-medium file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:font-bold file:text-emerald-800 hover:border-emerald-300"
               />
             </label>
             <button
               onClick={() => upload.mutate()}
               disabled={upload.isPending || !file}
-              className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-12 rounded-xl bg-emerald-700 px-5 text-sm font-black text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             >
               {upload.isPending ? "Validating…" : "Run dry validation"}
             </button>

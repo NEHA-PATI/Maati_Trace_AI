@@ -97,8 +97,8 @@ export default function FpoRelationshipsPage() {
       <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
     </header>
     {error ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div> : null}
-    <section className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Relationship status filters">
-      <div className="flex gap-2 overflow-x-auto">{tabs.map(([key, title]) => <button key={key} type="button" onClick={() => setTab(key)} className={`shrink-0 rounded-xl px-4 py-3 text-sm font-bold ${tab === key ? "bg-emerald-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{title}<span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${tab === key ? "bg-white/20" : "bg-slate-100"}`}>{counts[key] || 0}</span></button>)}</div>
+    <section className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm" aria-label="Relationship status filters">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">{tabs.map(([key, title]) => <button key={key} type="button" onClick={() => setTab(key)} className={`min-h-12 rounded-xl px-4 py-3 text-sm font-bold transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${tab === key ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}<span className={`ml-2 inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-xs transition-colors duration-200 ${tab === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>{counts[key] || 0}</span></button>)}</div>
     </section>
     {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading farm requests…</div> : visible.length ? <div className="space-y-4">{visible.map((item) => {
       const pending = item.status === "PENDING_FPO_ACCEPTANCE";
