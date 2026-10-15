@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft, Smartphone, Monitor } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import LoadingState from "@/components/ui/LoadingState";
 import { Input } from "@/components/ui/input";
 import {
   cloneConfiguration,
@@ -183,7 +184,7 @@ export default function CropConfigurationEditorPage() {
     }
   }
 
-  if (loading) return <div className="px-4 py-8 text-sm text-slate-400">Loading…</div>;
+  if (loading) return <LoadingState label="Loading configuration…" className="px-4 py-8 text-sm text-slate-400" />;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">

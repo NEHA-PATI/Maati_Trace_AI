@@ -205,7 +205,7 @@ export function ProfileSettingsPage() {
   };
 
   return (
-    <div className="mt-font-body min-h-screen bg-[#F6F7F2] px-4 py-6 text-[#1D2117] md:px-6 lg:py-8">
+    <div className={`mt-font-body min-h-screen px-4 py-6 md:px-6 lg:py-8 ${profileType === "fpo" ? "fpo-profile-theme bg-[#fafaf8] text-slate-900" : "bg-[#F6F7F2] text-[#1D2117]"}`}>
       <div className="mx-auto max-w-[1440px]">
         <div className="space-y-5">
           <button
@@ -228,8 +228,8 @@ export function ProfileSettingsPage() {
             }
           />
 
-          <div className="grid gap-4 lg:grid-cols-[190px_1fr]">
-            <div className="lg:sticky lg:top-20 lg:z-20 lg:self-start">
+          <div className={profileType === "fpo" ? "grid gap-4" : "grid gap-4 lg:grid-cols-[190px_1fr]"}>
+            {profileType !== "fpo" ? <div className="lg:sticky lg:top-20 lg:z-20 lg:self-start">
               <ProfileNavigation
                 items={nav}
                 activeSection={activeSection}
@@ -246,7 +246,7 @@ export function ProfileSettingsPage() {
                 completion percentage reflects a wider optional
                 profile-fill score.
               </div>
-            </div>
+            </div> : null}
 
             <main className="space-y-5">
               <ProfileMissingFields

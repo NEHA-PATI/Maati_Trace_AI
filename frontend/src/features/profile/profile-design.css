@@ -38,7 +38,7 @@
 }
 
 .mt-font-mono {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "Poppins", "Noto Sans Oriya", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.02em;
 }
 
@@ -208,6 +208,32 @@
   background: var(--mt-glass);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* Keep the FPO profile visually consistent with the dashboard shell. */
+.fpo-profile-theme [class*="border-[#E3E8DE]"],
+.fpo-profile-theme [class*="border-[#E9EDE5]"],
+.fpo-profile-theme [class*="border-[#CCD8C7]"] {
+  border-color: rgb(226 232 240) !important;
+}
+
+.fpo-profile-theme [class*="bg-[#F8FAF6]"],
+.fpo-profile-theme [class*="bg-[#F7FAF4]"],
+.fpo-profile-theme [class*="bg-[#F1F5EF]"],
+.fpo-profile-theme [class*="bg-[#F0F7EB]"] {
+  background-color: rgb(248 250 252) !important;
+}
+
+.fpo-profile-theme [class*="bg-[#4B6B3A]"],
+.fpo-profile-theme [class*="bg-[#7FA66A]"] {
+  background-color: rgb(5 150 105) !important;
+}
+
+.fpo-profile-theme [class*="text-[#1D2117]"],
+.fpo-profile-theme [class*="text-[#687064]"],
+.fpo-profile-theme [class*="text-[#7F8D79]"],
+.fpo-profile-theme [class*="text-[#8A9A84]"] {
+  color: rgb(51 65 85) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

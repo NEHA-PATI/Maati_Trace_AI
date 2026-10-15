@@ -88,18 +88,18 @@ export default function SystemMediaField({
   const isAudio = assetRole === "INSTRUCTION_AUDIO";
 
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white ${compact ? "p-2.5" : "p-3"}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           {isAudio ? <Music2 className="h-4 w-4 text-emerald-700" /> : <ImageIcon className="h-4 w-4 text-emerald-700" />}
           <div className="min-w-0">
-            <p className="truncate text-xs font-bold text-slate-700">{label}</p>
-            {asset ? <p className="truncate text-[11px] text-slate-400">{asset.storage_backend} · {asset.mime_type}</p> : <p className="text-[11px] text-amber-600">Not configured</p>}
+            <p className="truncate text-[13px] font-bold text-slate-700">{label}</p>
+            {asset && !compact ? <p className="truncate text-[11px] text-slate-400">{asset.storage_backend} · {asset.mime_type}</p> : null}
           </div>
         </div>
         {!readOnly ? (
           <div className="flex shrink-0 items-center gap-1">
-            <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border bg-white px-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
               {asset ? <RefreshCw className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}
               {busy ? "Working…" : asset ? "Replace" : "Upload"}
               <input type="file" accept={accept} className="hidden" disabled={busy} onChange={upload} />

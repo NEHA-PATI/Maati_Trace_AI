@@ -118,10 +118,15 @@ export const router = createBrowserRouter(
             },
             { path: "/admin/system", element: <SystemManagementPage /> },
             { path: "/admin/data-acquisition", element: <HistoricalAcquisitionPage /> },
-            {
-              path: "/admin/feature-processing",
-              element: <SystemManagementPage />,
-            },
+            // {
+            //   path: "/admin/feature-processing",
+            //   element: <SystemManagementPage />,
+            // },
+            { path: "/admin/feature-engine", element: <SystemManagementPage /> },
+            { path: "/admin/raster-management", element: <SystemManagementPage /> },
+            { path: "/admin/farm-registry", element: <SystemManagementPage /> },
+            { path: "/admin/analytics", element: <SystemManagementPage /> },
+            { path: "/admin/hot-stream", element: <SystemManagementPage /> },
           ],
         },
         {

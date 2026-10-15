@@ -123,6 +123,30 @@ async def historical_acquisition_proxy(
 
 
 @app.api_route(
+    "/api/lakehouse-inventory/{rest_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def lakehouse_inventory_proxy(
+    rest_path: str,
+    request: Request,
+    principal: dict[str, str] = Depends(require_roles("admin")),
+):
+    """Authorize inventory operations in Backend 1 before calling DB 2 service."""
+    try:
+        return await proxy_request(
+            prefix="lakehouse-inventory",
+            rest_path=rest_path,
+            request=request,
+            service_context=principal,
+        )
+    except GatewayProxyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "ML_INVENTORY_GATEWAY_ERROR", "message": str(exc)},
+        ) from exc
+
+
+@app.api_route(
     "/api/{prefix}/{rest_path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )
