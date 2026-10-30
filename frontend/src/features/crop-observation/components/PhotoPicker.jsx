@@ -70,7 +70,7 @@ export default function PhotoPicker({ value = [], onChange, locale, title, maxIm
           }
           return (
             <button key={`empty-${index}`} type="button" onClick={() => inputRef.current?.click()} disabled={busy} className="flex h-[84px] w-[84px] shrink-0 flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-[#E9E7DC] bg-[#F7F8F3] text-[11px] font-bold text-[#5B6055] active:scale-[0.98] disabled:opacity-60" aria-label={primary(STRINGS.addPhoto, locale)}>
-              {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <MediaCameraIcon className="h-6 w-6" />}
+              {busy ? <Loader2 className="h-6 w-6 animate-spin text-emerald-600" /> : <MediaCameraIcon className="h-6 w-6 text-sky-600" />}
               <span>{primary(STRINGS.addPhoto, locale)}</span>
             </button>
           );

@@ -75,6 +75,8 @@ export const STRINGS = {
   editToday: { en: "Edit today's update", or: "ଆଜିର ତଥ୍ୟ ବଦଳାନ୍ତୁ" },
 };
 
+STRINGS.submit = { en: "Submit", or: "Submit" };
+
 export const STATUS_STRINGS = {
   GOOD: { en: "Good", or: "ଭଲ ଅଛି" },
   SOME_PROBLEM: { en: "Some problem", or: "କିଛି ସମସ୍ୟା ଅଛି" },

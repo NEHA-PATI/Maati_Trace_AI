@@ -24,7 +24,7 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
             scope === "WHOLE_FARM" ? "border-[#4B6B3A] bg-[#E1F1D6]" : "border-[#E9E7DC] bg-white hover:border-[#C9D8BD]",
           )}
         >
-          <Sprout className="h-5 w-5 shrink-0 text-[#33492A]" />
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-[#EAF6E3]"><Sprout className="h-5 w-5 shrink-0 text-emerald-700" /></span>
           <Bilingual pair={STRINGS.wholeFarm} locale={locale} className="text-sm font-bold leading-tight text-[#1D2117]" />
         </button>
 
@@ -37,7 +37,7 @@ export default function ApplicationAreaField({ field, value, onChange, locale })
             scope === "SELECTED_AREA" ? "border-[#4B6B3A] bg-[#E1F1D6]" : "border-[#E9E7DC] bg-white hover:border-[#C9D8BD]",
           )}
         >
-          <MapPin className="h-5 w-5 shrink-0 text-[#33492A]" />
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-[#F0EAFE]"><MapPin className="h-5 w-5 shrink-0 text-violet-600" /></span>
           <Bilingual pair={STRINGS.selectedArea} locale={locale} className="text-sm font-bold leading-tight text-[#1D2117]" />
         </button>
       </div>

@@ -93,6 +93,43 @@ export const OPTION_ICONS = {
   OTHER: CircleHelp,
 };
 
+export const OPTION_ICON_COLORS = {
+  CHEMICAL_FERTILIZER: "text-amber-600",
+  ORGANIC: "text-emerald-600",
+  MICRONUTRIENT: "text-sky-600",
+  UREA: "text-violet-600",
+  DAP: "text-indigo-600",
+  NPK: "text-teal-600",
+  BROADCAST: "text-indigo-600",
+  SOIL: "text-amber-700",
+  FOLIAR: "text-emerald-600",
+  WHOLE_FARM: "text-emerald-700",
+  SELECTED_AREA: "text-violet-600",
+  SMALL_PART: "text-sky-600",
+  ABOUT_HALF: "text-amber-600",
+  MOST_OF_FARM: "text-orange-600",
+  MANUAL: "text-slate-600",
+  MECHANICAL: "text-blue-600",
+  HERBICIDE: "text-lime-700",
+  GOOD: "text-emerald-600",
+  AVERAGE: "text-amber-600",
+  POOR: "text-rose-600",
+  OWN_SAVED: "text-emerald-600",
+  MARKET_PURCHASED: "text-blue-600",
+  GOVT_SUPPLIED: "text-indigo-600",
+  STEM_BORER: "text-orange-600",
+  BROWN_PLANTHOPPER: "text-amber-700",
+  LEAF_FOLDER: "text-emerald-600",
+  BLAST: "text-rose-600",
+  BLIGHT: "text-orange-600",
+  SHEATH_BLIGHT: "text-amber-600",
+  NOT_SURE: "text-slate-500",
+  CARBOFURAN: "text-orange-600",
+  IMIDACLOPRID: "text-rose-600",
+  COPPER_FUNGICIDE: "text-cyan-700",
+  OTHER: "text-slate-500",
+};
+
 export function iconForPractice(code) {
   return PRACTICE_ICONS[code] || Leaf;
 }
@@ -103,6 +140,24 @@ export function iconForField(field) {
 
 export function iconForOption(optionCode, field) {
   return OPTION_ICONS[optionCode] || iconForField(field);
+}
+
+export function colorForOption(optionCode) {
+  return OPTION_ICON_COLORS[optionCode] || "text-[#5B6055]";
+}
+
+export function colorForField(fieldCode) {
+  return {
+    input_category: "text-emerald-700",
+    product_code: "text-indigo-600",
+    quantity: "text-violet-600",
+    application_method: "text-blue-600",
+    application_area: "text-rose-600",
+    pest_observed: "text-orange-600",
+    disease_observed: "text-emerald-600",
+    severity: "text-amber-600",
+    control_method: "text-cyan-700",
+  }[fieldCode] || "text-[#33492A]";
 }
 
 export const MediaCameraIcon = Camera;
