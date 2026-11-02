@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Loader2, Mic, Play } from "lucide-react";
 
 import { fetchAuthedMediaBlob } from "@/features/crop-observation/api/cropObservationApi";
-import { primary, STRINGS } from "@/features/crop-observation/i18n";
+import { formatDate as formatLocalizedDate, primary, STRINGS } from "@/features/crop-observation/i18n";
 import { cn } from "@/lib/utils";
 
 function formatDate(value, locale) {
   try {
-    return new Date(value).toLocaleDateString(locale === "or-IN" ? "or-IN" : "en-IN", {
+    return formatLocalizedDate(value, locale, {
       day: "numeric",
       month: "short",
     });

@@ -4,12 +4,14 @@ import { Bell, LogOut, Menu, X } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
 import { getAuthenticatedNavigation, PUBLIC_ITEMS, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
-import { LanguageToggle } from "@/features/language";
+import { LanguageToggle, useLanguage } from "@/features/language";
+import { languageString } from "@/features/language/language";
 import LogoutConfirmModal from "@/features/auth/components/LogoutConfirmModal";
 
 const GET_STARTED_ITEM = {
   to: "/register",
   label: "Get Started",
+  labelKey: "getStarted",
 };
 
 function MaatiLogo() {
@@ -30,6 +32,7 @@ export default function PublicNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, initialising, logout, user } = useAuth();
+  const { locale } = useLanguage();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -73,7 +76,7 @@ export default function PublicNav() {
                     : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-paper-warm)]"
                 }`}
               >
-                {item.label}
+                {languageString(item.labelKey, locale)}
               </Link>
             );
           })}
@@ -85,8 +88,8 @@ export default function PublicNav() {
             <>
               <Link
                 to="/notifications"
-                aria-label="Notifications"
-                title="Notifications"
+                aria-label={languageString("notifications", locale)}
+                title={languageString("notifications", locale)}
                 className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors ${
                   location.pathname === "/notifications"
                     ? "border-[var(--mt-leaf)] bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"
@@ -125,7 +128,7 @@ export default function PublicNav() {
                 to={GET_STARTED_ITEM.to}
                 className="hidden h-10 items-center whitespace-nowrap rounded-full bg-[var(--mt-leaf)] px-3 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-leaf-deep)] md:flex md:h-11 md:px-4"
               >
-                {GET_STARTED_ITEM.label}
+                {languageString(GET_STARTED_ITEM.labelKey, locale)}
               </Link>
               <button type="button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mt-line)] bg-white text-[var(--mt-ink-soft)] md:hidden">
                 {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -146,7 +149,7 @@ export default function PublicNav() {
         <nav className="grid gap-1.5" aria-label="Mobile menu">
           {navItems.map((item) => (
             <Link key={item.to} to={item.to} onClick={() => setMobileMenuOpen(false)} className={`rounded-xl px-4 py-3 text-sm font-bold transition-colors ${isNavigationItemActive(location.pathname, item) ? "bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]" : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-leaf-tint)] hover:text-[var(--mt-leaf-deep)]"}`}>
-              {item.label}
+              {languageString(item.labelKey, locale)}
             </Link>
           ))}
           <div className="my-1 border-t border-[var(--mt-line)]" />

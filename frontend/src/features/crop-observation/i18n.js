@@ -73,6 +73,14 @@ export const STRINGS = {
   voice: { en: "Voice", or: "କଥା" },
   crop: { en: "Crop", or: "ଫସଲ" },
   editToday: { en: "Edit today's update", or: "ଆଜିର ତଥ୍ୟ ବଦଳାନ୍ତୁ" },
+  cropJourney: { en: "Your crop health journey starts here.", or: "ଆପଣଙ୍କ ଫସଲ ସ୍ୱାସ୍ଥ୍ୟ ଯାତ୍ରା ଏଠାରୁ ଆରମ୍ଭ ହୁଏ।" },
+  fieldView: { en: "Field view", or: "ଜମି ଦୃଶ୍ୟ" },
+  perennialCrop: { en: "Perennial crop", or: "ବହୁବର୍ଷୀୟ ଫସଲ" },
+  seasonalCrop: { en: "Seasonal crop", or: "ଋତୁକାଳୀନ ଫସଲ" },
+  cropNotReady: { en: "is not ready for crop updates yet.", or: "ପାଇଁ ଏବେ ଫସଲ ତଥ୍ୟ ଦେବା ବ୍ୟବସ୍ଥା ପ୍ରସ୍ତୁତ ନାହିଁ।" },
+  couldNotLoadCrops: { en: "Could not load crops.", or: "ଫସଲ ତାଲିକା ଖୋଲିହେଲା ନାହିଁ।" },
+  couldNotLoadHistory: { en: "Could not load history.", or: "ପୂର୍ବ ତଥ୍ୟ ଖୋଲିହେଲା ନାହିଁ।" },
+  couldNotLoadMore: { en: "Could not load more.", or: "ଆହୁରି ତଥ୍ୟ ଖୋଲିହେଲା ନାହିଁ।" },
 };
 
 STRINGS.submit = { en: "Submit", or: "Submit" };
@@ -121,4 +129,16 @@ export function humanizeCode(code) {
   return String(code || "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Keep digits in the Latin 0-9 form in both language modes.
+export function formatDate(value, locale, options) {
+  return new Date(value).toLocaleDateString(
+    locale === LOCALES.OR ? "or-IN-u-nu-latn" : "en-IN-u-nu-latn",
+    options,
+  );
+}
+
+export function formatNumber(value, options) {
+  return new Intl.NumberFormat("en-IN-u-nu-latn", options).format(value);
 }

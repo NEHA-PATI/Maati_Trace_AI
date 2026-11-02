@@ -55,6 +55,18 @@ export const LANGUAGE_STRINGS = Object.freeze({
   ourMethod: { en: "Our Method", or: "ଆମ ପଦ୍ଧତି" },
   useCases: { en: "Use Cases", or: "ବ୍ୟବହାର କ୍ଷେତ୍ର" },
   plans: { en: "Plans", or: "ଯୋଜନା" },
+  dashboard: { en: "Dashboard", or: "ଡ୍ୟାସବୋର୍ଡ" },
+  myCrop: { en: "My Crop", or: "ମୋ ଫସଲ" },
+  fpos: { en: "FPOs", or: "ଏଫପିଓ" },
+  profile: { en: "Profile", or: "ପ୍ରୋଫାଇଲ" },
+  register: { en: "Register", or: "ପଞ୍ଜୀକରଣ" },
+  fpoWorkspace: { en: "FPO Workspace", or: "ଏଫପିଓ କାର୍ଯ୍ୟକ୍ଷେତ୍ର" },
+  farmers: { en: "Farmers", or: "ଚାଷୀ" },
+  monitoring: { en: "Monitoring", or: "ନିରୀକ୍ଷଣ" },
+  reports: { en: "Reports", or: "ରିପୋର୍ଟ" },
+  adminDashboard: { en: "Admin Dashboard", or: "ଆଡମିନ ଡ୍ୟାସବୋର୍ଡ" },
+  login: { en: "Login", or: "ଲଗଇନ" },
+  getStarted: { en: "Get Started", or: "ଆରମ୍ଭ କରନ୍ତୁ" },
 });
 
 export function languageString(key, locale) {

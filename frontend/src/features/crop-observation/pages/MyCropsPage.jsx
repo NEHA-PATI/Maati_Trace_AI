@@ -85,7 +85,7 @@ export default function MyCropsPage() {
             localizedError(
               err,
               locale,
-              "Could not load crops.",
+              primary(STRINGS.couldNotLoadCrops, locale),
               "ଫସଲ ତାଲିକା ଖୋଲିହେଲା ନାହିଁ।",
             ),
           );
@@ -116,7 +116,7 @@ export default function MyCropsPage() {
           localizedError(
             err,
             locale,
-            `${crop.name} is not ready for crop updates yet.`,
+            `${crop.name} ${primary(STRINGS.cropNotReady, locale)}`,
             `${crop.name} ପାଇଁ ଏବେ ତଥ୍ୟ ଦେବା ବ୍ୟବସ୍ଥା ପ୍ରସ୍ତୁତ ନାହିଁ।`,
           ),
         );
@@ -136,7 +136,7 @@ export default function MyCropsPage() {
             <h1 className="mt-1 truncate text-[25px] font-black tracking-[-0.03em] text-[#1D2117] sm:text-4xl">
               {primary(STRINGS.hello, locale)}{farmerName ? `, ${farmerName}` : ""}
             </h1>
-            <p className="mt-1 hidden text-xs font-medium text-[#687A60] sm:block">Your crop health journey starts here.</p>
+            <p className="mt-1 hidden text-xs font-medium text-[#687A60] sm:block">{primary(STRINGS.cropJourney, locale)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <LanguageToggle locale={locale} setLocale={setLocale} />
@@ -149,7 +149,7 @@ export default function MyCropsPage() {
         <section className="mt-7">
           <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-[#E0E8DB] bg-white/70 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
             <div>
-              <div className="flex items-center gap-2"><p className="text-xl font-black text-[#1D2117]">{primary(STRINGS.myCrops, locale)}</p><span className="rounded-full bg-[#E1F1D6] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#426333]">Field view</span></div>
+              <div className="flex items-center gap-2"><p className="text-xl font-black text-[#1D2117]">{primary(STRINGS.myCrops, locale)}</p><span className="rounded-full bg-[#E1F1D6] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#426333]">{primary(STRINGS.fieldView, locale)}</span></div>
               <p className="mt-1 text-sm font-medium text-[#5B6055]">{primary(STRINGS.chooseCrop, locale)}</p>
             </div>
             <div className="flex items-center justify-center gap-2 rounded-xl bg-[#F3F6EF] p-1 sm:justify-end">
