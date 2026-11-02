@@ -175,7 +175,10 @@ export const router = createBrowserRouter(
                   element: <Navigate to="/fpo/overview" replace />,
                 },
                 { path: "/fpo/farmers", element: <FpoFarmerDirectoryPage /> },
-                { path: "/fpo/farms", element: <FpoMonitoringPage /> },
+                {
+                  path: "/fpo/farms",
+                  element: <Navigate to="/fpo/monitoring" replace />,
+                },
                 {
                   path: "/fpo/farmers/:farmerId",
                   element: <FpoFarmerDetailPage />,

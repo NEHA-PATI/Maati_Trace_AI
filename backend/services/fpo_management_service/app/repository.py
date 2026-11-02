@@ -1349,6 +1349,11 @@ def resolve_fpo_entitlements(conn: Connection, *, user_id: UUID | str) -> dict[s
         for row in rows
     }
     for feature in features.values():
+        configuration = feature["configuration"]
+        if isinstance(configuration, dict) and (
+            configuration.get("enabled") is False or configuration.get("emergency_disable") is True
+        ):
+            feature["enabled"] = False
         feature["dependencies_satisfied"] = all(features.get(dep, {}).get("enabled", False) for dep in feature["dependencies"])
         if feature["source"] == "class":
             feature["source"] = f"CLASS_{class_code}_VERSION_{version}"
@@ -1448,7 +1453,7 @@ def assign_fpo_class(conn: Connection, *, fpo_id: UUID | str, class_code: str, a
         action="FPO_CLASS_ASSIGNED",
         target_type="fpo_class_assignment",
         target_id=row["assignment_id"],
-        metadata={"class_code": class_code, "configuration_version": 1},
+        metadata={"class_code": class_code, "configuration_version": row["configuration_version"]},
     )
     return dict(row)
 

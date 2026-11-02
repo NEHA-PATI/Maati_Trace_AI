@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Trash2, X } from "lucide-react";
+import { Loader2, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import PreviousEntryRow from "@/features/crop-observation/components/PreviousEnt
 import VoiceRecorder from "@/features/crop-observation/components/VoiceRecorder";
 import { STRINGS, primary } from "@/features/crop-observation/i18n";
 import DynamicField from "./DynamicField";
-import { iconForField } from "./fieldIcons";
+import { colorForField, iconForField } from "./fieldIcons";
 
 function newClientEntryId() {
   return crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random()}`;
@@ -52,6 +52,7 @@ export default function PracticeSheet({
   const practiceMax = mediaConfig.practice_evidence?.max_images || 2;
   const voiceEnabled = mediaConfig.voice_note?.enabled ?? true;
   const voiceMaxSeconds = mediaConfig.voice_note?.max_seconds || 60;
+  const loadingData = history === null && !historyError;
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +86,8 @@ export default function PracticeSheet({
     setAnswers((prev) => ({ ...prev, [fieldCode]: value }));
   }
 
-  async function handleSave() {
+  async function handleSave(event) {
+    event?.preventDefault();
     setSaving(true);
     setFormError("");
     setFieldErrors({});
@@ -149,10 +151,11 @@ export default function PracticeSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 animate-in fade-in lg:items-center lg:justify-center lg:p-6" onClick={onClose}>
-      <div
-        className="flex max-h-[88vh] w-full flex-col rounded-t-[22px] bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom-4 duration-200 lg:max-w-[780px] lg:rounded-[24px] lg:pb-0"
+    <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/40 animate-in fade-in lg:items-center lg:justify-center lg:p-6" onClick={onClose}>
+      <form
+        className="relative flex h-[88vh] max-h-[88vh] min-h-0 w-full flex-col rounded-t-[22px] bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom-4 duration-200 lg:h-auto lg:max-w-[780px] lg:rounded-[24px] lg:pb-0"
         onClick={(event) => event.stopPropagation()}
+        onSubmit={handleSave}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-[#E9E7DC]" />
         <div className="flex items-center justify-between border-b border-[#E9E7DC] px-4 py-3">
@@ -167,7 +170,7 @@ export default function PracticeSheet({
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto px-4 pb-32 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {practice.guide_image_url ? <img src={systemMediaUrl(practice.guide_image_url)} alt="" className="w-full rounded-2xl object-cover" /> : null}
           {formError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -176,7 +179,17 @@ export default function PracticeSheet({
           ) : null}
 
           {history === null ? (
-            !historyError ? <div className="h-16 animate-pulse rounded-xl bg-[#F7F8F3]" /> : null
+            !historyError ? (
+              <div
+                className="flex h-[68px] items-center justify-center gap-2 rounded-xl border border-[#E3E8DE] bg-gradient-to-r from-[#F7F8F3] via-[#EEF5E9] to-[#F7F8F3] px-3 text-sm font-semibold text-[#5B6055] animate-pulse"
+                role="status"
+                aria-live="polite"
+                aria-label="Loading previous entries"
+              >
+                <Loader2 className="h-4 w-4 animate-spin text-[#4B6B3A]" />
+                <span>Loading previous entries…</span>
+              </div>
+            ) : null
           ) : history.length > 0 ? (
             <section>
               <div className="mb-2 text-sm font-bold text-[#5B6055]">
@@ -206,10 +219,10 @@ export default function PracticeSheet({
           {practice.fields.map((field) => {
             const FieldIcon = iconForField(field);
             return (
-              <div key={field.field_code} className="space-y-2">
+              <div key={field.field_code} className="min-w-0 space-y-2">
                 <label className="flex items-center gap-2 text-[15px] font-bold text-[#1D2117]">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#E1F1D6] text-[#33492A]">
-                    <FieldIcon className="h-5 w-5" />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#E1F1D6]">
+                    <FieldIcon className={`h-5 w-5 ${colorForField(field.field_code)}`} />
                   </span>
                   <span className="min-w-0 flex-1">
                     {field.label}
@@ -262,13 +275,27 @@ export default function PracticeSheet({
           </div>
         </div>
 
-        <div className="sticky bottom-0 border-t border-[#E9E7DC] bg-white px-4 py-3">
+        <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-[#E9E7DC] bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           {uploadStage ? <p className="mb-2 text-center text-xs text-[#5B6055]">{uploadStage}</p> : null}
-          <Button className="h-[52px] w-full rounded-[14px] bg-[#4B6B3A] text-base font-bold hover:bg-[#33492A]" onClick={handleSave} disabled={saving}>
-            {saving ? primary(STRINGS.saving, locale) : primary(STRINGS.save, locale)}
+          <Button type="submit" className="h-[52px] w-full rounded-[14px] bg-[#4B6B3A] text-base font-bold hover:bg-[#33492A]" disabled={saving || loadingData}>
+            {saving ? primary(STRINGS.saving, locale) : primary(STRINGS.submit, locale)}
           </Button>
         </div>
-      </div>
+
+        {loadingData ? (
+          <div
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-t-[22px] bg-white/65 text-center backdrop-blur-sm lg:rounded-[24px]"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading management form"
+          >
+            <span className="grid h-14 w-14 place-items-center rounded-full bg-[#E1F1D6] text-[#4B6B3A] shadow-sm">
+              <Loader2 className="h-7 w-7 animate-spin" />
+            </span>
+            <span className="text-sm font-bold text-[#33492A]">Loading management form…</span>
+          </div>
+        ) : null}
+      </form>
     </div>
   );
 }

@@ -1,22 +1,119 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, MapPinned, TrendingUp, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, MapPinned } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import FpoFeatureGate from "@/features/fpo/access/FpoFeatureGate";
 import { getFpoDashboardReport } from "@/features/fpo/api/fpoDashboardApi";
 import { getFpoFarmMonitoring } from "@/features/fpo/api/fpoFarmerApi";
-import { aggregateFarms, statusLabel } from "./fpoPortfolioUtils";
 
-function Metric({ label, value, icon: Icon, tone = "text-emerald-700" }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-400">{label}</p>{Icon && <Icon className={`h-4 w-4 ${tone}`} />}</div><p className="mt-2 text-3xl font-black text-slate-950">{value ?? 0}</p></div>; }
+const EMPTY_FARMS = [];
+
+function Metric({ label, value, icon: Icon }) {
+  const MetricIcon = Icon;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-black uppercase tracking-wider text-slate-400">{label}</p>
+        <MetricIcon className="h-4 w-4 text-emerald-700" />
+      </div>
+      <p className="mt-2 text-3xl font-black text-slate-950">{value ?? "—"}</p>
+    </div>
+  );
+}
 
 export default function FpoDashboardPage() {
-  const report = useQuery({ queryKey: ["fpo-portfolio-report"], queryFn: getFpoDashboardReport, staleTime: 30000 });
-  const farmsQuery = useQuery({ queryKey: ["fpo-overview-farms"], queryFn: () => getFpoFarmMonitoring(), staleTime: 30000 });
-  const farms = farmsQuery.data?.items || [];
-  const districts = useMemo(() => aggregateFarms(farms, (farm) => farm.district_name).slice(0, 8), [farms]);
-  const statusCounts = useMemo(() => farms.reduce((acc, farm) => { const status = farm.overall_status || "NO_DATA"; acc[status] = (acc[status] || 0) + 1; return acc; }, {}), [farms]);
-  const critical = farms.filter((farm) => farm.overall_status === "CRITICAL"); const attention = farms.filter((farm) => farm.overall_status === "NEEDS_ATTENTION"); const alerts = farms.reduce((sum, farm) => sum + Number(farm.open_alert_count || 0), 0); const area = farms.reduce((sum, farm) => sum + Number(farm.area_acres || 0), 0);
-  const freshness = report.data?.data_freshness?.data_through || farms.map((farm) => farm.latest_observation_date || farm.latest_analysis_date).filter(Boolean).sort().at(-1);
-  return <FpoFeatureGate feature="BASIC_REPORTS" fallback={<div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">Portfolio overview is not enabled for this organization.</div>}><div className="space-y-6 pb-10"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">FPO portfolio</p><h1 className="mt-2 text-3xl font-black text-slate-950">Overview</h1><p className="mt-1 text-sm text-slate-500">A decision view across your districts, blocks, villages, crops, and farms.</p></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Data through {freshness ? new Date(freshness).toLocaleDateString("en-IN") : "not available"}</span></header><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6"><Metric label="Active farmers" value={report.data?.portfolio?.active_farmer_count ?? "—"} icon={CheckCircle2} /><Metric label="Active farms" value={farms.length || report.data?.portfolio?.active_farm_count} icon={CheckCircle2} /><Metric label="Area covered" value={`${area.toFixed(1)} ac`} icon={MapPinned} /><Metric label="Critical farms" value={critical.length} icon={XCircle} tone="text-rose-700" /><Metric label="Needs attention" value={attention.length} icon={AlertTriangle} tone="text-orange-700" /><Metric label="Open alerts" value={alerts} icon={Clock3} tone="text-amber-700" /></section><section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]"><article className="rounded-2xl border border-slate-200 bg-white p-6"><div className="flex items-center justify-between"><div><h2 className="font-black text-slate-950">Farm status</h2><p className="mt-1 text-sm text-slate-500">Click a category to investigate it in Monitoring.</p></div><Link to="/fpo/monitoring" className="text-sm font-bold text-emerald-700">View all <ArrowRight className="inline h-4 w-4" /></Link></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">{["NORMAL", "WATCH", "NEEDS_ATTENTION", "CRITICAL", "NO_DATA"].map((status) => <Link key={status} to={`/fpo/monitoring?status=${status}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3 hover:border-emerald-200"><p className="text-[10px] font-black uppercase text-slate-400">{statusLabel(status)}</p><p className="mt-1 text-2xl font-black text-slate-900">{statusCounts[status] || 0}</p></Link>)}</div></article><article className="rounded-2xl border border-slate-200 bg-white p-6"><div className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-emerald-700" /><h2 className="font-black text-slate-950">Priority locations</h2></div><div className="mt-4 space-y-3">{districts.slice(0, 5).map((row) => <div key={row.name} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2"><div><p className="font-bold text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{row.farms} farms · {row.alerts} alerts</p></div><span className="font-black text-orange-700">{row.concern} concern</span></div>)}{!districts.length && <p className="text-sm text-slate-500">No area data available.</p>}</div></article></section><section className="grid gap-6 lg:grid-cols-2"><article className="rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-black text-slate-950">Concern by district</h2><div className="mt-5 h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={districts} margin={{ left: 0, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="concern" name="Attention/critical farms" fill="#f97316" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></article><article className="rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-black text-slate-950">Immediate follow-up</h2><div className="mt-4 space-y-3">{[...critical, ...attention].slice(0, 5).map((farm) => <Link key={farm.farm_id} to={`/fpo/farmers/${farm.farmer_id}/farms/${farm.farm_id}/intelligence`} className="flex items-center justify-between rounded-xl border border-slate-100 p-3 hover:bg-orange-50"><div><p className="font-bold text-slate-900">{farm.farm_name || "Unnamed farm"}</p><p className="text-xs text-slate-500">{farm.district_name || "Location unavailable"} · {farm.crop_name || "Crop unavailable"}</p></div><span className="text-xs font-black text-emerald-700">View farm →</span></Link>)}{!critical.length && !attention.length && <p className="text-sm text-slate-500">No farms currently require priority follow-up.</p>}</div></article></section></div></FpoFeatureGate>;
+  const report = useQuery({
+    queryKey: ["fpo-portfolio-report"],
+    queryFn: getFpoDashboardReport,
+    staleTime: 30000,
+  });
+  const farmsQuery = useQuery({
+    queryKey: ["fpo-overview-farms"],
+    queryFn: () => getFpoFarmMonitoring(),
+    staleTime: 30000,
+  });
+  const farms = farmsQuery.data?.items || EMPTY_FARMS;
+  const priorityFarms = useMemo(
+    () => farms
+      .filter((farm) => ["CRITICAL", "NEEDS_ATTENTION"].includes(farm.overall_status))
+      .slice(0, 5),
+    [farms],
+  );
+  const area = farms.reduce((sum, farm) => sum + Number(farm.area_acres || 0), 0);
+  const freshness = report.data?.data_freshness?.data_through
+    || farms.map((farm) => farm.latest_observation_date || farm.latest_analysis_date).filter(Boolean).sort().at(-1);
+  const activeFarmCount = farmsQuery.isSuccess
+    ? farms.length
+    : report.data?.portfolio?.active_farm_count;
+
+  return (
+    <FpoFeatureGate
+      feature="BASIC_REPORTS"
+      fallback={<div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">Portfolio overview is not enabled for this organization.</div>}
+    >
+      <div className="space-y-6 pb-10">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">FPO portfolio</p>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">Overview</h1>
+            <p className="mt-1 text-sm text-slate-500">A concise snapshot of your farmer and farm portfolio.</p>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+            Data through {freshness ? new Date(freshness).toLocaleDateString("en-IN") : "not available"}
+          </span>
+        </header>
+
+        <section aria-label="Portfolio summary" className="grid gap-4 sm:grid-cols-3">
+          <Metric label="Active farmers" value={report.data?.portfolio?.active_farmer_count} icon={CheckCircle2} />
+          <Metric label="Active farms" value={activeFarmCount} icon={MapPinned} />
+          <Metric label="Area covered" value={farmsQuery.isSuccess ? `${area.toFixed(1)} ac` : "—"} icon={MapPinned} />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-black text-slate-950">Farms needing attention</h2>
+              <p className="mt-1 text-sm text-slate-500">Start with the highest-priority farm follow-ups.</p>
+            </div>
+            <Link to="/fpo/monitoring" className="text-sm font-bold text-emerald-700">
+              Open monitoring <ArrowRight className="inline h-4 w-4" />
+            </Link>
+          </div>
+
+          {farmsQuery.isLoading ? <p className="mt-4 text-sm text-slate-500">Loading priority farms…</p> : null}
+          {farmsQuery.isError ? (
+            <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">
+              Unable to load priority farms. Open monitoring to retry.
+            </p>
+          ) : null}
+          {farmsQuery.isSuccess && priorityFarms.length ? (
+            <div className="mt-4 space-y-2">
+              {priorityFarms.map((farm) => (
+                <Link
+                  key={farm.farm_id}
+                  to={`/fpo/farmers/${farm.farmer_id}/farms/${farm.farm_id}/intelligence`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 hover:bg-orange-50"
+                >
+                  <div>
+                    <p className="font-bold text-slate-900">{farm.farm_name || "Unnamed farm"}</p>
+                    <p className="text-xs text-slate-500">
+                      {farm.district_name || "Location unavailable"} · {farm.crop_name || "Crop unavailable"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-black uppercase text-orange-700">
+                    {String(farm.overall_status).replaceAll("_", " ")}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {farmsQuery.isSuccess && !priorityFarms.length ? (
+            <p className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
+              No farms currently require priority follow-up.
+            </p>
+          ) : null}
+        </section>
+      </div>
+    </FpoFeatureGate>
+  );
 }

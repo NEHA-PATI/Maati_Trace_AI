@@ -147,6 +147,30 @@ async def lakehouse_inventory_proxy(
 
 
 @app.api_route(
+    "/api/scientific-standardization/{rest_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def scientific_standardization_proxy(
+    rest_path: str,
+    request: Request,
+    principal: dict[str, str] = Depends(require_roles("admin")),
+):
+    """Authorize scientific processing operations in Backend 1."""
+    try:
+        return await proxy_request(
+            prefix="scientific-standardization",
+            rest_path=rest_path,
+            request=request,
+            service_context=principal,
+        )
+    except GatewayProxyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "ML_SCIENCE_GATEWAY_ERROR", "message": str(exc)},
+        ) from exc
+
+
+@app.api_route(
     "/api/{prefix}/{rest_path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )

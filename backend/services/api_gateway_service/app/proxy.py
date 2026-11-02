@@ -39,6 +39,7 @@ ROUTE_TARGETS = {
     "crop-observations": settings.crop_observation_service_url,
     "historical-acquisition": settings.ml_acquisition_service_url,
     "lakehouse-inventory": settings.ml_acquisition_service_url,
+    "scientific-standardization": settings.ml_acquisition_service_url,
 }
 
 HEALTH_ROUTE_TARGETS = {
@@ -57,6 +58,7 @@ HEALTH_ROUTE_TARGETS = {
     "crop-observations": settings.crop_observation_service_url,
     "historical-acquisition": settings.ml_acquisition_service_url,
     "lakehouse-inventory": settings.ml_acquisition_service_url,
+    "scientific-standardization": settings.ml_acquisition_service_url,
 }
 
 
