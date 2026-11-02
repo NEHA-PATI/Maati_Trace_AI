@@ -22,7 +22,7 @@ function initialLocale(user) {
   return readStoredLocale()
     || normalizeLocale(user?.preferred_language)
     || browserLocale()
-    || LOCALES.OR;
+    || LOCALES.EN;
 }
 
 export function LanguageProvider({ children }) {
@@ -35,9 +35,20 @@ export function LanguageProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const normalized = normalizeLocale(locale) || LOCALES.OR;
-    document.documentElement.lang = normalized === LOCALES.OR ? "or" : "en-IN";
+    const normalized = normalizeLocale(locale) || LOCALES.EN;
+    document.documentElement.lang = normalized;
     document.documentElement.dir = "ltr";
+    document.documentElement.dataset.locale = normalized;
+  }, [locale]);
+
+  useEffect(() => {
+    function handleStorage(event) {
+      if (event.key !== LANGUAGE_STORAGE_KEY && event.key !== LEGACY_LANGUAGE_STORAGE_KEY) return;
+      const next = normalizeLocale(event.newValue);
+      if (next && next !== locale) setLocaleState(next);
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, [locale]);
 
   useEffect(() => {
@@ -61,12 +72,19 @@ export function LanguageProvider({ children }) {
 
 export function useLanguage() {
   const value = useContext(LanguageContext);
-  if (!value) throw new Error("useLanguage must be used inside LanguageProvider");
-  return value;
+  // A small fallback keeps leaf components and unit tests renderable without
+  // the application shell. The app itself always mounts the provider.
+  return value || {
+    locale: LOCALES.EN,
+    setLocale: () => {},
+    locales: [LOCALES.EN, LOCALES.OR],
+    currentLanguageLabel: "English",
+    isOdia: false,
+  };
 }
 
 export function getActiveLocale() {
-  return readStoredLocale() || LOCALES.OR;
+  return readStoredLocale() || LOCALES.EN;
 }
 
 export { LANGUAGE_STORAGE_KEY, LEGACY_LANGUAGE_STORAGE_KEY };

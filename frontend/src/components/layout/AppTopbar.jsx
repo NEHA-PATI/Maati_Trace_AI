@@ -3,12 +3,14 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Bell, LogOut } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
+import { useTranslation } from "@/features/i18n";
 import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
 import { LanguageToggle, useLanguage } from "@/features/language";
 import { languageString } from "@/features/language/language";
 import LogoutConfirmModal from "@/features/auth/components/LogoutConfirmModal";
 
 function MaatiLogo() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f0df] shadow-sm ring-1 ring-black/10">
@@ -16,7 +18,7 @@ function MaatiLogo() {
       </span>
       <div className="leading-tight">
         <div className="text-[17px] font-extrabold text-[var(--mt-ink)]">MaatiTrace</div>
-        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">Land Intelligence</div>
+        <div className="text-[10.5px] font-semibold text-[var(--mt-ink-faint)]">{t("landIntelligence")}</div>
       </div>
     </div>
   );

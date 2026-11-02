@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import PasswordStrength from "@/features/auth/components/PasswordStrength";
+import { useTranslation } from "@/features/i18n";
 
 const PasswordField = forwardRef(function PasswordField(
   {
@@ -20,6 +21,7 @@ const PasswordField = forwardRef(function PasswordField(
   },
   ref,
 ) {
+  const { t } = useTranslation();
   const generatedId = useId();
   const inputId =
     providedId ||
@@ -66,12 +68,12 @@ const PasswordField = forwardRef(function PasswordField(
           }
           aria-label={
             visible
-              ? `Hide ${label.toLowerCase()}`
-              : `Show ${label.toLowerCase()}`
+              ? `${t("hide")} ${label.toLowerCase()}`
+              : `${t("show")} ${label.toLowerCase()}`
           }
           className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 hover:text-slate-800"
         >
-          {visible ? "Hide" : "Show"}
+          {visible ? t("hide") : t("show")}
         </button>
       </div>
 

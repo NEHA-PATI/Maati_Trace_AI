@@ -12,6 +12,16 @@ def test_latest_analysis_request_defaults_to_a_bounded_lookback():
     assert request.h3_resolution == 12
 
 
+def test_latest_analysis_request_preserves_sentinel2_history_limits():
+    request = LatestAnalysisRequest(
+        sentinel2_history_min_dates=2,
+        sentinel2_history_max_scenes=3,
+    )
+
+    assert request.sentinel2_history_min_dates == 2
+    assert request.sentinel2_history_max_scenes == 3
+
+
 def test_latest_analysis_request_rejects_invalid_ranges():
     with pytest.raises(ValidationError):
         LatestAnalysisRequest(start_date="2026-09-08", end_date="2026-09-07")

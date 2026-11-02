@@ -3,6 +3,7 @@ import { LayoutDashboard, Building2, Users, Sprout, UserPlus, Activity, Satellit
 
 const ADMIN_NAVIGATION = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, iconClass: "text-indigo-500", end: true },
+  { to: "/admin/data-acquisition", label: "Data Acquisition", icon: Database, iconClass: "text-orange-500" },
   { to: "/admin/fpo", label: "FPO Management", icon: Building2, iconClass: "text-emerald-500" },
   { to: "/admin/fpo-registry", label: "FPO Registry", icon: Users, iconClass: "text-teal-500" },
   { to: "/admin/crop-observation", label: "Crop Observations", icon: Sprout, iconClass: "text-amber-500" },

@@ -5,6 +5,7 @@ import {
   Leaf, Droplets, Satellite, MapPin, User
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "@/features/i18n";
 
 // Farm map snapshot thumbnail (real satellite/field imagery)
 const FARM_THUMBNAILS = {
@@ -103,13 +104,14 @@ const ALL_NOTIFICATIONS = [
 ];
 
 const PRIORITY_CONFIG = {
-  high:   { dot: "bg-red-400",    ring: "ring-red-100",    badge: "bg-red-50 text-red-600",    bar: "bg-red-300",   label: "Critical" },
-  medium: { dot: "bg-amber-400",  ring: "ring-amber-100",  badge: "bg-amber-50 text-amber-700", bar: "bg-amber-300", label: "Warning" },
-  low:    { dot: "bg-emerald-400",ring: "ring-emerald-100",badge: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-300", label: "Info" },
+  high:   { dot: "bg-red-400",    ring: "ring-red-100",    badge: "bg-red-50 text-red-600",    bar: "bg-red-300",   labelKey: "critical" },
+  medium: { dot: "bg-amber-400",  ring: "ring-amber-100",  badge: "bg-amber-50 text-amber-700", bar: "bg-amber-300", labelKey: "warning" },
+  low:    { dot: "bg-emerald-400",ring: "ring-emerald-100",badge: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-300", labelKey: "info" },
 };
 
 export default function Notifications() {
   const [filter, setFilter] = useState("all");
+  const { t } = useTranslation();
 
   const filtered = filter === "all"
     ? ALL_NOTIFICATIONS
@@ -122,7 +124,7 @@ export default function Notifications() {
       <div className="flex flex-col items-start gap-3">
         <div className="w-full text-center">
           <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Notifications</h1>
-          <p className="mt-0.5 whitespace-nowrap text-xs leading-4 text-gray-400">Alerts, predictions and system updates</p>
+          <p className="mt-0.5 whitespace-nowrap text-xs leading-4 text-gray-400">{t("notificationSummary")}</p>
         </div>
         <div className="flex w-full items-center gap-1 rounded-2xl border border-gray-200/80 bg-gray-100/80 p-1.5" role="tablist" aria-label="Notification priority">
           {["all", "high", "medium", "low"].map(f => (
@@ -138,6 +140,7 @@ export default function Notifications() {
                   : "text-gray-500 hover:bg-white/60 hover:text-gray-800"
               }`}
             >
+              {t(f === "all" ? "all" : PRIORITY_CONFIG[f].labelKey)}
               {filter === f && <motion.span layoutId="notification-tab" className="absolute inset-0 -z-0 rounded-xl bg-white shadow-sm" transition={{ type: "spring", stiffness: 420, damping: 32 }} />}
               <span className="relative z-10">{f}</span>
               {f === "high" && (
@@ -183,7 +186,7 @@ export default function Notifications() {
                         <span className="w-1.5 h-1.5 rounded-full bg-red-400 pulse-live flex-shrink-0" />
                       )}
                       <span className={`text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                        {cfg.label}
+                        {t(cfg.labelKey)}
                       </span>
                     </div>
                   </div>

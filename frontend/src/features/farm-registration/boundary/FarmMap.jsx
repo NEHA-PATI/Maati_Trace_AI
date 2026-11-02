@@ -8,6 +8,7 @@ import MapCamera from "./MapCamera";
 import BoundaryDrawingController from "./BoundaryDrawingController";
 import { calculateBoundarySummary, geoJsonBounds } from "./boundaryUtils";
 import useDeviceLocation from "./useDeviceLocation";
+import { useTranslation } from "@/features/i18n";
 
 function MapAction({ label, icon: Icon, className = "", ...props }) {
   return (
@@ -19,6 +20,7 @@ function MapAction({ label, icon: Icon, className = "", ...props }) {
 }
 
 export default function FarmMap({ geometry, onGeometryChange, resolvedLocation, onConfirm }) {
+  const { t } = useTranslation();
   const [command, setCommand] = useState(null);
   const [drawing, setDrawing] = useState(false);
   const [mapMessage, setMapMessage] = useState(MAP_CONFIG.apiKey ? "" : "Satellite imagery is unavailable until the ArcGIS key is configured.");
@@ -61,8 +63,8 @@ export default function FarmMap({ geometry, onGeometryChange, resolvedLocation, 
 
       <div className="absolute left-3 right-3 top-3 z-[500] md:left-4 md:right-auto">
         <div className="rounded-2xl bg-white/95 p-3 shadow-lg backdrop-blur">
-          <p className="text-xs font-bold text-slate-900">{drawing ? "Tap every corner of your farm" : "Find your farm in the satellite image"}</p>
-          <p className="mt-0.5 text-[11px] text-slate-600">{resolvedLocation?.address || "Use your current location or move the map."}</p>
+          <p className="text-xs font-bold text-slate-900">{drawing ? t("tapCorners") : t("findFarmImage")}</p>
+          <p className="mt-0.5 text-[11px] text-slate-600">{resolvedLocation?.address || t("useCurrentLocation")}</p>
         </div>
       </div>
 
@@ -71,22 +73,22 @@ export default function FarmMap({ geometry, onGeometryChange, resolvedLocation, 
         <div className="rounded-2xl bg-white/95 p-3 shadow-xl backdrop-blur">
           <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
             <div>
-              <p className="text-xs text-slate-500">Selected farm area</p>
-              <p className="text-lg font-bold text-slate-900">{summary.valid ? `${summary.acres.toFixed(2)} acre` : "Not completed"}</p>
+              <p className="text-xs text-slate-500">{t("selectedFarmArea")}</p>
+              <p className="text-lg font-bold text-slate-900">{summary.valid ? `${summary.acres.toFixed(2)} acre` : t("notCompleted")}</p>
               {summary.valid ? <p className="text-xs text-slate-500">{summary.hectares.toFixed(3)} hectare · {summary.pointCount} corners</p> : null}
             </div>
-            <button type="button" onClick={gps.locate} disabled={gps.loading} className="h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700">{gps.loading ? "Locating…" : "My location"}</button>
+            <button type="button" onClick={gps.locate} disabled={gps.loading} className="h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700">{gps.loading ? t("locating") : t("myLocation")}</button>
           </div>
-          <button type="button" onClick={onConfirm} disabled={!summary.valid} className="mt-2 h-12 w-full rounded-xl bg-emerald-700 px-3 text-sm font-bold text-white disabled:bg-slate-300 md:hidden">Finish boundary</button>
+          <button type="button" onClick={onConfirm} disabled={!summary.valid} className="mt-2 h-12 w-full rounded-xl bg-emerald-700 px-3 text-sm font-bold text-white disabled:bg-slate-300 md:hidden">{t("finishBoundary")}</button>
         </div>
       </div>
 
       <div className="absolute bottom-24 right-3 z-[600] flex flex-col gap-2 rounded-2xl bg-white p-2 shadow-xl ring-1 ring-slate-200/80">
-        <MapAction label={drawing ? "Drawing mode active" : "Start drawing"} icon={MousePointer2} onClick={() => issueCommand("start-drawing")} aria-pressed={drawing} className={`text-white ${drawing ? "border-emerald-700 bg-emerald-700 ring-2 ring-emerald-300" : "border-emerald-500 bg-emerald-500"}`} />
-        <MapAction label="Undo" icon={RotateCcw} onClick={undo} disabled={!historyRef.current.length} className="border-slate-200 text-slate-600" />
-        <MapAction label="Edit corners" icon={Pencil} onClick={() => issueCommand("edit")} disabled={!summary.valid} className="border-emerald-200 text-emerald-700" />
-        <MapAction label="Move map" icon={Move} onClick={() => issueCommand("stop-editing")} className="border-slate-200 text-slate-700" />
-        <MapAction label="Clear boundary" icon={Trash2} onClick={() => issueCommand("clear")} disabled={!geometry} className="border-rose-200 text-rose-600" />
+        <MapAction label={drawing ? t("drawingModeActive") : t("startDrawing")} icon={MousePointer2} onClick={() => issueCommand("start-drawing")} aria-pressed={drawing} className={`text-white ${drawing ? "border-emerald-700 bg-emerald-700 ring-2 ring-emerald-300" : "border-emerald-500 bg-emerald-500"}`} />
+        <MapAction label={t("undo")} icon={RotateCcw} onClick={undo} disabled={!historyRef.current.length} className="border-slate-200 text-slate-600" />
+        <MapAction label={t("editCorners")} icon={Pencil} onClick={() => issueCommand("edit")} disabled={!summary.valid} className="border-emerald-200 text-emerald-700" />
+        <MapAction label={t("moveMap")} icon={Move} onClick={() => issueCommand("stop-editing")} className="border-slate-200 text-slate-700" />
+        <MapAction label={t("clearBoundary")} icon={Trash2} onClick={() => issueCommand("clear")} disabled={!geometry} className="border-rose-200 text-rose-600" />
       </div>
     </div>
   );

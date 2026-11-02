@@ -27,6 +27,10 @@ export const ROUTE_RULES = Object.freeze({
     ROLES.FARMER,
   ],
 
+  farmerSelfProfile: [
+    ROLES.FARMER,
+  ],
+
   cropDiary: [
     ROLES.ADMIN,
     ROLES.FPO,
@@ -87,7 +91,7 @@ const PATH_PERMISSION_MAP = Object.freeze({
 
   "/my-fpo": "myFpo",
 
-  "/farmer/me": "farmerProfile",
+  "/farmer/me": "farmerSelfProfile",
   "/farmers/:farmerId": "farmerProfile",
 
   "/land/:farmId": "landIntelligence",

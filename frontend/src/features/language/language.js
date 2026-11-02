@@ -1,6 +1,6 @@
 export const LOCALES = Object.freeze({
-  EN: "en-IN",
-  OR: "or-IN",
+  EN: "en",
+  OR: "or",
 });
 
 export const SUPPORTED_LOCALES = Object.freeze([LOCALES.EN, LOCALES.OR]);
@@ -33,7 +33,7 @@ export function readStoredLocale() {
 }
 
 export function persistLocale(locale) {
-  const next = normalizeLocale(locale) || LOCALES.OR;
+  const next = normalizeLocale(locale) || LOCALES.EN;
   try {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
     // Keep the crop feature and older sessions in sync during migration.

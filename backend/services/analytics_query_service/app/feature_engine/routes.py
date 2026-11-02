@@ -48,13 +48,13 @@ def _admin(authorization: str | None) -> dict:
     try:
         user = load_current_user(authorization)
     except MissingAuthorizationError as exc:
-        raise HTTPException(status_code=401, detail="Authentication is required") from exc
+        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Authentication is required"}) from exc
     except (InvalidAccessTokenError, CurrentUserUnavailableError) as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(status_code=401, detail={"code": "AUTH_INVALID", "message": str(exc)}) from exc
     except PrincipalLookupError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail={"code": "FEATURE_ENGINE_UNAVAILABLE", "message": str(exc)}) from exc
     if str(user.get("role") or "").lower() != "admin":
-        raise HTTPException(status_code=403, detail="Admin access is required")
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Admin access is required"})
     return user
 
 
@@ -130,12 +130,13 @@ def latest_calculations(
     scope: str = Query(default="farm", pattern="^(farm|h3)$"),
     prediction_key: str | None = Query(default=None),
     result_date: str | None = Query(default=None),
+    latest_only: bool = Query(default=True),
 ):
     return {
         "farm_id": str(farm_id),
         "scope": scope,
         "items": repository.get_calculated_predictions(
-            farm_id, scope=scope, latest_only=True, prediction_key=prediction_key,
+            farm_id, scope=scope, latest_only=latest_only, prediction_key=prediction_key,
             result_date=result_date,
         ),
     }

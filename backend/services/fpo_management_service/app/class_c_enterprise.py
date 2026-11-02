@@ -80,7 +80,15 @@ def class_c_release_readiness(conn: Connection, admin_user_id: UUID | str) -> di
         checks.append({"check_key": key, "status": "PASS" if passed else "FAIL", "evidence": evidence})
     feature_count = int(conn.execute(text("SELECT count(*) FROM public.fpo_class_feature_versions WHERE class_code='C' AND version=4 AND enabled" )).scalar_one())
     add("CLASS_C_FEATURE_CONFIGURATION", feature_count >= 50, {"enabled_feature_count": feature_count})
-    add("CLASS_B_PLAN_FOUNDATION", bool(conn.execute(text("SELECT 1 FROM public.fpo_plan_versions WHERE class_code='B' AND status='PUBLISHED'")).scalar_one_or_none()), {})
+    add(
+        "CLASS_B_PLAN_FOUNDATION",
+        bool(
+            conn.execute(
+                text("SELECT EXISTS (SELECT 1 FROM public.fpo_plan_versions WHERE class_code='B' AND status='PUBLISHED')")
+            ).scalar_one()
+        ),
+        {},
+    )
     for table, key in [("fpo_aggregation_lots", "TRACEABILITY_CONTRACT"), ("fpo_inventory_ledger", "INVENTORY_CONTRACT"), ("fpo_commercial_contracts", "COMMERCIAL_CONTRACT"), ("fpo_export_packs", "EXPORT_PACK_CONTRACT"), ("fpo_data_sharing_grants", "DATA_SHARING_CONTRACT"), ("fpo_api_clients", "INTEGRATION_CONTRACT")]:
         add(key, bool(conn.execute(text("SELECT to_regclass(:name)"), {"name": f"public.{table}"}).scalar_one_or_none()), {})
     for item in checks:
@@ -93,4 +101,5 @@ def publish_class_c_plan(conn: Connection, admin_user_id: UUID | str, reason: st
     if not readiness["ready"]: raise ValueError("FPO_CLASS_C_RELEASE_NOT_READY")
     row = conn.execute(text("UPDATE public.fpo_plan_versions SET status='PUBLISHED',release_state='PUBLISHED',effective_from=now(),published_at=now(),published_by=:user,publication_reason=:reason WHERE class_code='C' AND version=4 AND status='DRAFT' RETURNING *"), {"user": str(admin_user_id), "reason": reason.strip()}).mappings().first()
     if not row: raise ValueError("FPO_CLASS_C_PLAN_NOT_PUBLISHABLE")
+    conn.execute(text("UPDATE public.fpo_class_feature_versions SET published_at=COALESCE(published_at,now()) WHERE class_code='C' AND version=4"))
     return dict(row)

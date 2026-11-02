@@ -1,0 +1,12 @@
+{
+  "client": "Thunder Client",
+  "environmentName": "MaatiTrace ML Acquisition - Local",
+  "environmentId": "env_maatitrace_ml_phase1_local",
+  "dateExported": "2026-10-03T00:00:00.000Z",
+  "version": "1.0",
+  "variables": [
+    {"name": "baseUrl", "value": "http://localhost:8000", "type": "text", "secret": false},
+    {"name": "accessToken", "value": "paste-admin-access-token", "type": "text", "secret": true},
+    {"name": "jobId", "value": "replace-after-submit", "type": "text", "secret": false}
+  ]
+}

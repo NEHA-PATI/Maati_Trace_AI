@@ -1,0 +1,22 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "MaatiTrace ML Phase 1 - Historical Acquisition",
+  "collectionId": "col_maatitrace_ml_phase1_acquisition",
+  "dateExported": "2026-10-03T00:00:00.000Z",
+  "version": "1.1",
+  "variables": [
+    {"name": "baseUrl", "value": "http://localhost:8000"},
+    {"name": "accessToken", "value": "paste-admin-access-token"},
+    {"name": "jobId", "value": "replace-after-submit"}
+  ],
+  "requests": [
+    {"name": "1 - List source contracts", "method": "GET", "url": "{{baseUrl}}/api/historical-acquisition/sources", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]},
+    {"name": "2 - Preview catalog-only campaign", "method": "POST", "url": "{{baseUrl}}/api/historical-acquisition/plan", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"},{"name":"Content-Type","value":"application/json"}], "body":{"type":"json","raw":"{\n  \"area_id\": \"district-odisha-block-01\",\n  \"boundary_version\": \"boundary-sha256-v1\",\n  \"bbox\": [83.8, 21.3, 83.9, 21.4],\n  \"start\": \"2020-01-01\",\n  \"end\": \"2020-01-31\",\n  \"sources\": [\"sentinel_2_l2a\", \"landsat_c2_l2\", \"gpm_imerg_final\"],\n  \"mode\": \"retrospective\",\n  \"stage\": \"catalog_only\",\n  \"storage_uri\": \"file:///absolute/path/to/lakehouse\"\n}"}},
+    {"name": "3 - Submit catalog-only campaign", "method": "POST", "url": "{{baseUrl}}/api/historical-acquisition/jobs", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"},{"name":"Content-Type","value":"application/json"}], "body":{"type":"json","raw":"{\n  \"area_id\": \"district-odisha-block-01\",\n  \"boundary_version\": \"boundary-sha256-v1\",\n  \"bbox\": [83.8, 21.3, 83.9, 21.4],\n  \"start\": \"2020-01-01\",\n  \"end\": \"2020-01-31\",\n  \"sources\": [\"sentinel_2_l2a\", \"landsat_c2_l2\", \"gpm_imerg_final\"],\n  \"mode\": \"retrospective\",\n  \"stage\": \"catalog_only\",\n  \"storage_uri\": \"file:///absolute/path/to/lakehouse\"\n}"}},
+    {"name": "4 - List campaigns", "method": "GET", "url": "{{baseUrl}}/api/historical-acquisition/jobs?limit=100", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]},
+    {"name": "5 - Campaign detail", "method": "GET", "url": "{{baseUrl}}/api/historical-acquisition/jobs/{{jobId}}", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]},
+    {"name": "6 - Shards (failed)", "method": "GET", "url": "{{baseUrl}}/api/historical-acquisition/jobs/{{jobId}}/shards?state=failed&limit=100", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]},
+    {"name": "7 - Retry failed shards", "method": "POST", "url": "{{baseUrl}}/api/historical-acquisition/jobs/{{jobId}}/retry", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]},
+    {"name": "8 - Cancel campaign", "method": "POST", "url": "{{baseUrl}}/api/historical-acquisition/jobs/{{jobId}}/cancel", "headers": [{"name":"Authorization","value":"Bearer {{accessToken}}"}]}
+  ]
+}

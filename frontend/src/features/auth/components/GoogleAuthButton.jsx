@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { environment } from "@/app/config/environment";
+import { useTranslation } from "@/features/i18n";
 
 const SCRIPT_ID = "google-identity-services";
 
@@ -24,6 +25,7 @@ function loadGoogleIdentityServices() {
 }
 
 export default function GoogleAuthButton({ onSuccess, onError, disabled = false, className = "" }) {
+  const { t } = useTranslation();
   const buttonRef = useRef(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,7 +75,7 @@ export default function GoogleAuthButton({ onSuccess, onError, disabled = false,
   return (
     <div className={className} aria-busy={loading} aria-disabled={disabled}>
       <div ref={buttonRef} className={disabled ? "pointer-events-none opacity-60" : "flex justify-center"} />
-      {loading ? <p className="mt-2 text-center text-xs text-slate-500">Loading Google sign-in…</p> : null}
+      {loading ? <p className="mt-2 text-center text-xs text-slate-500">{t("auth.googleLoading")}</p> : null}
     </div>
   );
 }
