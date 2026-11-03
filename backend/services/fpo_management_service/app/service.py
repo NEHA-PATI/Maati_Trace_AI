@@ -4,20 +4,26 @@ import logging
 import hashlib
 import os
 import httpx
+from uuid import UUID
 
 from shared.db.postgres import engine
 from services.fpo_management_service.app.config import FpoManagementConfig
 from services.fpo_management_service.app.storage import create_upload_url, DocumentStorageError, delete_bytes, download_bytes, scan_with_clamav, store_bytes
 from services.fpo_management_service.app.repository import (
-    claim_events,
+    claim_provisioning_events,
     record_event_inbox,
     mark_event_inbox_processed,
     mark_event_inbox_failed,
+    set_provisioning_error,
+    list_provisioning_cases,
+    get_provisioning_case,
+    retry_provisioning_event,
+    retry_fpo_provisioning,
+    fpo_provisioning_metrics,
     get_bootstrap_status,
     get_portal_bootstrap,
-    mark_failed,
-    mark_published,
     provision_fpo,
+    complete_fpo_provisioning,
     get_verification_for_user,
     create_document_upload_intent,
     get_document_upload_target,
@@ -109,31 +115,99 @@ from services.fpo_management_service.app.class_c_enterprise import (
 logger = logging.getLogger("fpo_management_service")
 
 
+def _create_profile_for_provisioning(
+    payload: dict,
+    correlation_id: str,
+    existing_profile_fpo_id: str | None,
+) -> str:
+    config = FpoManagementConfig.from_env()
+    if len(config.profile_internal_service_token.encode("utf-8")) < 32:
+        raise ValueError("PROFILE_SERVICE_AUTH_NOT_CONFIGURED")
+    request_payload = {
+        "user_id": payload["user_id"],
+        "correlation_id": correlation_id,
+        "existing_profile_fpo_id": existing_profile_fpo_id,
+        "authorised_fpo_representative": payload["authorised_fpo_representative"],
+        "full_name": payload["full_name"],
+        "email": payload["email"],
+        "phone_number": payload["phone_number"],
+        "signup_profile": payload["signup_profile"],
+    }
+    try:
+        response = httpx.post(
+            f"{config.profile_service_url}/internal/v1/fpos/provision",
+            json=request_payload,
+            headers={
+                "X-Internal-Service-Token": config.profile_internal_service_token,
+                "X-Correlation-ID": correlation_id,
+            },
+            timeout=10,
+        )
+    except httpx.HTTPError as exc:
+        raise RuntimeError("PROFILE_SERVICE_UNAVAILABLE") from exc
+    if response.status_code == 409:
+        raise ValueError("FPO_REGISTRATION_CONFLICT")
+    if response.status_code == 422:
+        raise ValueError("FPO_PROFILE_PROVISIONING_INVALID")
+    if response.status_code != 200:
+        raise RuntimeError("PROFILE_SERVICE_PROVISIONING_FAILED")
+    try:
+        profile_id = str(response.json()["profile_fpo_id"])
+        UUID(profile_id)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("PROFILE_SERVICE_RESPONSE_INVALID") from exc
+    return profile_id
+
+
 def process_batch(batch_size: int) -> int:
     processed = 0
     with engine.begin() as conn:
-        events = claim_events(conn, batch_size=batch_size)
+        events = claim_provisioning_events(conn, batch_size=batch_size)
     for event in events:
         try:
+            payload = dict(event["payload"])
             with engine.begin() as conn:
-                if not record_event_inbox(conn, event):
-                    mark_published(conn, event["event_id"])
-                    processed += 1
-                    continue
-                if event["event_type"] == "auth.user.created":
-                    payload = event["payload"] if isinstance(event["payload"], dict) else {}
-                    if payload.get("account_type") == "fpo":
-                        provision_fpo(conn, payload)
-                    elif payload.get("account_type") == "farmer":
-                        reconcile_farmer_account(conn, payload=payload)
-                mark_published(conn, event["event_id"])
+                organization = provision_fpo(
+                    conn,
+                    {
+                        **payload,
+                        "_occurred_at": event["occurred_at"].isoformat(),
+                        "_correlation_id": str(event["correlation_id"]),
+                    },
+                )
+            profile_id = _create_profile_for_provisioning(
+                payload,
+                str(event["correlation_id"]),
+                str(organization["profile_fpo_id"]) if organization.get("profile_fpo_id") else None,
+            )
+            with engine.begin() as conn:
+                complete_fpo_provisioning(
+                    conn,
+                    user_id=payload["user_id"],
+                    profile_fpo_id=profile_id,
+                    correlation_id=event["correlation_id"],
+                )
                 mark_event_inbox_processed(conn, event["event_id"])
                 processed += 1
         except Exception as exc:
-            logger.exception("fpo_provisioning_failed", extra={"event_id": str(event["event_id"])})
+            error_code = str(exc) if isinstance(exc, ValueError) else "FPO_PROVISIONING_TEMPORARY_FAILURE"
+            logger.exception(
+                "fpo_provisioning_failed",
+                extra={
+                    "event_id": str(event["event_id"]),
+                    "correlation_id": str(event.get("correlation_id") or ""),
+                    "error_code": error_code,
+                },
+            )
             with engine.begin() as conn:
-                mark_failed(conn, event["event_id"], str(exc))
-                mark_event_inbox_failed(conn, event["event_id"], str(exc))
+                mark_event_inbox_failed(conn, event["event_id"], error_code)
+                set_provisioning_error(
+                    conn,
+                    user_id=event["subject_id"],
+                    error_code=error_code,
+                    error="We could not finish setting up your organization. Support can retry safely.",
+                    correlation_id=event.get("correlation_id"),
+                )
     return processed
 
 
@@ -169,6 +243,46 @@ def process_document_scan_batch(batch_size: int) -> int:
 def bootstrap_status(user_id):
     with engine.connect() as conn:
         return get_bootstrap_status(conn, user_id)
+
+
+def ingest_auth_user_created_event(event: dict) -> str:
+    with engine.begin() as conn:
+        return record_event_inbox(conn, event)
+
+
+def admin_provisioning_cases(*, limit: int, offset: int, status: str | None = None):
+    with engine.connect() as conn:
+        return list_provisioning_cases(conn, limit=limit, offset=offset, status=status)
+
+
+def admin_provisioning_case(fpo_id):
+    with engine.connect() as conn:
+        return get_provisioning_case(conn, fpo_id)
+
+
+def admin_retry_provisioning(*, event_id, actor_user_id, reason):
+    with engine.begin() as conn:
+        return retry_provisioning_event(
+            conn,
+            event_id=event_id,
+            actor_user_id=actor_user_id,
+            reason=reason,
+        )
+
+
+def admin_retry_fpo_provisioning(*, fpo_id, actor_user_id, reason):
+    with engine.begin() as conn:
+        return retry_fpo_provisioning(
+            conn,
+            fpo_id=fpo_id,
+            actor_user_id=actor_user_id,
+            reason=reason,
+        )
+
+
+def provisioning_metrics():
+    with engine.connect() as conn:
+        return fpo_provisioning_metrics(conn)
 
 
 def portal_bootstrap(user_id):

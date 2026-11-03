@@ -50,6 +50,7 @@ from services.auth_service.app.repository import (
     mark_signup_verified,
     mark_user_login,
     register_invalid_otp_attempt,
+    resolve_fpo_signup_location,
     review_fpo_access_request,
     revoke_all_refresh_tokens_for_user,
     revoke_refresh_family,
@@ -533,9 +534,12 @@ def complete_signup(signup_session_id: UUID | str, context: RequestContext) -> I
                 event_type="auth.user.created",
                 subject_id=user["user_id"],
                 idempotency_key=f"auth.user.created:{user['user_id']}",
+                event_version=2 if session.get("account_type", session.get("role")) == "fpo" else 1,
+                correlation_id=_event_correlation_id(context),
                 payload={
                     "user_id": str(user["user_id"]),
                     "account_type": session.get("account_type", session.get("role", "farmer")),
+                    "authorised_fpo_representative": bool(session.get("authorised_fpo_representative")),
                     "full_name": user["full_name"],
                     "email": user.get("email"),
                     "phone_number": user.get("phone_number"),
@@ -1032,28 +1036,61 @@ def submit_fpo_access_request(
                 device_id_hash=context.device_id_hash,
                 correlation_id=get_correlation_id(),
             )
-            queue_email(
-                conn,
-                to_email=request_row["contact_email"],
-                to_name=request_row["contact_person_name"],
-                template_key="fpo_access_acknowledgement",
-                template_data={
-                    "contact_person_name": request_row["contact_person_name"],
-                    "organisation_name": request_row["organisation_name"],
-                    "request_id": str(request_row["request_id"]),
-                },
-                public_metadata={"fpo_access_request_id": str(request_row["request_id"])},
-            )
-            record_audit_event(
-                event_type="fpo_access_requested",
-                outcome="success",
-                identifier=request_row["contact_email"],
-                ip_address=context.ip_address,
-                device_id_hash=context.device_id_hash,
-                user_agent_hash=context.user_agent_hash,
-                metadata={"request_id": str(request_row["request_id"])},
-                conn=conn,
-            )
+            if request_row["already_exists"]:
+                if request_row.get("account_exists"):
+                    message = (
+                        "An account already exists for this email. "
+                        "Sign in or contact support if FPO setup is incomplete."
+                    )
+                elif request_row.get("invitation_status") in {"expired", "revoked"}:
+                    message = (
+                        "An earlier invitation expired or was cancelled. "
+                        "The administrator can resend it; please do not submit another request."
+                    )
+                elif request_row.get("invitation_status") == "accepted":
+                    message = (
+                        "This FPO access request has already been processed. "
+                        "Sign in or contact support if you need help."
+                    )
+                else:
+                    message = (
+                        "An FPO access request for this email is already being handled. "
+                        "No duplicate request was created."
+                    )
+                record_audit_event(
+                    event_type="fpo_access_request_deduplicated",
+                    outcome="existing",
+                    identifier=request_row["contact_email"],
+                    ip_address=context.ip_address,
+                    device_id_hash=context.device_id_hash,
+                    user_agent_hash=context.user_agent_hash,
+                    metadata={"request_id": str(request_row["request_id"])},
+                    conn=conn,
+                )
+            else:
+                message = "Your FPO access request was received for administrator review."
+                queue_email(
+                    conn,
+                    to_email=request_row["contact_email"],
+                    to_name=request_row["contact_person_name"],
+                    template_key="fpo_access_acknowledgement",
+                    template_data={
+                        "contact_person_name": request_row["contact_person_name"],
+                        "organisation_name": request_row["organisation_name"],
+                        "request_id": str(request_row["request_id"]),
+                    },
+                    public_metadata={"fpo_access_request_id": str(request_row["request_id"])},
+                )
+                record_audit_event(
+                    event_type="fpo_access_requested",
+                    outcome="success",
+                    identifier=request_row["contact_email"],
+                    ip_address=context.ip_address,
+                    device_id_hash=context.device_id_hash,
+                    user_agent_hash=context.user_agent_hash,
+                    metadata={"request_id": str(request_row["request_id"])},
+                    conn=conn,
+                )
     except SQLAlchemyError as exc:
         raise AuthError(
             "FPO_ACCESS_REQUEST_FAILED",
@@ -1064,9 +1101,10 @@ def submit_fpo_access_request(
 
     return {
         "request_id": request_row["request_id"],
-        "status": "pending",
-        "message": "Your FPO access request was received for administrator review.",
+        "status": request_row["status"],
+        "message": message,
         "correlation_id": get_correlation_id(),
+        "already_exists": request_row["already_exists"],
     }
 
 
@@ -1138,6 +1176,7 @@ def create_invitation_for_admin(
         with engine.begin() as conn:
             invitation_metadata = dict(payload.metadata)
             access_request_id = invitation_metadata.get("access_request_id")
+            fpo_access_request_id = None
             if payload.role == "fpo" and access_request_id:
                 access_request = get_fpo_access_request_for_update(
                     conn,
@@ -1169,10 +1208,16 @@ def create_invitation_for_admin(
                     "state_name": access_request["state_name"],
                     "district_name": access_request["district_name"],
                 })
+                fpo_access_request_id = access_request["request_id"]
             if get_user_by_email(conn, email, for_update=True) is not None:
                 raise AuthError(
                     "INVITATION_UNAVAILABLE",
-                    "An invitation cannot be created for this email address.",
+                    (
+                        "An FPO account already exists for this email. Use account recovery, "
+                        "or check FPO provisioning if setup is incomplete."
+                        if payload.role == "fpo"
+                        else "An account already exists for this email. Use sign-in or account recovery."
+                    ),
                     409,
                 )
             inviter = get_user_by_id(conn, admin_user_id)
@@ -1181,6 +1226,7 @@ def create_invitation_for_admin(
                 conn,
                 email=email,
                 role=payload.role,
+                fpo_access_request_id=fpo_access_request_id,
                 token_hash=token_hash,
                 invited_by=admin_user_id,
                 expires_at=expires_at,
@@ -1255,6 +1301,49 @@ def validate_invitation(token: str) -> dict[str, Any]:
     }
 
 
+def _event_correlation_id(context: RequestContext) -> str:
+    try:
+        return str(UUID(context.correlation_id))
+    except (TypeError, ValueError, AttributeError):
+        return str(uuid4())
+
+
+def _build_fpo_invitation_signup_profile(
+    conn,
+    *,
+    metadata: dict[str, Any],
+    full_name: str,
+) -> dict[str, Any]:
+    registration_number = str(metadata.get("registration_number") or "").strip()
+    if not registration_number:
+        raise AuthError(
+            "FPO_INVITATION_REGISTRATION_REQUIRED",
+            "The FPO access request needs a registration number. Ask the administrator to update it before accepting the invitation.",
+            422,
+        )
+
+    location = resolve_fpo_signup_location(
+        conn,
+        state_code=metadata.get("state_code"),
+        state_name=metadata.get("state_name"),
+        district_code=metadata.get("district_code"),
+        district_name=metadata.get("district_name"),
+    )
+    if not location:
+        raise AuthError(
+            "FPO_INVITATION_LOCATION_INVALID",
+            "The FPO access request has an invalid location. Ask the administrator to correct it before accepting the invitation.",
+            422,
+        )
+
+    return {
+        "organisation_name": str(metadata.get("organisation_name") or full_name).strip(),
+        "registration_type": str(metadata.get("registration_type") or "other").strip(),
+        "registration_number": registration_number,
+        **location,
+    }
+
+
 def accept_invitation(payload: InvitationAcceptRequest, context: RequestContext) -> IssuedSession:
     assert_password_policy(payload.password)
     assert_password_not_breached(payload.password)
@@ -1274,6 +1363,16 @@ def accept_invitation(payload: InvitationAcceptRequest, context: RequestContext)
                 raise AuthError("INVITATION_USED", "This invitation is no longer valid.", 400)
             if invitation["expires_at"] <= now:
                 raise AuthError("INVITATION_EXPIRED", "This invitation has expired.", 400)
+            invitation_metadata = invitation.get("metadata") or {}
+            fpo_signup_profile = (
+                _build_fpo_invitation_signup_profile(
+                    conn,
+                    metadata=invitation_metadata,
+                    full_name=payload.full_name,
+                )
+                if invitation["role"] == "fpo"
+                else None
+            )
             if get_user_by_email(conn, invitation["email"], for_update=True) is not None:
                 raise AuthError("INVITATION_UNAVAILABLE", "This invitation cannot be accepted.", 409)
             if get_user_by_phone(conn, payload.phone_number, for_update=True) is not None:
@@ -1288,28 +1387,22 @@ def accept_invitation(payload: InvitationAcceptRequest, context: RequestContext)
                 role=invitation["role"],
                 is_verified=True,
             )
-            if invitation["role"] == "fpo":
-                metadata = invitation.get("metadata") or {}
+            if fpo_signup_profile is not None:
                 create_auth_outbox_event(
                     conn,
                     event_type="auth.user.created",
                     subject_id=user["user_id"],
                     idempotency_key=f"auth.user.created:{user['user_id']}",
+                    event_version=2,
+                    correlation_id=_event_correlation_id(context),
                     payload={
                         "user_id": str(user["user_id"]),
                         "account_type": "fpo",
+                        "authorised_fpo_representative": True,
                         "full_name": user["full_name"],
                         "email": user.get("email"),
                         "phone_number": user.get("phone_number"),
-                        "signup_profile": {
-                            "organisation_name": metadata.get("organisation_name") or user["full_name"],
-                            "registration_type": metadata.get("registration_type") or "other",
-                            "registration_number": metadata.get("registration_number"),
-                            "state_name": metadata.get("state_name"),
-                            "district_name": metadata.get("district_name"),
-                            "state_code": metadata.get("state_code"),
-                            "district_code": metadata.get("district_code"),
-                        },
+                        "signup_profile": fpo_signup_profile,
                     },
                 )
             mark_account_invitation_accepted(

@@ -13,6 +13,12 @@ def test_legacy_fpo_portal_route_remains_unchanged():
     assert _build_target_url("fpo-portal", "bootstrap", b"").endswith("/v1/fpo-portal/bootstrap")
 
 
+def test_admin_fpo_routes_forward_to_fpo_management_service():
+    target = _build_target_url("admin-fpo", "provisioning", b"limit=20")
+
+    assert target.endswith("/v1/admin/fpo/provisioning?limit=20")
+
+
 def test_historical_acquisition_routes_forward_to_ml_service():
     target = _build_target_url("historical-acquisition", "jobs/123", b"limit=10")
 

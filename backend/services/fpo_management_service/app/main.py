@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import secrets
+import httpx
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.concurrency import run_in_threadpool
@@ -16,7 +19,13 @@ from services.fpo_management_service.app.config import FpoManagementConfig
 from services.fpo_management_service.app.storage import DocumentStorageError
 from services.fpo_management_service.app.service import (
     bootstrap_status,
+    ingest_auth_user_created_event,
     portal_bootstrap,
+    admin_provisioning_cases,
+    admin_provisioning_case,
+    admin_retry_provisioning,
+    admin_retry_fpo_provisioning,
+    provisioning_metrics,
     review_verification_request,
     submit_verification_request,
     verification_queue,
@@ -139,6 +148,44 @@ class RelationshipRequest(BaseModel):
     policy_version: str = Field(default="2", min_length=1, max_length=40)
     accepted: bool
     selected_optional_scopes: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AuthFpoSignupProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    organisation_name: str = Field(min_length=2, max_length=240)
+    registration_type: str = Field(min_length=2, max_length=100)
+    registration_number: str = Field(min_length=2, max_length=100)
+    state_code: int = Field(gt=0)
+    state_name: str | None = Field(default=None, max_length=100)
+    district_code: int | None = Field(default=None, gt=0)
+    district_name: str | None = Field(default=None, max_length=100)
+
+
+class AuthFpoSignupPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: UUID
+    account_type: Literal["fpo"]
+    authorised_fpo_representative: bool | None = None
+    full_name: str = Field(min_length=2, max_length=200)
+    email: EmailStr
+    phone_number: str | None = Field(default=None, min_length=5, max_length=30)
+    signup_profile: AuthFpoSignupProfile
+
+
+class AuthUserCreatedEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_id: UUID
+    event_type: Literal["auth.user.created"]
+    event_version: Literal[1, 2]
+    occurred_at: datetime
+    correlation_id: UUID
+    subject_id: UUID
+    payload: AuthFpoSignupPayload
+
+
+class ProvisioningRetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=3, max_length=1000)
 
 
 class StagedFarmLinkRequest(BaseModel):
@@ -511,12 +558,171 @@ def live():
 
 @app.get("/health/ready")
 def ready():
+    if (
+        len(config.internal_event_token.encode("utf-8")) < 32
+        or len(config.profile_internal_service_token.encode("utf-8")) < 32
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail={"service": "fpo_management_service", "status": "not_ready", "code": "INTERNAL_SERVICE_AUTH_NOT_CONFIGURED"},
+        )
     try:
         with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+            schema_ready = conn.execute(text("""
+                SELECT to_regclass('public.fpo_event_inbox') IS NOT NULL
+                   AND to_regclass('public.fpo_service_heartbeats') IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public'
+                         AND table_name = 'fpo_event_inbox'
+                         AND column_name = 'event_payload'
+                   )
+                   AND EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public'
+                         AND table_name = 'fpo_event_inbox'
+                         AND column_name = 'attempts_in_cycle'
+                   )
+                   AND EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public'
+                         AND table_name = 'fpo_event_inbox'
+                         AND column_name = 'correlation_id'
+                   )
+                   AND EXISTS (
+                       SELECT 1 FROM public.fpo_service_heartbeats
+                       WHERE service_name = 'fpo_management_worker'
+                         AND heartbeat_at > now() - interval '60 seconds'
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM public.fpo_event_inbox
+                       WHERE consumer_name = 'fpo_management_service'
+                         AND status IN ('RECEIVED', 'FAILED')
+                         AND created_at < now() - interval '5 minutes'
+                   )
+            """)).scalar_one()
+            if not schema_ready:
+                raise RuntimeError("FPO provisioning migration is not applied")
+        response = httpx.get(f"{config.profile_service_url}/health/ready", timeout=2)
+        if response.status_code != 200:
+            raise RuntimeError("Profile Service is not ready")
         return {"service": "fpo_management_service", "status": "ready"}
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"service": "fpo_management_service", "status": "not_ready", "message": str(exc)[:200]}) from exc
+        raise HTTPException(
+            status_code=503,
+            detail={"service": "fpo_management_service", "status": "not_ready", "code": "DATABASE_OR_MIGRATION_UNAVAILABLE"},
+        ) from exc
+
+
+@app.get("/metrics")
+def read_provisioning_metrics():
+    values = provisioning_metrics()
+    metric_names = {
+        "events_received": "fpo_provisioning_events_received_total",
+        "duplicates": "fpo_provisioning_events_duplicate_total",
+        "poison": "fpo_provisioning_events_poison_total",
+        "attempts": "fpo_provisioning_started_total",
+        "completed": "fpo_provisioning_completed_total",
+        "failed": "fpo_provisioning_failed_total",
+        "retries": "fpo_provisioning_retry_total",
+        "avg_duration_seconds": "fpo_provisioning_duration_seconds",
+        "queue_depth": "fpo_provisioning_queue_depth",
+        "oldest_event_age_seconds": "fpo_provisioning_oldest_event_age_seconds",
+    }
+    return Response(
+        "\n".join(f"{metric_names[key]} {values[key]}" for key in metric_names) + "\n",
+        media_type="text/plain; version=0.0.4",
+    )
+
+
+@app.post("/v1/internal/events/auth-user-created", status_code=202)
+async def receive_auth_user_created_event(
+    event: AuthUserCreatedEvent,
+    x_internal_service_token: str | None = Header(default=None, alias="X-Internal-Service-Token"),
+):
+    expected = config.internal_event_token
+    if len(expected.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail={"code": "INTERNAL_EVENT_AUTH_NOT_CONFIGURED"})
+    if not x_internal_service_token or not secrets.compare_digest(x_internal_service_token, expected):
+        raise HTTPException(status_code=401, detail={"code": "INTERNAL_SERVICE_UNAUTHORIZED"})
+    if str(event.subject_id) != str(event.payload.user_id):
+        raise HTTPException(status_code=422, detail={"code": "FPO_EVENT_SUBJECT_MISMATCH"})
+    if event.payload.authorised_fpo_representative is False or (
+        event.event_version == 2 and event.payload.authorised_fpo_representative is not True
+    ):
+        raise HTTPException(status_code=422, detail={"code": "FPO_REPRESENTATIVE_AUTHORITY_REQUIRED"})
+    event_data = event.model_dump(mode="json")
+    if event.event_version == 1 and event.payload.authorised_fpo_representative is None:
+        event_data["payload"]["authorised_fpo_representative"] = True
+    result = await run_in_threadpool(
+        ingest_auth_user_created_event,
+        event_data,
+    )
+    return {"event_id": str(event.event_id), "result": result}
+
+
+@app.get("/v1/admin/fpo/provisioning")
+async def read_fpo_provisioning_cases(
+    status: str | None = Query(default=None, pattern="^(RECEIVED|PROCESSING|PROCESSED|FAILED|DEAD)$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    user=Depends(current_user),
+):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
+    items = await run_in_threadpool(
+        admin_provisioning_cases,
+        limit=limit,
+        offset=offset,
+        status=status,
+    )
+    return {"items": items, "limit": limit, "offset": offset}
+
+
+@app.get("/v1/admin/fpo/provisioning/{fpo_id}")
+async def read_fpo_provisioning_case(fpo_id: UUID, user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
+    result = await run_in_threadpool(admin_provisioning_case, fpo_id)
+    if not result:
+        raise HTTPException(status_code=404, detail={"code": "FPO_PROVISIONING_CASE_NOT_FOUND"})
+    return result
+
+
+@app.post("/v1/admin/fpo/provisioning/events/{event_id}/retry")
+async def retry_fpo_provisioning_event(event_id: UUID, payload: ProvisioningRetryRequest, user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
+    try:
+        return await run_in_threadpool(
+            admin_retry_provisioning,
+            event_id=event_id,
+            actor_user_id=user["user_id"],
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": str(exc), "message": "This provisioning event cannot be retried."},
+        ) from exc
+
+
+@app.post("/v1/admin/fpo/provisioning/{fpo_id}/retry")
+async def retry_fpo_provisioning_by_organization(fpo_id: UUID, payload: ProvisioningRetryRequest, user=Depends(current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
+    try:
+        return await run_in_threadpool(
+            admin_retry_fpo_provisioning,
+            fpo_id=fpo_id,
+            actor_user_id=user["user_id"],
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": str(exc), "message": "This organization cannot be retried."},
+        ) from exc
 
 
 @app.get("/v1/fpo-portal/bootstrap-status")

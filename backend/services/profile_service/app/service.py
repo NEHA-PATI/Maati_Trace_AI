@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shared.db.postgres import engine
@@ -33,6 +34,7 @@ from services.profile_service.app.repository import (
 from services.profile_service.app.schemas import (
     FarmerProfileResponse,
     FarmerProfileUpdate,
+    FpoProvisioningProfileRequest,
     FpoProfileResponse,
     FpoProfileSetupRequest,
     FpoProfileUpdate,
@@ -331,6 +333,174 @@ def fpo_profile_progress(
         FPO_REQUIRED_FIELDS,
         FPO_DISPLAY_FIELDS,
     )
+
+
+def provision_fpo_profile_internal(
+    payload: FpoProvisioningProfileRequest,
+) -> dict[str, str]:
+    if not payload.authorised_fpo_representative:
+        raise ProfileError(
+            "FPO_REPRESENTATIVE_AUTHORITY_REQUIRED",
+            "The FPO representative authorization is required.",
+            422,
+        )
+
+    signup = payload.signup_profile
+    registration_number = "".join(
+        character for character in signup.registration_number.upper()
+        if character.isalnum()
+    )
+    with engine.begin() as conn:
+        auth_user = conn.execute(
+            text("""
+                SELECT role, is_active, is_verified FROM public.users
+                WHERE user_id = :user_id FOR UPDATE;
+            """),
+            {"user_id": str(payload.user_id)},
+        ).mappings().first()
+        if (
+            not auth_user
+            or auth_user["role"] != "fpo"
+            or not auth_user["is_active"]
+            or not auth_user["is_verified"]
+        ):
+            raise ProfileError(
+                "FPO_AUTH_USER_INVALID",
+                "The FPO account is not eligible for profile provisioning.",
+                422,
+            )
+
+        state = conn.execute(
+            text("""
+                SELECT state_name FROM public.states
+                WHERE state_code = :state_code;
+            """),
+            {"state_code": signup.state_code},
+        ).mappings().first()
+        if not state:
+            raise ProfileError(
+                "FPO_STATE_CODE_INVALID",
+                "The selected state is not in the location catalogue.",
+                422,
+            )
+
+        district_name = None
+        if signup.district_code is not None:
+            district = conn.execute(
+                text("""
+                    SELECT district_name FROM public.districts
+                    WHERE district_code = :district_code AND state_code = :state_code;
+                """),
+                {"district_code": signup.district_code, "state_code": signup.state_code},
+            ).mappings().first()
+            if not district:
+                raise ProfileError(
+                    "FPO_DISTRICT_CODE_INVALID",
+                    "The selected district does not belong to the selected state.",
+                    422,
+                )
+            district_name = district["district_name"]
+
+        if payload.existing_profile_fpo_id:
+            linked_profile = conn.execute(
+                text("""
+                    SELECT p.fpo_id,
+                           (SELECT fu.user_id FROM public.fpo_users fu
+                            WHERE fu.fpo_id = p.fpo_id AND fu.is_active = TRUE
+                              AND fu.fpo_role = 'owner' LIMIT 1) AS owner_user_id,
+                           regexp_replace(upper(p.registration_number), '[^A-Z0-9]', '', 'g') AS normalized_registration
+                    FROM public.fpos p
+                    WHERE p.fpo_id = :profile_fpo_id AND p.is_active = TRUE
+                    FOR UPDATE;
+                """),
+                {"profile_fpo_id": str(payload.existing_profile_fpo_id)},
+            ).mappings().first()
+            if (
+                not linked_profile
+                or linked_profile["normalized_registration"] != registration_number
+                or (linked_profile.get("owner_user_id") and str(linked_profile["owner_user_id"]) != str(payload.user_id))
+            ):
+                raise ProfileError(
+                    "FPO_PROFILE_LINK_CONFLICT",
+                    "The organization profile link needs administrator review.",
+                    409,
+                )
+            conn.execute(
+                text("""
+                    INSERT INTO public.fpo_users (fpo_id, user_id, fpo_role, role, is_active, created_at, updated_at)
+                    VALUES (:fpo_id, :user_id, 'owner', 'owner', TRUE, now(), now())
+                    ON CONFLICT (fpo_id, user_id)
+                    DO UPDATE SET is_active = TRUE, fpo_role = 'owner', role = 'owner', updated_at = now();
+                """),
+                {"fpo_id": str(payload.existing_profile_fpo_id), "user_id": str(payload.user_id)},
+            )
+            return {"profile_fpo_id": str(payload.existing_profile_fpo_id)}
+
+        conn.execute(
+            text("""
+                SELECT pg_advisory_xact_lock(hashtext(:registration_number));
+            """),
+            {"registration_number": registration_number},
+        )
+        duplicate = conn.execute(
+            text("""
+                SELECT p.fpo_id, fu.user_id AS owner_user_id
+                FROM public.fpos p
+                LEFT JOIN public.fpo_users fu
+                  ON fu.fpo_id = p.fpo_id AND fu.is_active = TRUE
+                 AND fu.fpo_role = 'owner'
+                WHERE regexp_replace(upper(p.registration_number), '[^A-Z0-9]', '', 'g') = :registration_number
+                LIMIT 1;
+            """),
+            {"registration_number": registration_number},
+        ).mappings().first()
+        if duplicate:
+            if str(duplicate.get("owner_user_id")) == str(payload.user_id):
+                return {"profile_fpo_id": str(duplicate["fpo_id"])}
+            raise ProfileError(
+                "FPO_REGISTRATION_CONFLICT",
+                "This organization could not be registered with the supplied details. Contact support.",
+                409,
+            )
+
+        values = FpoProfileSetupRequest.model_validate({
+            "fpo_name": signup.organisation_name,
+            "registration_number": signup.registration_number,
+            "registration_type": signup.registration_type,
+            "contact_person_name": payload.full_name,
+            "contact_phone": payload.phone_number,
+            "contact_email": str(payload.email),
+            "state_name": state["state_name"],
+            "district_name": district_name,
+            "district_code": signup.district_code,
+            "main_commodities": [],
+            "services_provided": [],
+        }).model_dump()
+        complete, _, _ = fpo_profile_progress(values)
+        values["profile_complete"] = complete
+        profile = create_fpo_with_membership(
+            conn,
+            user_id=payload.user_id,
+            values=values,
+            write_legacy_verification_status=False,
+        )
+        update_user_onboarding_status(
+            conn,
+            user_id=payload.user_id,
+            onboarding_status="completed" if complete else "pending",
+        )
+        record_profile_audit_event(
+            conn,
+            entity_type="fpo",
+            entity_id=profile["fpo_id"],
+            subject_user_id=payload.user_id,
+            actor_user_id=payload.user_id,
+            event_type="fpo_profile_provisioned",
+            changed_fields=["fpo_name", "registration_number", "registration_type", "state_name", "district_name"],
+            correlation_id=str(payload.correlation_id),
+            ip_address=None,
+        )
+        return {"profile_fpo_id": str(profile["fpo_id"])}
 
 
 def _farmer_envelope(

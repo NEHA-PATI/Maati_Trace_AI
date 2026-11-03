@@ -58,6 +58,7 @@ import FpoClassCCompliancePage from "@/features/fpo/dashboard/FpoClassCComplianc
 import FpoClassCIntegrationsPage from "@/features/fpo/dashboard/FpoClassCIntegrationsPage";
 import FpoVerificationWorkspacePage from "@/pages/FpoVerificationWorkspacePage";
 import FpoProvisioningRoute from "@/features/fpo/access/FpoProvisioningRoute";
+import FpoProvisioningPage from "@/features/fpo/access/FpoProvisioningPage";
 
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminFpoRegistryPage from "@/pages/AdminFpoRegistryPage";
@@ -169,6 +170,7 @@ export const router = createBrowserRouter(
             {
               element: <FpoAppShell />,
               children: [
+                { path: "/fpo/provisioning", element: <FpoProvisioningPage /> },
                 { path: "/fpo/overview", element: <FpoDashboardPage /> },
                 {
                   path: "/fpo/dashboard",

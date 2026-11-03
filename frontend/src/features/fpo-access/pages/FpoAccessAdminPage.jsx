@@ -12,11 +12,8 @@ export default function FpoAccessAdminPage() {
     setLoading(true);
     setError("");
     try {
-      const [pending, approved] = await Promise.all([
-        fpoAccessApi.listForAdmin({ status: "pending" }),
-        fpoAccessApi.listForAdmin({ status: "approved" }),
-      ]);
-      setItems([...(pending.items || []), ...(approved.items || [])]);
+      const result = await fpoAccessApi.listActionableForAdmin();
+      setItems(result.items || []);
     } catch (requestError) {
       setError(requestError.message || "FPO access requests could not be loaded.");
     } finally {
@@ -39,6 +36,24 @@ export default function FpoAccessAdminPage() {
       await load();
     } catch (requestError) {
       setError(requestError.message || "The request could not be rejected.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function closeExistingAccount(item) {
+    setBusyId(item.request_id);
+    setError("");
+    setNotice("");
+    try {
+      await fpoAccessApi.reviewForAdmin(item.request_id, {
+        status: "closed",
+        review_note: "Closed because an account already exists for this email.",
+      });
+      setNotice(`Closed the duplicate request for ${item.contact_email}.`);
+      await load();
+    } catch (requestError) {
+      setError(requestError.message || "The request could not be closed.");
     } finally {
       setBusyId("");
     }
@@ -71,7 +86,7 @@ export default function FpoAccessAdminPage() {
       setNotice(`Invitation queued for ${item.contact_email}.`);
       await load();
     } catch (requestError) {
-      setError(`${requestError.message || "The invitation could not be queued."} Approved requests remain available for invitation retry.`);
+      setError(`${requestError.message || "The invitation could not be queued."} The request remains available for retry.`);
       await load();
     } finally {
       setBusyId("");
@@ -88,7 +103,7 @@ export default function FpoAccessAdminPage() {
       {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div> : null}
       {error ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
       {loading ? <p className="text-sm text-slate-500">Loading requests…</p> : null}
-      {!loading && items.length === 0 ? <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No pending or approved FPO requests.</p> : null}
+      {!loading && items.length === 0 ? <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No pending, approved, or expired-invitation FPO requests.</p> : null}
       <div className="grid gap-4">
         {items.map((item) => {
           const busy = busyId === item.request_id;
@@ -98,20 +113,29 @@ export default function FpoAccessAdminPage() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg font-bold text-slate-950">{item.organisation_name}</h2>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold uppercase text-slate-600">{item.status}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold uppercase text-slate-600">{item.account_exists ? "account already exists" : item.invitation_status === "expired" || item.invitation_status === "revoked" ? `invitation ${item.invitation_status}` : item.status}</span>
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{item.contact_person_name} · {item.contact_email} · {item.contact_phone}</p>
                   <p className="mt-1 text-sm text-slate-500">{[item.district_name, item.state_name].filter(Boolean).join(", ")}</p>
                   {item.registration_number ? <p className="mt-1 text-xs text-slate-500">Registration: {item.registration_number}</p> : null}
+                  {item.account_exists ? (
+                    <p className="mt-2 text-sm text-amber-800">This email already has an account. Do not send another invitation; check FPO provisioning or close this request.</p>
+                  ) : item.invitation_status === "expired" || item.invitation_status === "revoked" ? (
+                    <p className="mt-2 text-sm text-amber-800">The previous invitation is no longer usable. Resend it from this request; a new request is not needed.</p>
+                  ) : null}
                   {item.message ? <p className="mt-3 text-sm leading-6 text-slate-700">{item.message}</p> : null}
                 </div>
                 <div className="flex gap-2">
-                  {item.status === "pending" ? (
+                  {item.account_exists && item.status !== "closed" ? (
+                    <button type="button" disabled={busy} onClick={() => closeExistingAccount(item)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Close duplicate request</button>
+                  ) : !item.account_exists && item.status === "pending" ? (
                     <button type="button" disabled={busy} onClick={() => reject(item)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50">Reject</button>
                   ) : null}
-                  <button type="button" disabled={busy} onClick={() => approveAndInvite(item)} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {busy ? "Working…" : item.status === "approved" ? "Retry invitation" : "Approve and invite"}
-                  </button>
+                  {!item.account_exists && (
+                    <button type="button" disabled={busy} onClick={() => approveAndInvite(item)} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                      {busy ? "Working…" : item.invitation_status === "expired" || item.invitation_status === "revoked" ? "Resend invitation" : item.status === "approved" ? "Retry invitation" : "Approve and invite"}
+                    </button>
+                  )}
                 </div>
               </div>
             </article>

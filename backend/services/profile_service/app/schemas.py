@@ -374,6 +374,7 @@ class FpoProfileSetupRequest(StrictModel):
         max_length=2000,
     )
 
+
     @field_validator(
         "fpo_name",
         "registration_number",
@@ -449,6 +450,25 @@ class FpoProfileSetupRequest(StrictModel):
             )
 
         return self
+
+
+class FpoProvisioningSignupProfile(StrictModel):
+    organisation_name: str = Field(min_length=2, max_length=240)
+    registration_type: str = Field(min_length=2, max_length=100)
+    registration_number: str = Field(min_length=2, max_length=100)
+    state_code: int = Field(gt=0)
+    district_code: int | None = Field(default=None, gt=0)
+
+
+class FpoProvisioningProfileRequest(StrictModel):
+    user_id: UUID
+    correlation_id: UUID
+    existing_profile_fpo_id: UUID | None = None
+    authorised_fpo_representative: bool
+    full_name: str = Field(min_length=2, max_length=200)
+    email: EmailStr
+    phone_number: str | None = Field(default=None, min_length=5, max_length=30)
+    signup_profile: FpoProvisioningSignupProfile
 
 
 class FpoProfileUpdate(FpoProfileSetupRequest):

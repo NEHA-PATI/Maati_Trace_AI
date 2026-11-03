@@ -207,9 +207,10 @@ class FpoAccessRequestCreate(StrictModel):
 
 class FpoAccessRequestPublicResponse(StrictModel):
     request_id: UUID
-    status: Literal["pending"]
+    status: Literal["pending", "approved", "closed"]
     message: str
     correlation_id: str
+    already_exists: bool = False
 
 
 class FpoAccessRequestAdminView(StrictModel):
@@ -226,6 +227,9 @@ class FpoAccessRequestAdminView(StrictModel):
     reviewed_by: UUID | None = None
     reviewed_at: datetime | None = None
     review_note: str | None = None
+    account_exists: bool = False
+    invitation_status: Literal["active", "expired", "revoked", "accepted"] | None = None
+    invitation_expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -50,6 +50,7 @@ from services.profile_service.app.schemas import (
     FpoProfileEnvelope,
     FpoProfileResponse,
     FpoProfileSetupRequest,
+    FpoProvisioningProfileRequest,
     FpoProfileUpdate,
     FpoValidationResponse,
     HealthResponse,
@@ -66,6 +67,7 @@ from services.profile_service.app.service import (
     setup_my_fpo_profile,
     update_my_farmer_profile,
     update_my_fpo_profile,
+    provision_fpo_profile_internal,
     validate_farmer_internal,
     validate_fpo_internal,
 )
@@ -369,6 +371,16 @@ async def create_my_fpo_profile(
         context,
         payload,
     )
+
+
+@app.post(
+    "/internal/v1/fpos/provision",
+    dependencies=[Depends(require_internal_service)],
+)
+def provision_fpo_for_internal_service(
+    payload: FpoProvisioningProfileRequest,
+):
+    return provision_fpo_profile_internal(payload)
 
 
 @app.patch(
