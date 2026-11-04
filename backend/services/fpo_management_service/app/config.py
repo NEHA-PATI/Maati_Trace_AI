@@ -13,6 +13,9 @@ class FpoManagementConfig:
     worker_batch_size: int
     worker_poll_seconds: float
     analytics_query_service_url: str
+    internal_event_token: str
+    profile_service_url: str
+    profile_internal_service_token: str
 
     @classmethod
     def from_env(cls) -> "FpoManagementConfig":
@@ -24,4 +27,7 @@ class FpoManagementConfig:
             worker_batch_size=max(1, int(os.getenv("FPO_OUTBOX_BATCH_SIZE", "25"))),
             worker_poll_seconds=max(1.0, float(os.getenv("FPO_OUTBOX_POLL_SECONDS", "5"))),
             analytics_query_service_url=os.getenv("FPO_ANALYTICS_QUERY_SERVICE_URL", "http://127.0.0.1:8011").rstrip("/"),
+            internal_event_token=os.getenv("FPO_EVENT_DELIVERY_TOKEN", "").strip(),
+            profile_service_url=os.getenv("PROFILE_SERVICE_URL", "http://127.0.0.1:8003").rstrip("/"),
+            profile_internal_service_token=os.getenv("PROFILE_INTERNAL_SERVICE_TOKEN", "").strip(),
         )

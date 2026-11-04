@@ -18,6 +18,8 @@ import {
   getFpoFeatureCatalogue,
   getFpoFeatureOverrides,
   getFpoVerificationQueue,
+  getFpoProvisioningCases,
+  retryFpoProvisioningEvent,
   getFpoAdminDocuments,
   getFpoAdminDocumentContent,
   validateFpoDocument,
@@ -35,7 +37,7 @@ import {
 } from "@/lib/api/fpo";
 import { fpoAccessApi } from "@/features/fpo-access/api/fpoAccessApi";
 
-const TABS = ["verification", "access", "configuration", "governance"];
+const TABS = ["verification", "provisioning", "access", "configuration", "governance"];
 const FILTERS = [
   ["", "All submissions"],
   ["SUBMITTED", "Submitted"],
@@ -53,6 +55,10 @@ export default function FpoAdminPage() {
   const [tab, setTab] = useState("verification");
   const [filter, setFilter] = useState("");
   const [items, setItems] = useState([]);
+  const [provisioningItems, setProvisioningItems] = useState([]);
+  const [provisioningLoading, setProvisioningLoading] = useState(false);
+  const [provisioningBusyId, setProvisioningBusyId] = useState("");
+  const [provisioningRetryReason, setProvisioningRetryReason] = useState("");
   const [accessItems, setAccessItems] = useState([]);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessBusyId, setAccessBusyId] = useState("");
@@ -113,12 +119,45 @@ export default function FpoAdminPage() {
   async function loadAccessRequests() {
     setAccessLoading(true);
     try {
-      const result = await fpoAccessApi.listForAdmin({});
+      const result = await fpoAccessApi.listActionableForAdmin();
       setAccessItems(result.items || []);
     } catch (requestError) {
       setError(requestError?.message || "Unable to load FPO access requests.");
     } finally {
       setAccessLoading(false);
+    }
+  }
+
+  async function loadProvisioningCases() {
+    setProvisioningLoading(true);
+    try {
+      const result = await getFpoProvisioningCases();
+      setProvisioningItems(result.items || []);
+    } catch (requestError) {
+      setError(requestError?.message || "Unable to load FPO provisioning cases.");
+    } finally {
+      setProvisioningLoading(false);
+    }
+  }
+
+  async function retryProvisioningCase(item) {
+    const reason = provisioningRetryReason.trim();
+    if (!reason) {
+      setError("Enter a reason before retrying provisioning.");
+      return;
+    }
+    setProvisioningBusyId(item.event_id);
+    setError("");
+    setNotice("");
+    try {
+      await retryFpoProvisioningEvent(item.event_id, reason);
+      setNotice("Provisioning was safely requeued. The worker will retry the same organization.");
+      setProvisioningRetryReason("");
+      await loadProvisioningCases();
+    } catch (requestError) {
+      setError(requestError?.message || "The provisioning event could not be requeued.");
+    } finally {
+      setProvisioningBusyId("");
     }
   }
 
@@ -129,19 +168,24 @@ export default function FpoAdminPage() {
   useEffect(() => {
     if (tab === "configuration") loadFeatureConfiguration();
     if (tab === "access") loadAccessRequests();
+    if (tab === "provisioning") loadProvisioningCases();
   }, [tab]);
 
   async function decideAccess(item, status) {
     setAccessBusyId(item.request_id);
     setError("");
+    setNotice("");
     try {
       await fpoAccessApi.reviewForAdmin(item.request_id, {
         status,
         review_note:
           status === "rejected"
             ? "Request rejected by administrator."
+            : status === "closed"
+              ? "Closed because an account already exists for this email."
             : "Approved for secure FPO invitation.",
       });
+      setNotice(status === "closed" ? "Closed the duplicate access request." : "Rejected the access request.");
       await loadAccessRequests();
     } catch (requestError) {
       setError(
@@ -550,7 +594,7 @@ export default function FpoAdminPage() {
           ) : null}
           {!accessLoading && accessItems.length === 0 ? (
             <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-              No pending or approved access requests.
+              No pending, approved, or expired-invitation requests.
             </p>
           ) : null}
           <div className="space-y-3">
@@ -568,7 +612,12 @@ export default function FpoAdminPage() {
                           {item.organisation_name}
                         </h3>
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold uppercase text-slate-600">
-                          {item.status}
+                            {item.account_exists
+                              ? "account already exists"
+                              : item.invitation_status === "expired" ||
+                            item.invitation_status === "revoked"
+                              ? `invitation ${item.invitation_status}`
+                              : item.status}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-slate-600">
@@ -585,9 +634,31 @@ export default function FpoAdminPage() {
                           Registration: {item.registration_number}
                         </p>
                       ) : null}
+                      {item.account_exists ? (
+                        <p className="mt-2 text-sm text-amber-800">
+                          This email already has an account. Do not send another
+                          invitation; check FPO provisioning or close this
+                          request.
+                        </p>
+                      ) : item.invitation_status === "expired" ||
+                      item.invitation_status === "revoked" ? (
+                        <p className="mt-2 text-sm text-amber-800">
+                          The previous invitation is no longer usable. Resend it
+                          from this request; a new request is not needed.
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {item.status === "pending" ? (
+                      {item.account_exists && item.status !== "closed" ? (
+                        <Button
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => decideAccess(item, "closed")}
+                          className="rounded-lg"
+                        >
+                          Close duplicate request
+                        </Button>
+                      ) : !item.account_exists && item.status === "pending" ? (
                         <Button
                           variant="outline"
                           disabled={busy}
@@ -597,8 +668,10 @@ export default function FpoAdminPage() {
                           Reject
                         </Button>
                       ) : null}
-                      {item.status === "pending" ||
-                      item.status === "approved" ? (
+                      {!item.account_exists && (item.status === "pending" ||
+                      item.status === "approved" ||
+                      item.invitation_status === "expired" ||
+                      item.invitation_status === "revoked") ? (
                         <Button
                           disabled={busy}
                           onClick={() => approveAndInvite(item)}
@@ -606,19 +679,97 @@ export default function FpoAdminPage() {
                         >
                           {busy
                             ? "Working…"
-                            : item.status === "approved"
-                              ? "Retry invitation"
-                              : "Approve and invite"}
+                            : item.invitation_status === "expired" ||
+                              item.invitation_status === "revoked"
+                              ? "Resend invitation"
+                              : item.status === "approved"
+                                ? "Retry invitation"
+                                : "Approve and invite"}
                         </Button>
-                      ) : (
+                      ) : !item.account_exists ? (
                         <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold uppercase text-slate-500">
                           {item.status === "closed"
                             ? "Invitation sent"
                             : "No action"}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : tab === "provisioning" ? (
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+            <h2 className="font-black text-sky-950">FPO account provisioning</h2>
+            <p className="mt-1 text-sm leading-6 text-sky-900">
+              Inspect signup delivery and organization setup. Retry replays the same event through the normal idempotent flow; it never marks an organization ready by hand.
+            </p>
+            <label className="mt-4 block text-sm font-bold text-slate-800" htmlFor="fpo-provisioning-retry-reason">
+              Reason required for retry
+            </label>
+            <input
+              id="fpo-provisioning-retry-reason"
+              value={provisioningRetryReason}
+              onChange={(event) => setProvisioningRetryReason(event.target.value)}
+              placeholder="Support ticket or investigation summary"
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+              maxLength={1000}
+            />
+            <Button
+              variant="outline"
+              className="mt-3 rounded-xl"
+              onClick={loadProvisioningCases}
+              disabled={provisioningLoading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${provisioningLoading ? "animate-spin" : ""}`} />
+              Refresh cases
+            </Button>
+          </div>
+          {provisioningLoading ? (
+            <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Loading provisioning cases…</p>
+          ) : null}
+          {!provisioningLoading && provisioningItems.length === 0 ? (
+            <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">No FPO provisioning events have been delivered.</p>
+          ) : null}
+          <div className="space-y-3">
+            {provisioningItems.map((item) => {
+              const canRetry = ["FAILED", "DEAD"].includes(item.event_status)
+                && item.error_code !== "POISON_EVENT";
+              const busy = provisioningBusyId === item.event_id;
+              return (
+                <article key={item.event_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-950">{item.organization_name || "Organization identity not created"}</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.public_fpo_id || "No public FPO ID yet"} · {item.provisioning_status || item.event_status}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700">
+                      {item.event_status}
+                    </span>
+                  </div>
+                  <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2">
+                    <div><dt className="font-bold text-slate-500">Current step</dt><dd className="mt-1 text-slate-800">{item.provisioning_step || "Waiting for organization"}</dd></div>
+                    <div><dt className="font-bold text-slate-500">Attempts</dt><dd className="mt-1 text-slate-800">{item.attempts ?? 0}</dd></div>
+                    <div><dt className="font-bold text-slate-500">Error code</dt><dd className="mt-1 text-slate-800">{item.provisioning_error_code || item.error_code || "—"}</dd></div>
+                    <div><dt className="font-bold text-slate-500">Reference ID</dt><dd className="mt-1 break-all font-mono text-slate-800">{item.correlation_id || "—"}</dd></div>
+                    <div><dt className="font-bold text-slate-500">Auth user ID</dt><dd className="mt-1 break-all font-mono text-slate-800">{item.auth_user_id}</dd></div>
+                    <div><dt className="font-bold text-slate-500">Last updated</dt><dd className="mt-1 text-slate-800">{item.updated_at ? new Date(item.updated_at).toLocaleString() : "—"}</dd></div>
+                  </dl>
+                  {item.provisioning_error ? <p className="mt-3 text-sm text-rose-700">{item.provisioning_error}</p> : null}
+                  {canRetry ? (
+                    <Button
+                      className="mt-4 rounded-xl bg-emerald-700 hover:bg-emerald-800"
+                      disabled={busy || provisioningRetryReason.trim().length < 3}
+                      onClick={() => retryProvisioningCase(item)}
+                    >
+                      {busy ? "Requeueing…" : "Retry safely"}
+                    </Button>
+                  ) : null}
                 </article>
               );
             })}

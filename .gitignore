@@ -37,6 +37,8 @@ coverage.xml
 *.log
 *.md
 *.pdf
+!docs/fpo-api-contract.md
+!backend/docs/fpo_entry.md
 backend/services/*/.env
 frontend/.env.local
 

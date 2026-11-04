@@ -49,6 +49,19 @@ export function getFpoVerificationQueue(status = "") {
   );
 }
 
+export function getFpoProvisioningCases({ status = "", limit = 50, offset = 0 } = {}) {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (status) query.set("status", status);
+  return fpoManagementClient.request(`/v1/admin/fpo/provisioning?${query}`);
+}
+
+export function retryFpoProvisioningEvent(eventId, reason) {
+  return fpoManagementClient.request(
+    `/v1/admin/fpo/provisioning/events/${eventId}/retry`,
+    { method: "POST", body: { reason } },
+  );
+}
+
 export function reviewFpoVerification(fpoId, status, note = "") {
   return fpoManagementClient.request(
     `/v1/fpo-portal/admin/organizations/${fpoId}/verification`,

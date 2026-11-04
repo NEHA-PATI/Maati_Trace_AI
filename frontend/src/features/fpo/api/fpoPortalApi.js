@@ -4,6 +4,10 @@ export function getFpoPortalBootstrap() {
   return fpoManagementClient.request("/v1/fpo-portal/bootstrap");
 }
 
+export function getFpoBootstrapStatus() {
+  return fpoManagementClient.request("/v1/fpo-portal/bootstrap-status");
+}
+
 export function getFpoPortalEntitlements() {
   return fpoManagementClient.request("/v1/fpo-portal/entitlements");
 }

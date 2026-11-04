@@ -8,6 +8,7 @@ from fastapi import Depends, Header, Request
 from services.auth_service.app.audit import record_audit_event
 from services.auth_service.app.config_validation import get_auth_config
 from services.auth_service.app.errors import AuthError
+from services.auth_service.app.logging_context import get_correlation_id
 from services.auth_service.app.security import (
     AuthSecurityError,
     decode_access_token,
@@ -22,6 +23,7 @@ class RequestContext:
     ip_address: str | None
     device_id_hash: str | None
     user_agent_hash: str | None
+    correlation_id: str = "unassigned"
 
 
 def get_request_context(
@@ -33,6 +35,7 @@ def get_request_context(
         ip_address=request.client.host if request.client else None,
         device_id_hash=hash_device_id(x_device_id),
         user_agent_hash=hash_user_agent(user_agent),
+        correlation_id=get_correlation_id(),
     )
 
 

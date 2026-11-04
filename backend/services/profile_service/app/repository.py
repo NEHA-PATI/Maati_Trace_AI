@@ -465,10 +465,13 @@ def create_fpo_with_membership(
     *,
     user_id: UUID | str,
     values: dict[str, Any],
+    write_legacy_verification_status: bool = True,
 ) -> dict[str, Any]:
+    verification_column = "verification_status," if write_legacy_verification_status else ""
+    verification_value = "'pending'," if write_legacy_verification_status else ""
     row = conn.execute(
         text(
-            """
+            f"""
             INSERT INTO fpos (
                 fpo_name,
                 registration_number,
@@ -498,7 +501,7 @@ def create_fpo_with_membership(
                 active_member_count,
                 services_provided,
 
-                verification_status,
+                {verification_column}
                 profile_image_url,
                 onboarding_completed_at,
                 profile_version,
@@ -533,7 +536,7 @@ def create_fpo_with_membership(
                 :active_member_count,
                 :services_provided,
 
-                'pending',
+                {verification_value}
                 :profile_image_url,
                 CASE
                     WHEN :profile_complete

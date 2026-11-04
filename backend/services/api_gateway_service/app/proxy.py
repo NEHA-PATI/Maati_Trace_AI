@@ -23,6 +23,7 @@ ROUTE_TARGETS = {
     # New FPO owner APIs use /api/fpo/me/... while legacy portal APIs use
     # /api/fpo-portal/.... Both are owned by the same service.
     "fpo": settings.fpo_management_service_url,
+    "admin-fpo": settings.fpo_management_service_url,
     # Farmer/FPO consent endpoints are owned by FPO Management Service.
     # Keep the public prefix aligned with the domain API contract.
     "farmer": settings.fpo_management_service_url,
@@ -118,6 +119,8 @@ def _build_target_url(prefix: str, rest_path: str, query_string: bytes) -> str:
     elif prefix == "fpo":
         # /api/fpo/me/... -> http://fpo-management/v1/fpo/me/...
         target_path = f"/v1/fpo/{rest_path}" if rest_path else "/v1/fpo"
+    elif prefix == "admin-fpo":
+        target_path = f"/v1/admin/fpo/{rest_path}" if rest_path else "/v1/admin/fpo"
     else:
         target_path = f"/v1/{prefix}"
         if rest_path:

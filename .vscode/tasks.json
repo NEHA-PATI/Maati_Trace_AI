@@ -425,14 +425,35 @@
       "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "args": [
         "-u",
-        "-m",
-        "services.fpo_management_service.worker"
+        "-c",
+        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/fpo_management_service/.env'); assert env_path.is_file(), 'Missing services/fpo_management_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.fpo_management_service.worker', run_name='__main__', alter_sys=True)"
       ],
       "problemMatcher": [],
       "runOptions": {
         "instanceLimit": 1
       }
+    },
+    {
+      "label": "MaatiTrace: Auth FPO Event Publisher",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "args": [
+        "-u",
+        "-c",
+        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.fpo_event_worker', run_name='__main__', alter_sys=True)"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "MaatiTrace: FPO Provisioning Workers",
+      "dependsOn": [
+        "MaatiTrace: Auth FPO Event Publisher",
+        "MaatiTrace: FPO Management Worker"
+      ],
+      "dependsOrder": "parallel"
     }
   ]
 }
-

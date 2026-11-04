@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import hashlib
 from typing import Any
 from uuid import UUID
 import json
@@ -12,81 +14,172 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 
-STATE_CODES = {21: "OD", 9: "UP", 27: "MH", 29: "KA", 33: "TN", 32: "KL", 19: "WB"}
-STATE_NAME_CODES = {
-    "odisha": 21,
-    "uttar pradesh": 9,
-    "maharashtra": 27,
-    "karnataka": 29,
-    "tamil nadu": 33,
-    "kerala": 32,
-    "west bengal": 19,
-}
 CHECK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 
-def public_fpo_id(state_code: int, sequence_number: int) -> str:
-    state = STATE_CODES.get(int(state_code), f"S{int(state_code):02d}")[:3].upper()
+def public_fpo_id(state_code: int, sequence_number: int, occurred_at: datetime | None = None) -> str:
+    if state_code <= 0 or sequence_number <= 0:
+        raise ValueError("FPO_PUBLIC_ID_INPUT_INVALID")
+    event_time = occurred_at or datetime.now(timezone.utc)
+    if event_time.tzinfo is None:
+        event_time = event_time.replace(tzinfo=timezone.utc)
+    state = f"S{int(state_code):02d}"
     check = CHECK_ALPHABET[sequence_number % len(CHECK_ALPHABET)]
-    return f"MTFPO-{state}-{__import__('datetime').datetime.now().year % 100:02d}-{sequence_number:06d}-{check}"
+    return f"MTFPO-{state}-{event_time.year % 100:02d}-{sequence_number:06d}-{check}"
 
 
-def claim_events(conn: Connection, *, batch_size: int) -> list[dict[str, Any]]:
+def validate_auth_user_created_event(event: dict[str, Any]) -> dict[str, Any]:
+    if set(event) - {
+        "event_id", "event_type", "event_version", "occurred_at",
+        "correlation_id", "subject_id", "payload",
+    }:
+        raise ValueError("FPO_EVENT_ENVELOPE_FIELDS_INVALID")
+    if event.get("event_type") != "auth.user.created" or int(event.get("event_version") or 0) not in {1, 2}:
+        raise ValueError("FPO_EVENT_TYPE_OR_VERSION_UNSUPPORTED")
+    payload = event.get("payload")
+    if not isinstance(payload, dict) or payload.get("account_type") != "fpo":
+        raise ValueError("FPO_EVENT_PAYLOAD_INVALID")
+    if set(payload) - {
+        "user_id", "account_type", "authorised_fpo_representative",
+        "email", "phone_number", "full_name", "signup_profile",
+    }:
+        raise ValueError("FPO_EVENT_PAYLOAD_FIELDS_INVALID")
+    user_id = payload.get("user_id")
+    if not user_id or str(event.get("subject_id")) != str(user_id):
+        raise ValueError("FPO_EVENT_SUBJECT_MISMATCH")
+    if payload.get("authorised_fpo_representative") is not True:
+        raise ValueError("FPO_REPRESENTATIVE_AUTHORITY_REQUIRED")
+    profile = payload.get("signup_profile")
+    if not isinstance(profile, dict):
+        raise ValueError("FPO_SIGNUP_PROFILE_REQUIRED")
+    if set(profile) - {
+        "organisation_name", "registration_type", "registration_number",
+        "state_code", "state_name", "district_code", "district_name",
+    }:
+        raise ValueError("FPO_SIGNUP_PROFILE_FIELDS_INVALID")
+    if not str(profile.get("organisation_name") or "").strip():
+        raise ValueError("FPO_ORGANISATION_NAME_REQUIRED")
+    if not str(profile.get("registration_number") or "").strip():
+        raise ValueError("FPO_REGISTRATION_NUMBER_REQUIRED")
+    try:
+        UUID(str(user_id))
+        UUID(str(event.get("event_id")))
+        UUID(str(event.get("correlation_id")))
+        occurred_at = datetime.fromisoformat(
+            str(event.get("occurred_at")).replace("Z", "+00:00")
+        )
+        if occurred_at.tzinfo is None or occurred_at.utcoffset() is None:
+            raise ValueError("FPO_EVENT_TIMESTAMP_TIMEZONE_REQUIRED")
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError("FPO_EVENT_ENVELOPE_INVALID") from exc
+    return payload
+
+
+def claim_provisioning_events(conn: Connection, *, batch_size: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         text(
             """
             WITH candidates AS (
-                SELECT event_id
-                FROM public.auth_outbox_events
-                WHERE event_type = 'auth.user.created'
-                  AND payload->>'account_type' = 'fpo'
-                  AND (status IN ('queued', 'failed') AND available_at <= now())
-                   OR (status = 'publishing' AND locked_at < now() - interval '5 minutes')
+                SELECT inbox_id
+                FROM public.fpo_event_inbox
+                WHERE consumer_name = 'fpo_management_service'
+                  AND event_type = 'auth.user.created'
+                  AND (
+                    (status IN ('RECEIVED', 'FAILED') AND available_at <= now())
+                    OR (status = 'PROCESSING' AND locked_at < now() - interval '5 minutes')
+                  )
                 ORDER BY available_at, created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT :batch_size
             )
-            UPDATE public.auth_outbox_events AS e
-            SET status = 'publishing', locked_at = now(), attempts = e.attempts + 1, updated_at = now()
+            UPDATE public.fpo_event_inbox AS e
+            SET status = 'PROCESSING', locked_at = now(),
+                attempts = e.attempts + 1,
+                attempts_in_cycle = e.attempts_in_cycle + 1,
+                updated_at = now()
             FROM candidates
-            WHERE e.event_id = candidates.event_id
+            WHERE e.inbox_id = candidates.inbox_id
             RETURNING e.*;
             """
         ),
         {"batch_size": batch_size},
     ).mappings().all()
-    return [dict(row) for row in rows]
+    return [
+        {
+            **dict(row),
+            "payload": row["event_payload"] or {},
+            "event_id": row["event_id"],
+        }
+        for row in rows
+    ]
 
 
-def record_event_inbox(conn: Connection, event: dict[str, Any], *, consumer_name: str = "fpo_management_service") -> bool:
-    """Record delivery idempotently before applying an event."""
-    payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-    payload_hash = __import__("hashlib").sha256(
+def record_event_inbox(conn: Connection, event: dict[str, Any], *, consumer_name: str = "fpo_management_service") -> str:
+    payload = validate_auth_user_created_event(event)
+    payload_hash = hashlib.sha256(
         json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
-    inserted = conn.execute(
+    inserted_id = conn.execute(
         text(
             """
             INSERT INTO public.fpo_event_inbox
-                (consumer_name, event_id, event_type, event_version, subject_id, payload_hash, status, attempts)
-            VALUES (:consumer, :event_id, :event_type, :event_version, :subject_id, :payload_hash, 'PROCESSING', 1)
-            ON CONFLICT (consumer_name, event_id) DO UPDATE
-            SET status = CASE WHEN fpo_event_inbox.status = 'PROCESSED' THEN fpo_event_inbox.status ELSE 'PROCESSING' END,
-                attempts = fpo_event_inbox.attempts + 1,
-                locked_at = now(), updated_at = now()
-            RETURNING status;
+                (consumer_name, event_id, event_type, event_version, subject_id,
+                 payload_hash, event_payload, correlation_id, occurred_at, status, attempts,
+                 delivery_count, poison_count)
+            VALUES (:consumer, :event_id, :event_type, :event_version, :subject_id,
+                    :payload_hash, CAST(:event_payload AS jsonb), :correlation_id,
+                    CAST(:occurred_at AS timestamptz), 'RECEIVED', 0, 1, 0)
+            ON CONFLICT (consumer_name, event_id) DO NOTHING
+            RETURNING inbox_id;
             """
         ),
         {
             "consumer": consumer_name,
             "event_id": str(event["event_id"]),
-            "event_type": event.get("event_type", "unknown"),
-            "event_version": int(event.get("event_version") or 1),
-            "subject_id": payload.get("user_id"),
+            "event_type": event["event_type"],
+            "event_version": int(event["event_version"]),
+            "subject_id": event["subject_id"],
             "payload_hash": payload_hash,
+            "event_payload": json.dumps(payload),
+            "correlation_id": str(event["correlation_id"]),
+            "occurred_at": event["occurred_at"],
         },
-    ).scalar_one()
-    return inserted != "PROCESSED"
+    ).scalar_one_or_none()
+    if inserted_id:
+        return "ACCEPTED"
+
+    existing = conn.execute(
+        text("""
+            SELECT inbox_id, payload_hash, status
+            FROM public.fpo_event_inbox
+            WHERE consumer_name = :consumer AND event_id = :event_id
+            FOR UPDATE;
+        """),
+        {"consumer": consumer_name, "event_id": str(event["event_id"])},
+    ).mappings().one()
+    if existing["payload_hash"] == payload_hash:
+        conn.execute(
+            text("""
+                UPDATE public.fpo_event_inbox
+                SET delivery_count = delivery_count + 1, updated_at = now()
+                WHERE inbox_id = :inbox_id;
+            """),
+            {"inbox_id": existing["inbox_id"]},
+        )
+        return "DUPLICATE"
+
+    conn.execute(
+        text("""
+            UPDATE public.fpo_event_inbox
+            SET status = 'DEAD', error_code = 'POISON_EVENT',
+                delivery_count = delivery_count + 1, poison_count = poison_count + 1,
+                last_error = 'Event ID was delivered again with a different payload hash.',
+                locked_at = NULL, updated_at = now()
+            WHERE inbox_id = :inbox_id;
+        """),
+        {"inbox_id": existing["inbox_id"]},
+    )
+    return "POISON_EVENT"
 
 
 def mark_event_inbox_processed(conn: Connection, event_id: UUID | str, *, consumer_name: str = "fpo_management_service") -> None:
@@ -94,7 +187,8 @@ def mark_event_inbox_processed(conn: Connection, event_id: UUID | str, *, consum
         text("""
             UPDATE public.fpo_event_inbox
             SET status = 'PROCESSED', processed_at = now(), locked_at = NULL, updated_at = now()
-            WHERE consumer_name = :consumer AND event_id = :event_id;
+            WHERE consumer_name = :consumer AND event_id = :event_id
+              AND status = 'PROCESSING';
         """),
         {"consumer": consumer_name, "event_id": str(event_id)},
     )
@@ -104,202 +198,261 @@ def mark_event_inbox_failed(conn: Connection, event_id: UUID | str, error: str, 
     conn.execute(
         text("""
             UPDATE public.fpo_event_inbox
-            SET status = CASE WHEN attempts >= 10 THEN 'DEAD' ELSE 'FAILED' END,
-                last_error = :error, locked_at = NULL, updated_at = now()
-            WHERE consumer_name = :consumer AND event_id = :event_id;
+            SET status = CASE WHEN attempts_in_cycle >= 10 THEN 'DEAD' ELSE 'FAILED' END,
+                error_code = CASE WHEN attempts_in_cycle >= 10 THEN 'PROVISIONING_ATTEMPTS_EXHAUSTED' ELSE 'PROVISIONING_RETRYABLE' END,
+                last_error = :error, locked_at = NULL,
+                available_at = now() + interval '30 seconds', updated_at = now()
+            WHERE consumer_name = :consumer AND event_id = :event_id
+              AND status = 'PROCESSING';
         """),
         {"consumer": consumer_name, "event_id": str(event_id), "error": error[:2000]},
     )
 
 
-def mark_published(conn: Connection, event_id: UUID | str) -> None:
+def record_provisioning_status_event(
+    conn: Connection,
+    *,
+    fpo_id: UUID | str,
+    status_from: dict[str, Any],
+    status_to: dict[str, Any],
+    reason: str,
+    correlation_id: UUID | str | None = None,
+) -> None:
     conn.execute(
-        text(
-            """
-            UPDATE public.auth_outbox_events
-            SET status = 'published', published_at = now(), last_error = NULL,
-                locked_at = NULL, updated_at = now()
-            WHERE event_id = :event_id;
-            """
-        ),
-        {"event_id": str(event_id)},
+        text("""
+            INSERT INTO public.fpo_organization_status_events
+                (fpo_id, status_from, status_to, reason, metadata)
+            VALUES (:fpo_id, CAST(:status_from AS jsonb), CAST(:status_to AS jsonb),
+                    :reason, CAST(:metadata AS jsonb));
+        """),
+        {
+            "fpo_id": str(fpo_id),
+            "status_from": json.dumps(status_from),
+            "status_to": json.dumps(status_to),
+            "reason": reason,
+            "metadata": json.dumps(
+                {"correlation_id": str(correlation_id) if correlation_id else None}
+            ),
+        },
     )
 
 
-def mark_failed(conn: Connection, event_id: UUID | str, error: str) -> None:
+def set_provisioning_error(
+    conn: Connection,
+    *,
+    user_id: UUID | str,
+    error_code: str,
+    error: str,
+    correlation_id: UUID | str | None,
+) -> None:
+    current = conn.execute(
+        text("""
+            SELECT fpo_id, provisioning_status, provisioning_step
+            FROM public.fpo_organizations
+            WHERE auth_user_id = :user_id
+            FOR UPDATE;
+        """),
+        {"user_id": str(user_id)},
+    ).mappings().first()
+    if not current:
+        return
     conn.execute(
-        text(
-            """
-            UPDATE public.auth_outbox_events
-            SET status = 'failed', last_error = :error, locked_at = NULL,
-                available_at = now() + interval '30 seconds', updated_at = now()
-            WHERE event_id = :event_id;
-            """
-        ),
-        {"event_id": str(event_id), "error": error[:2000]},
+        text("""
+            UPDATE public.fpo_organizations
+            SET provisioning_status = 'FAILED',
+                provisioning_step = 'FAILED',
+                provisioning_error_code = :error_code,
+                provisioning_error = :error,
+                provisioning_correlation_id = COALESCE(:correlation_id, provisioning_correlation_id),
+                updated_at = now(), version = version + 1
+            WHERE auth_user_id = :user_id;
+        """),
+        {
+            "user_id": str(user_id),
+            "error_code": error_code,
+            "error": error[:500],
+            "correlation_id": str(correlation_id) if correlation_id else None,
+        },
     )
+    if current["provisioning_status"] != "FAILED" or current["provisioning_step"] != "FAILED":
+        record_provisioning_status_event(
+            conn,
+            fpo_id=current["fpo_id"],
+            status_from={
+                "provisioning_status": current["provisioning_status"],
+                "provisioning_step": current["provisioning_step"],
+            },
+            status_to={"provisioning_status": "FAILED", "provisioning_step": "FAILED"},
+            reason=error_code,
+            correlation_id=correlation_id,
+        )
 
 
 def provision_fpo(conn: Connection, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload["user_id"])
     basics = payload.get("signup_profile") or {}
-    state_code = int(
-        basics.get("state_code")
-        or STATE_NAME_CODES.get(str(basics.get("state_name") or "").strip().lower(), 0)
-    )
-    existing = conn.execute(
-        text("SELECT fpo_id, public_fpo_id, provisioning_status FROM public.fpo_organizations WHERE auth_user_id = :user_id FOR UPDATE"),
+    if payload.get("authorised_fpo_representative") is not True:
+        raise ValueError("FPO_REPRESENTATIVE_AUTHORITY_REQUIRED")
+    try:
+        state_code = int(basics.get("state_code"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("FPO_STATE_CODE_INVALID") from exc
+    state = conn.execute(
+        text("SELECT state_name FROM public.states WHERE state_code = :state_code"),
+        {"state_code": state_code},
+    ).mappings().first()
+    if not state:
+        raise ValueError("FPO_STATE_CODE_INVALID")
+    user = conn.execute(
+        text("SELECT role, is_active, is_verified FROM public.users WHERE user_id = :user_id"),
         {"user_id": user_id},
     ).mappings().first()
-    if existing and existing["provisioning_status"] == "READY":
-        return dict(existing)
+    if not user or user["role"] != "fpo" or not user["is_active"] or not user["is_verified"]:
+        raise ValueError("FPO_AUTH_USER_INVALID")
+    existing = conn.execute(
+        text("SELECT fpo_id, public_fpo_id, provisioning_status, provisioning_step, profile_fpo_id FROM public.fpo_organizations WHERE auth_user_id = :user_id FOR UPDATE"),
+        {"user_id": user_id},
+    ).mappings().first()
 
     if existing:
         org = dict(existing)
+        next_status = "PROFILE_PENDING" if org.get("profile_fpo_id") is None else org["provisioning_status"]
+        next_step = "CREATING_PROFILE" if org.get("profile_fpo_id") is None else org["provisioning_step"]
+        conn.execute(
+            text("""
+                UPDATE public.fpo_organizations
+                SET provisioning_status = CASE WHEN profile_fpo_id IS NULL THEN 'PROFILE_PENDING' ELSE provisioning_status END,
+                    provisioning_step = CASE WHEN profile_fpo_id IS NULL THEN 'CREATING_PROFILE' ELSE provisioning_step END,
+                    provisioning_correlation_id = COALESCE(provisioning_correlation_id, :correlation_id),
+                    updated_at = now()
+                WHERE fpo_id = :fpo_id;
+            """),
+            {"fpo_id": str(org["fpo_id"]), "correlation_id": payload.get("_correlation_id")},
+        )
+        if org["provisioning_status"] != next_status or org["provisioning_step"] != next_step:
+            record_provisioning_status_event(
+                conn,
+                fpo_id=org["fpo_id"],
+                status_from={
+                    "provisioning_status": org["provisioning_status"],
+                    "provisioning_step": org["provisioning_step"],
+                },
+                status_to={
+                    "provisioning_status": next_status,
+                    "provisioning_step": next_step,
+                },
+                reason="FPO provisioning resumed",
+                correlation_id=payload.get("_correlation_id"),
+            )
+            org["provisioning_status"] = next_status
+            org["provisioning_step"] = next_step
     else:
         sequence = int(conn.execute(text("SELECT nextval('public.fpo_public_number_seq')")).scalar_one())
-        public_id = public_fpo_id(state_code, sequence)
+        occurred_at = datetime.fromisoformat(str(payload.get("_occurred_at") or datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00"))
+        public_id = public_fpo_id(state_code, sequence, occurred_at)
         org = dict(conn.execute(
             text(
                 """
-                INSERT INTO public.fpo_organizations (auth_user_id, public_fpo_id, provisioning_status)
-                VALUES (:user_id, :public_fpo_id, 'PROFILE_PENDING')
-                RETURNING fpo_id, public_fpo_id, provisioning_status;
+                INSERT INTO public.fpo_organizations
+                    (auth_user_id, public_fpo_id, provisioning_status, provisioning_step, provisioning_correlation_id)
+                VALUES (:user_id, :public_fpo_id, 'PROFILE_PENDING', 'CREATING_PROFILE', :correlation_id)
+                RETURNING fpo_id, public_fpo_id, provisioning_status, provisioning_step, profile_fpo_id;
                 """
             ),
-            {"user_id": user_id, "public_fpo_id": public_id},
+            {"user_id": user_id, "public_fpo_id": public_id, "correlation_id": payload.get("_correlation_id")},
         ).mappings().one())
+        record_provisioning_status_event(
+            conn,
+            fpo_id=org["fpo_id"],
+            status_from={"provisioning_status": "PENDING", "provisioning_step": None},
+            status_to={
+                "provisioning_status": "PROFILE_PENDING",
+                "provisioning_step": "CREATING_PROFILE",
+            },
+            reason="FPO account provisioning started",
+            correlation_id=payload.get("_correlation_id"),
+        )
+    return {**org, "auth_user_id": user_id, "signup_profile": basics}
 
-    linked_profile = conn.execute(
-        text("SELECT profile_fpo_id FROM public.fpo_organizations WHERE fpo_id = :fpo_id"),
-        {"fpo_id": str(org["fpo_id"])},
-    ).scalar_one_or_none()
-    if linked_profile:
-        return {**org, "profile_fpo_id": linked_profile, "provisioning_status": "READY"}
 
-    existing_profile = conn.execute(
-        text(
-            """
-            SELECT p.fpo_id, p.contact_email, fu.user_id AS bound_user_id
-            FROM public.fpos p
-            LEFT JOIN public.fpo_users fu
-              ON fu.fpo_id = p.fpo_id AND fu.is_active = TRUE
-            WHERE p.registration_number = :registration_number
-            LIMIT 1;
-            """
-        ),
-        {"registration_number": basics.get("registration_number")},
+def complete_fpo_provisioning(
+    conn: Connection,
+    *,
+    user_id: UUID | str,
+    profile_fpo_id: UUID | str,
+    correlation_id: UUID | str,
+) -> dict[str, Any]:
+    org = conn.execute(
+        text("""
+            SELECT fpo_id, public_fpo_id, provisioning_status, provisioning_step, profile_fpo_id
+            FROM public.fpo_organizations
+            WHERE auth_user_id = :user_id
+            FOR UPDATE;
+        """),
+        {"user_id": str(user_id)},
     ).mappings().first()
-
-    if existing_profile:
-        same_owner = (
-            str(existing_profile.get("bound_user_id")) == user_id
-            and str(existing_profile.get("contact_email", "")).lower() == str(payload.get("email", "")).lower()
-        )
-        if not same_owner:
-            error = "FPO registration number is already linked to another account"
-            conn.execute(
-                text("UPDATE public.fpo_organizations SET provisioning_status = 'FAILED', provisioning_error = :error, updated_at = now(), version = version + 1 WHERE fpo_id = :fpo_id"),
-                {"fpo_id": str(org["fpo_id"]), "error": error},
-            )
-            return {**org, "provisioning_status": "FAILED", "provisioning_error": error}
-        conn.execute(
-            text(
-                """
-                UPDATE public.fpos
-                SET fpo_name = COALESCE(:fpo_name, fpo_name),
-                    registration_type = COALESCE(:registration_type, registration_type),
-                    contact_person_name = COALESCE(:contact_person_name, contact_person_name),
-                    contact_phone = COALESCE(:contact_phone, contact_phone),
-                    contact_email = COALESCE(:contact_email, contact_email),
-                    state_name = COALESCE(:state_name, state_name),
-                    district_name = COALESCE(:district_name, district_name),
-                    district_code = COALESCE(:district_code, district_code),
-                    updated_at = now(), profile_version = profile_version + 1
-                WHERE fpo_id = :fpo_id;
-                """
-            ),
-            {
-                "fpo_id": str(existing_profile["fpo_id"]),
-                "fpo_name": basics.get("organisation_name"),
-                "registration_type": basics.get("registration_type"),
-                "contact_person_name": payload.get("full_name"),
-                "contact_phone": payload.get("phone_number"),
-                "contact_email": payload.get("email"),
-                "state_name": basics.get("state_name"),
-                "district_name": basics.get("district_name"),
-                "district_code": basics.get("district_code"),
-            },
-        )
-        fpo = dict(existing_profile)
-    else:
-        fpo = conn.execute(
-            text(
-            """
-            INSERT INTO public.fpos (
-                fpo_name, registration_number, registration_type,
-                contact_person_name, contact_phone, contact_email,
-                state_name, district_name, district_code,
-                main_commodities, services_provided, verification_status,
-                profile_version, is_active
-            ) VALUES (
-                :fpo_name, :registration_number, :registration_type,
-                :contact_person_name, :contact_phone, :contact_email,
-                :state_name, :district_name, :district_code,
-                ARRAY[]::text[], ARRAY[]::text[], 'pending', 1, TRUE
-            )
-            RETURNING fpo_id;
-            """
-            ),
-            {
-            "fpo_name": basics.get("organisation_name") or payload.get("full_name") or "New FPO",
-            "registration_number": basics.get("registration_number"),
-            "registration_type": basics.get("registration_type"),
-            "contact_person_name": payload.get("full_name") or "FPO Representative",
-            "contact_phone": payload.get("phone_number"),
-            "contact_email": payload.get("email"),
-            "state_name": basics.get("state_name") or STATE_CODES.get(state_code, "Pending"),
-            "district_name": basics.get("district_name") or "Pending",
-            "district_code": basics.get("district_code"),
-            },
-        ).mappings().one()
-
-    conn.execute(
-        text(
-            """
-            INSERT INTO public.fpo_users (fpo_id, user_id, fpo_role, role, is_active, created_at, updated_at)
-            VALUES (:fpo_id, :user_id, 'owner', 'owner', TRUE, now(), now())
-            ON CONFLICT DO NOTHING;
-            """
-        ),
-        {"fpo_id": str(fpo["fpo_id"]), "user_id": user_id},
-    )
+    if not org:
+        raise ValueError("FPO_ORGANIZATION_NOT_FOUND")
+    if org["profile_fpo_id"] and str(org["profile_fpo_id"]) != str(profile_fpo_id):
+        raise ValueError("FPO_PROFILE_LINK_CONFLICT")
     conn.execute(
         text(
             """
             UPDATE public.fpo_organizations
             SET profile_fpo_id = :profile_fpo_id,
-                provisioning_status = 'READY', provisioning_error = NULL,
+                provisioning_status = 'READY', provisioning_step = 'COMPLETED',
+                provisioning_error = NULL, provisioning_error_code = NULL,
+                provisioning_correlation_id = :correlation_id,
                 updated_at = now(), version = version + 1
             WHERE fpo_id = :fpo_id;
             """
         ),
-        {"fpo_id": str(org["fpo_id"]), "profile_fpo_id": str(fpo["fpo_id"])},
+        {
+            "fpo_id": str(org["fpo_id"]),
+            "profile_fpo_id": str(profile_fpo_id),
+            "correlation_id": str(correlation_id),
+        },
     )
-    return {**dict(org), "profile_fpo_id": fpo["fpo_id"], "provisioning_status": "READY"}
+    if org["provisioning_status"] != "READY":
+        record_provisioning_status_event(
+            conn,
+            fpo_id=org["fpo_id"],
+            status_from={
+                "provisioning_status": org["provisioning_status"],
+                "provisioning_step": org["provisioning_step"],
+            },
+            status_to={
+                "provisioning_status": "READY",
+                "provisioning_step": "COMPLETED",
+                "profile_fpo_id": str(profile_fpo_id),
+            },
+            reason="FPO account provisioning completed",
+            correlation_id=correlation_id,
+        )
+    return {**dict(org), "profile_fpo_id": str(profile_fpo_id), "provisioning_status": "READY"}
 
 
 def get_bootstrap_status(conn: Connection, user_id: UUID | str) -> dict[str, Any]:
     row = conn.execute(
         text(
             """
-            SELECT o.fpo_id, o.public_fpo_id, o.provisioning_status,
+            SELECT o.fpo_id, o.public_fpo_id, o.provisioning_status, o.provisioning_step,
+                   o.provisioning_error_code, o.provisioning_error,
                    o.lifecycle_status, o.verification_status,
                    o.profile_fpo_id,
-                   p.fpo_id AS linked_profile_fpo_id
+                   p.fpo_id AS linked_profile_fpo_id,
+                   p.fpo_name AS display_name,
+                   o.provisioning_correlation_id AS correlation_id,
+                   e.attempts AS attempt_count
             FROM public.fpo_organizations o
             LEFT JOIN public.fpo_users u ON u.user_id = o.auth_user_id AND u.is_active = TRUE
             LEFT JOIN public.fpos p ON p.fpo_id = u.fpo_id AND p.is_active = TRUE
+            LEFT JOIN LATERAL (
+                SELECT attempts FROM public.fpo_event_inbox
+                WHERE subject_id = o.auth_user_id
+                  AND consumer_name = 'fpo_management_service'
+                ORDER BY created_at DESC LIMIT 1
+            ) e ON TRUE
             WHERE o.auth_user_id = :user_id
             LIMIT 1;
             """
@@ -307,10 +460,287 @@ def get_bootstrap_status(conn: Connection, user_id: UUID | str) -> dict[str, Any
         {"user_id": str(user_id)},
     ).mappings().first()
     if not row:
-        return {"status": "PENDING", "fpo_id": None, "public_fpo_id": None}
+        event = conn.execute(
+            text("""
+                SELECT status, error_code, correlation_id, attempts,
+                       event_payload->'signup_profile'->>'organisation_name' AS organization_name
+                FROM public.fpo_event_inbox
+                WHERE subject_id = :user_id
+                  AND consumer_name = 'fpo_management_service'
+                ORDER BY created_at DESC LIMIT 1;
+            """),
+            {"user_id": str(user_id)},
+        ).mappings().first()
+        if event and event["status"] in {"FAILED", "DEAD"}:
+            return {
+                "schema_version": 2,
+                "status": "FAILED",
+                "step": "FAILED",
+                "retryable": event.get("error_code") != "POISON_EVENT",
+                "next_poll_after_seconds": None,
+                "correlation_id": str(event["correlation_id"]) if event.get("correlation_id") else None,
+                "organization": None,
+                "organization_name": event.get("organization_name"),
+                "attempt_count": int(event.get("attempts") or 0),
+                "error": {
+                    "code": event.get("error_code") or "PROVISIONING_FAILED",
+                    "message": "We could not finish setting up your organization. Contact support with the reference ID.",
+                },
+            }
+        if event:
+            return {
+                "schema_version": 2,
+                "status": "PROCESSING",
+                "step": "CREATING_ORGANIZATION",
+                "retryable": False,
+                "next_poll_after_seconds": 2,
+                "correlation_id": str(event["correlation_id"]) if event.get("correlation_id") else None,
+                "organization": None,
+                "organization_name": event.get("organization_name"),
+                "attempt_count": int(event.get("attempts") or 0),
+                "error": None,
+            }
+        return {
+            "schema_version": 2,
+            "status": "PENDING",
+            "step": "WAITING_FOR_EVENT",
+            "retryable": True,
+            "next_poll_after_seconds": 2,
+            "correlation_id": None,
+            "organization": None,
+            "organization_name": None,
+            "error": None,
+        }
     result = dict(row)
-    result["status"] = "READY" if result.get("provisioning_status") == "READY" else result.get("provisioning_status", "PENDING")
-    return result
+    status = result.get("provisioning_status") or "PENDING"
+    ready = status == "READY"
+    failed = status == "FAILED"
+    return {
+        "schema_version": 2,
+        "status": status,
+        "step": result.get("provisioning_step") or ("COMPLETED" if ready else "CREATING_ORGANIZATION"),
+        "retryable": failed,
+        "next_poll_after_seconds": None if ready or failed else 5,
+        "correlation_id": str(result["correlation_id"]) if result.get("correlation_id") else None,
+        "organization": {
+            "fpo_id": str(result["fpo_id"]),
+            "profile_fpo_id": str(result["profile_fpo_id"]) if result.get("profile_fpo_id") else None,
+            "public_fpo_id": result["public_fpo_id"],
+            "display_name": result.get("display_name"),
+            "provisioning_status": status,
+            "lifecycle_status": result.get("lifecycle_status"),
+            "verification_status": result.get("verification_status"),
+        },
+        "attempt_count": int(result.get("attempt_count") or 0),
+        "error": (
+            {"code": result.get("provisioning_error_code") or "PROVISIONING_FAILED",
+             "message": result.get("provisioning_error") or "We could not finish setting up your organization."}
+            if failed else None
+        ),
+        "next_action": (
+            {"code": "COMPLETE_PROFILE", "route": "/fpo/profile"}
+            if ready and result.get("verification_status") == "PROFILE_INCOMPLETE"
+            else None
+        ),
+    }
+
+
+def list_provisioning_cases(
+    conn: Connection,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        text("""
+            SELECT e.event_id, e.subject_id AS auth_user_id, e.status AS event_status,
+                   e.error_code, e.attempts, e.correlation_id, e.created_at, e.updated_at,
+                   o.fpo_id, o.public_fpo_id, o.provisioning_status,
+                   o.provisioning_step, o.provisioning_error_code,
+                   o.provisioning_error, o.updated_at AS organization_updated_at,
+                   e.event_payload->'signup_profile'->>'organisation_name' AS organization_name
+            FROM public.fpo_event_inbox e
+            LEFT JOIN public.fpo_organizations o ON o.auth_user_id = e.subject_id
+            WHERE e.consumer_name = 'fpo_management_service'
+              AND (:status IS NULL OR e.status = :status)
+            ORDER BY e.created_at DESC
+            LIMIT :limit OFFSET :offset;
+        """),
+        {"status": status, "limit": limit, "offset": offset},
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_provisioning_case(conn: Connection, fpo_id: UUID | str) -> dict[str, Any] | None:
+    row = conn.execute(
+        text("""
+            SELECT e.event_id, e.subject_id AS auth_user_id, e.event_type, e.event_version,
+                   e.status AS event_status, e.error_code, e.attempts, e.correlation_id,
+                   e.created_at, e.updated_at, o.fpo_id, o.profile_fpo_id,
+                   o.public_fpo_id, o.provisioning_status, o.provisioning_step,
+                   o.provisioning_error_code, o.provisioning_error,
+                   o.lifecycle_status, o.verification_status,
+                   e.event_payload->'signup_profile'->>'organisation_name' AS organization_name
+            FROM public.fpo_organizations o
+            LEFT JOIN LATERAL (
+                SELECT * FROM public.fpo_event_inbox
+                WHERE subject_id = o.auth_user_id
+                  AND consumer_name = 'fpo_management_service'
+                ORDER BY created_at DESC LIMIT 1
+            ) e ON TRUE
+            WHERE o.fpo_id = :fpo_id;
+        """),
+        {"fpo_id": str(fpo_id)},
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def retry_provisioning_event(
+    conn: Connection,
+    *,
+    event_id: UUID | str,
+    actor_user_id: UUID | str,
+    reason: str,
+) -> dict[str, Any]:
+    event = conn.execute(
+        text("""
+            SELECT inbox_id, subject_id, status, attempts, error_code, correlation_id
+            FROM public.fpo_event_inbox
+            WHERE event_id = :event_id AND consumer_name = 'fpo_management_service'
+            FOR UPDATE;
+        """),
+        {"event_id": str(event_id)},
+    ).mappings().first()
+    if not event:
+        raise ValueError("FPO_PROVISIONING_EVENT_NOT_FOUND")
+    if event["status"] not in {"FAILED", "DEAD"}:
+        raise ValueError("FPO_PROVISIONING_EVENT_NOT_RETRYABLE")
+    if event.get("error_code") == "POISON_EVENT":
+        raise ValueError("FPO_POISON_EVENT_NOT_RETRYABLE")
+    conn.execute(
+        text("""
+            UPDATE public.fpo_event_inbox
+            SET status = 'RECEIVED', error_code = NULL, last_error = NULL,
+                attempts_in_cycle = 0, available_at = now(), locked_at = NULL, updated_at = now()
+            WHERE inbox_id = :inbox_id;
+        """),
+        {"inbox_id": event["inbox_id"]},
+    )
+    previous_org = conn.execute(
+        text("""
+            SELECT fpo_id, provisioning_status, provisioning_step
+            FROM public.fpo_organizations
+            WHERE auth_user_id = :user_id
+            FOR UPDATE;
+        """),
+        {"user_id": str(event["subject_id"])},
+    ).mappings().first()
+    organization = conn.execute(
+        text("""
+            UPDATE public.fpo_organizations
+            SET provisioning_status = 'PROFILE_PENDING',
+                provisioning_step = 'RETRY_QUEUED',
+                provisioning_error = NULL, provisioning_error_code = NULL,
+                updated_at = now(), version = version + 1
+            WHERE auth_user_id = :user_id AND provisioning_status <> 'READY'
+            RETURNING fpo_id;
+        """),
+        {"user_id": str(event["subject_id"])},
+    ).mappings().first()
+    if organization and previous_org:
+        record_provisioning_status_event(
+            conn,
+            fpo_id=organization["fpo_id"],
+            status_from={
+                "provisioning_status": previous_org["provisioning_status"],
+                "provisioning_step": previous_org["provisioning_step"],
+            },
+            status_to={
+                "provisioning_status": "PROFILE_PENDING",
+                "provisioning_step": "RETRY_QUEUED",
+            },
+            reason="FPO provisioning retry requested",
+            correlation_id=event["correlation_id"],
+        )
+    conn.execute(
+        text("""
+            INSERT INTO public.fpo_audit_events
+                (fpo_id, actor_user_id, action, target_type, target_id, metadata)
+            VALUES (:fpo_id, :actor_user_id, 'FPO_PROVISIONING_RETRY', 'FPO_EVENT', :event_id,
+                    CAST(:metadata AS jsonb));
+        """),
+        {
+            "fpo_id": str(organization["fpo_id"]) if organization else None,
+            "actor_user_id": str(actor_user_id),
+            "event_id": str(event_id),
+            "metadata": json.dumps(
+                {
+                    "reason": reason.strip(),
+                    "previous_status": event["status"],
+                    "previous_attempts": int(event["attempts"]),
+                }
+            ),
+        },
+    )
+    return {"event_id": str(event_id), "status": "RECEIVED", "fpo_id": str(organization["fpo_id"]) if organization else None}
+
+
+def retry_fpo_provisioning(
+    conn: Connection,
+    *,
+    fpo_id: UUID | str,
+    actor_user_id: UUID | str,
+    reason: str,
+) -> dict[str, Any]:
+    event_id = conn.execute(
+        text("""
+            SELECT e.event_id
+            FROM public.fpo_organizations o
+            JOIN LATERAL (
+                SELECT event_id FROM public.fpo_event_inbox
+                WHERE subject_id = o.auth_user_id
+                  AND consumer_name = 'fpo_management_service'
+                ORDER BY created_at DESC LIMIT 1
+            ) e ON TRUE
+            WHERE o.fpo_id = :fpo_id;
+        """),
+        {"fpo_id": str(fpo_id)},
+    ).scalar_one_or_none()
+    if not event_id:
+        raise ValueError("FPO_PROVISIONING_EVENT_NOT_FOUND")
+    return retry_provisioning_event(
+        conn,
+        event_id=event_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+    )
+
+
+def fpo_provisioning_metrics(conn: Connection) -> dict[str, float | int]:
+    row = conn.execute(
+        text("""
+            SELECT
+                COALESCE(SUM(delivery_count), 0) AS events_received,
+                COALESCE(SUM(GREATEST(delivery_count - 1, 0)), 0) AS duplicates,
+                COALESCE(SUM(poison_count), 0) AS poison,
+                COALESCE(SUM(attempts), 0) AS attempts,
+                COUNT(*) FILTER (WHERE status = 'PROCESSED') AS completed,
+                COUNT(*) FILTER (WHERE status IN ('FAILED', 'DEAD')) AS failed,
+                COALESCE(SUM(GREATEST(attempts - 1, 0)), 0) AS retries,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (processed_at - created_at)))
+                    FILTER (WHERE status = 'PROCESSED'), 0) AS avg_duration_seconds,
+                COUNT(*) FILTER (WHERE status IN ('RECEIVED', 'FAILED')) AS queue_depth,
+                COALESCE(
+                    MAX(EXTRACT(EPOCH FROM (now() - created_at)))
+                        FILTER (WHERE status IN ('RECEIVED', 'FAILED')),
+                    0
+                ) AS oldest_event_age_seconds
+            FROM public.fpo_event_inbox
+            WHERE consumer_name = 'fpo_management_service';
+        """)
+    ).mappings().one()
+    return {key: float(value) if key == "avg_duration_seconds" else int(value) for key, value in row.items()}
 
 
 def get_portal_bootstrap(conn: Connection, user_id: UUID | str) -> dict[str, Any]:
@@ -319,7 +749,9 @@ def get_portal_bootstrap(conn: Connection, user_id: UUID | str) -> dict[str, Any
             """
             SELECT o.fpo_id, o.public_fpo_id, o.lifecycle_status, o.verification_status,
                    o.verification_level, o.commercial_status, o.approved_at,
-                   o.provisioning_status, p.display_name, p.fpo_name,
+                   o.provisioning_status, o.provisioning_step, o.provisioning_error_code,
+                   o.provisioning_error, o.provisioning_correlation_id,
+                   o.profile_fpo_id, p.display_name, p.fpo_name,
                    p.profile_completion_percentage
             FROM public.fpo_organizations o
             LEFT JOIN public.fpos p ON p.fpo_id = o.profile_fpo_id
@@ -334,7 +766,18 @@ def get_portal_bootstrap(conn: Connection, user_id: UUID | str) -> dict[str, Any
     entitlements = resolve_fpo_entitlements(conn, user_id=user_id)
     return {
         "status": "READY" if row["provisioning_status"] == "READY" else row["provisioning_status"],
-        "organization": {"fpo_id": row["fpo_id"], "public_fpo_id": row["public_fpo_id"], "display_name": row["display_name"] or row["fpo_name"], "lifecycle_status": row["lifecycle_status"]},
+        "organization": {
+            "fpo_id": str(row["fpo_id"]),
+            "profile_fpo_id": str(row["profile_fpo_id"]) if row.get("profile_fpo_id") else None,
+            "public_fpo_id": row["public_fpo_id"],
+            "display_name": row["display_name"] or row["fpo_name"],
+            "provisioning_status": row["provisioning_status"],
+            "provisioning_step": row["provisioning_step"],
+            "provisioning_error_code": row["provisioning_error_code"],
+            "provisioning_error": row["provisioning_error"],
+            "correlation_id": str(row["provisioning_correlation_id"]) if row.get("provisioning_correlation_id") else None,
+            "lifecycle_status": row["lifecycle_status"],
+        },
         "profile": {"completion_percentage": row["profile_completion_percentage"] or 0, "missing_fields": []},
         "verification": {"status": row["verification_status"], "level": row["verification_level"], "approved_at": row["approved_at"]},
         "class": {"code": entitlements.get("class_code"), "commercial_status": row["commercial_status"]},

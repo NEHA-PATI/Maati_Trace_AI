@@ -378,7 +378,7 @@ def admin_fpo_access_requests_endpoint(
     offset: int = Query(default=0, ge=0),
     _principal: dict[str, str] = Depends(require_roles("admin")),
 ):
-    if status_filter not in {None, "pending", "approved", "rejected", "closed"}:
+    if status_filter not in {None, "pending", "approved", "rejected", "closed", "expired_invitation"}:
         raise AuthError("INVALID_STATUS_FILTER", "The status filter is invalid.", 422)
     return get_fpo_access_requests_for_admin(
         status_filter=status_filter,

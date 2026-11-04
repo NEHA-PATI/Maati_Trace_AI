@@ -368,6 +368,8 @@ def create_auth_outbox_event(
     subject_id: UUID | str,
     idempotency_key: str,
     payload: dict[str, Any],
+    event_version: int = 1,
+    correlation_id: UUID | str | None = None,
 ) -> dict[str, Any]:
     row = conn.execute(
         text(
@@ -376,6 +378,7 @@ def create_auth_outbox_event(
                 event_type,
                 event_version,
                 subject_id,
+                correlation_id,
                 idempotency_key,
                 payload,
                 status,
@@ -383,8 +386,9 @@ def create_auth_outbox_event(
             )
             VALUES (
                 :event_type,
-                1,
+                :event_version,
                 :subject_id,
+                COALESCE(CAST(:correlation_id AS uuid), gen_random_uuid()),
                 :idempotency_key,
                 CAST(:payload AS jsonb),
                 'queued',
@@ -397,11 +401,102 @@ def create_auth_outbox_event(
         {
             "event_type": event_type,
             "subject_id": str(subject_id),
+            "correlation_id": str(correlation_id) if correlation_id else None,
             "idempotency_key": idempotency_key,
             "payload": json.dumps(payload),
+            "event_version": event_version,
         },
     ).mappings().first()
     return dict(row) if row else {"idempotency_key": idempotency_key}
+
+
+def resolve_fpo_signup_location(
+    conn: Connection,
+    *,
+    state_code: int | str | None,
+    state_name: str | None,
+    district_code: int | str | None,
+    district_name: str | None,
+) -> dict[str, Any] | None:
+    parsed_state_code = None
+    if state_code is not None:
+        try:
+            parsed_state_code = int(state_code)
+        except (TypeError, ValueError):
+            return None
+
+    if parsed_state_code is not None:
+        state = conn.execute(
+            text("""
+                SELECT state_code, state_name
+                FROM public.states
+                WHERE state_code = :state_code;
+            """),
+            {"state_code": parsed_state_code},
+        ).mappings().first()
+    elif state_name and state_name.strip():
+        state = conn.execute(
+            text("""
+                SELECT state_code, state_name
+                FROM public.states
+                WHERE lower(btrim(state_name)) = lower(btrim(:state_name))
+                LIMIT 1;
+            """),
+            {"state_name": state_name},
+        ).mappings().first()
+    else:
+        return None
+
+    if not state:
+        return None
+
+    parsed_district_code = None
+    if district_code is not None:
+        try:
+            parsed_district_code = int(district_code)
+        except (TypeError, ValueError):
+            return None
+
+    if parsed_district_code is not None:
+        district = conn.execute(
+            text("""
+                SELECT district_code, district_name
+                FROM public.districts
+                WHERE district_code = :district_code
+                  AND state_code = :state_code;
+            """),
+            {
+                "district_code": parsed_district_code,
+                "state_code": state["state_code"],
+            },
+        ).mappings().first()
+        if not district:
+            return None
+    elif district_name and district_name.strip():
+        district = conn.execute(
+            text("""
+                SELECT district_code, district_name
+                FROM public.districts
+                WHERE state_code = :state_code
+                  AND lower(btrim(district_name)) = lower(btrim(:district_name))
+                LIMIT 1;
+            """),
+            {
+                "state_code": state["state_code"],
+                "district_name": district_name,
+            },
+        ).mappings().first()
+        if not district:
+            return None
+    else:
+        district = None
+
+    return {
+        "state_code": int(state["state_code"]),
+        "state_name": state["state_name"],
+        "district_code": int(district["district_code"]) if district else None,
+        "district_name": district["district_name"] if district else None,
+    }
 
 
 def get_signup_session(
@@ -936,6 +1031,68 @@ def create_fpo_access_request(
     device_id_hash: str | None,
     correlation_id: str,
 ) -> dict[str, Any]:
+    conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(lower(:email), 0));"),
+        {"email": contact_email},
+    )
+    existing = conn.execute(
+        text(
+            """
+            SELECT
+                r.request_id,
+                r.organisation_name,
+                r.registration_number,
+                r.contact_person_name,
+                r.contact_email,
+                r.contact_phone,
+                r.state_name,
+                r.district_name,
+                r.message,
+                r.status,
+                r.reviewed_by,
+                r.reviewed_at,
+                r.review_note,
+                r.created_at,
+                r.updated_at,
+                EXISTS (
+                    SELECT 1
+                    FROM public.users AS account
+                    WHERE lower(account.email) = lower(r.contact_email)
+                ) AS account_exists,
+                CASE
+                    WHEN invitation.invitation_id IS NULL THEN NULL
+                    WHEN invitation.accepted_at IS NOT NULL THEN 'accepted'
+                    WHEN invitation.revoked_at IS NOT NULL THEN 'revoked'
+                    WHEN invitation.expires_at <= now() THEN 'expired'
+                    ELSE 'active'
+                END AS invitation_status,
+                invitation.expires_at AS invitation_expires_at,
+                TRUE AS already_exists
+            FROM public.fpo_access_requests r
+            LEFT JOIN LATERAL (
+                SELECT invitation_id, expires_at, accepted_at, revoked_at
+                FROM public.account_invitations
+                WHERE role = 'fpo'
+                  AND lower(email) = lower(r.contact_email)
+                  AND fpo_access_request_id = r.request_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) invitation ON TRUE
+            WHERE lower(r.contact_email) = lower(:email)
+              AND (
+                  r.status IN ('pending', 'approved')
+                  OR (r.status = 'closed' AND invitation.invitation_id IS NOT NULL)
+              )
+            ORDER BY r.created_at DESC, r.request_id
+            LIMIT 1
+            FOR UPDATE OF r;
+            """
+        ),
+        {"email": contact_email},
+    ).mappings().first()
+    if existing:
+        return dict(existing)
+
     row = conn.execute(
         text(
             """
@@ -1005,7 +1162,13 @@ def create_fpo_access_request(
             "correlation_id": correlation_id,
         },
     ).mappings().one()
-    return dict(row)
+    return {
+        **dict(row),
+        "account_exists": False,
+        "invitation_status": None,
+        "invitation_expires_at": None,
+        "already_exists": False,
+    }
 
 
 def list_fpo_access_requests(
@@ -1019,24 +1182,66 @@ def list_fpo_access_requests(
         text(
             """
             SELECT
-                request_id,
-                organisation_name,
-                registration_number,
-                contact_person_name,
-                contact_email,
-                contact_phone,
-                state_name,
-                district_name,
-                message,
-                status,
-                reviewed_by,
-                reviewed_at,
-                review_note,
-                created_at,
-                updated_at
-            FROM fpo_access_requests
-            WHERE (:status_filter IS NULL OR status = :status_filter)
-            ORDER BY created_at DESC
+                r.request_id,
+                r.organisation_name,
+                r.registration_number,
+                r.contact_person_name,
+                r.contact_email,
+                r.contact_phone,
+                r.state_name,
+                r.district_name,
+                r.message,
+                r.status,
+                r.reviewed_by,
+                r.reviewed_at,
+                r.review_note,
+                r.created_at,
+                r.updated_at,
+                EXISTS (
+                    SELECT 1
+                    FROM public.users AS account
+                    WHERE lower(account.email) = lower(r.contact_email)
+                ) AS account_exists,
+                CASE
+                    WHEN invitation.invitation_id IS NULL THEN NULL
+                    WHEN invitation.accepted_at IS NOT NULL THEN 'accepted'
+                    WHEN invitation.revoked_at IS NOT NULL THEN 'revoked'
+                    WHEN invitation.expires_at <= now() THEN 'expired'
+                    ELSE 'active'
+                END AS invitation_status,
+                invitation.expires_at AS invitation_expires_at
+            FROM public.fpo_access_requests r
+            LEFT JOIN LATERAL (
+                SELECT invitation_id, expires_at, accepted_at, revoked_at
+                FROM public.account_invitations
+                WHERE role = 'fpo'
+                  AND lower(email) = lower(r.contact_email)
+                  AND fpo_access_request_id = r.request_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) invitation ON TRUE
+            WHERE (
+                :status_filter IS NULL
+                OR (
+                    :status_filter IN ('pending', 'approved', 'rejected', 'closed')
+                    AND r.status = :status_filter
+                )
+                OR (
+                    :status_filter = 'expired_invitation'
+                    AND r.status = 'closed'
+                    AND invitation.accepted_at IS NULL
+                    AND invitation.invitation_id IS NOT NULL
+                    AND (
+                        invitation.revoked_at IS NOT NULL
+                        OR invitation.expires_at <= now()
+                    )
+                )
+                OR (
+                    :status_filter IN ('rejected', 'closed')
+                    AND r.status = :status_filter
+                )
+            )
+            ORDER BY r.created_at DESC
             LIMIT :limit
             OFFSET :offset;
             """
@@ -1051,8 +1256,37 @@ def count_fpo_access_requests(conn: Connection, *, status_filter: str | None) ->
         text(
             """
             SELECT count(*)
-            FROM fpo_access_requests
-            WHERE (:status_filter IS NULL OR status = :status_filter);
+            FROM public.fpo_access_requests r
+            LEFT JOIN LATERAL (
+                SELECT invitation_id, expires_at, accepted_at, revoked_at
+                FROM public.account_invitations
+                WHERE role = 'fpo'
+                  AND lower(email) = lower(r.contact_email)
+                  AND fpo_access_request_id = r.request_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) invitation ON TRUE
+            WHERE (
+                :status_filter IS NULL
+                OR (
+                    :status_filter IN ('pending', 'approved', 'rejected', 'closed')
+                    AND r.status = :status_filter
+                )
+                OR (
+                    :status_filter = 'expired_invitation'
+                    AND r.status = 'closed'
+                    AND invitation.accepted_at IS NULL
+                    AND invitation.invitation_id IS NOT NULL
+                    AND (
+                        invitation.revoked_at IS NOT NULL
+                        OR invitation.expires_at <= now()
+                    )
+                )
+                OR (
+                    :status_filter IN ('rejected', 'closed')
+                    AND r.status = :status_filter
+                )
+            );
             """
         ),
         {"status_filter": status_filter},
@@ -1169,6 +1403,7 @@ def create_account_invitation(
     *,
     email: str,
     role: str,
+    fpo_access_request_id: UUID | str | None,
     token_hash: str,
     invited_by: UUID | str,
     expires_at: datetime,
@@ -1184,6 +1419,7 @@ def create_account_invitation(
                 invitation_id,
                 email,
                 role,
+                fpo_access_request_id,
                 token_hash,
                 invited_by,
                 expires_at,
@@ -1198,6 +1434,7 @@ def create_account_invitation(
                 gen_random_uuid(),
                 :email,
                 :role,
+                :fpo_access_request_id,
                 :token_hash,
                 :invited_by,
                 :expires_at,
@@ -1214,6 +1451,9 @@ def create_account_invitation(
         {
             "email": email,
             "role": role,
+            "fpo_access_request_id": (
+                str(fpo_access_request_id) if fpo_access_request_id else None
+            ),
             "token_hash": token_hash,
             "invited_by": str(invited_by),
             "expires_at": expires_at,
