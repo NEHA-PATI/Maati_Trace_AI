@@ -5,6 +5,14 @@ import { cacheInvalidate, cachedRequest } from "@/features/crop-observation/cach
 
 const BASE = "/v1/crop-observations";
 
+// The UI stores short language codes, while the crop-observation service
+// requires its region-specific locale identifiers.
+function cropObservationLocale(locale) {
+  if (locale === "or" || locale === "or-IN") return "or-IN";
+  if (locale === "en" || locale === "en-IN") return "en-IN";
+  return locale;
+}
+
 /**
  * Absolute URL for a system-media path (crop card / stage images —
  * unauthenticated, same as GET /crops) so it can be used directly as an
@@ -44,11 +52,12 @@ export async function fetchAuthedMediaBlob(path) {
 }
 
 export function getCrops(locale) {
-  const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+  const serviceLocale = cropObservationLocale(locale);
+  const query = serviceLocale ? `?locale=${encodeURIComponent(serviceLocale)}` : "";
   // Catalogue is near-static within a session (server sends max-age=300) — serve
   // from memory so re-entering "My Crop" paints instantly.
   return cachedRequest(
-    `crops:${locale || "default"}`,
+    `crops:${serviceLocale || "default"}`,
     () => cropObservationClient.request(`${BASE}/crops${query}`),
     300_000,
   );
@@ -79,7 +88,8 @@ export function startCropCycle(farmCropId, payload = {}) {
 }
 
 export function getStageScreen(cropCycleId, stageCode, locale) {
-  const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+  const serviceLocale = cropObservationLocale(locale);
+  const query = serviceLocale ? `?locale=${encodeURIComponent(serviceLocale)}` : "";
   return cropObservationClient.request(
     `${BASE}/crop-cycles/${cropCycleId}/stages/${stageCode}/screen${query}`,
   );
@@ -116,7 +126,8 @@ export function getHistory(cropCycleId, { before, limit } = {}) {
 
 export function getPracticeHistory(cropCycleId, stageCode, practiceCode, locale, { limit = 20 } = {}) {
   const search = new URLSearchParams();
-  if (locale) search.set("locale", locale);
+  const serviceLocale = cropObservationLocale(locale);
+  if (serviceLocale) search.set("locale", serviceLocale);
   if (limit) search.set("limit", String(limit));
   return cropObservationClient.request(
     `${BASE}/crop-cycles/${cropCycleId}/stages/${stageCode}/practices/${practiceCode}/history?${search.toString()}`,
