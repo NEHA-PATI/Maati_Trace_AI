@@ -30,7 +30,14 @@ def _run_one(query, params: dict[str, Any]) -> dict[str, Any] | None:
 def _run_write(query, params: dict[str, Any]) -> dict[str, Any] | None:
     try:
         with engine.begin() as conn:
-            rows = conn.execute(text(query), params).mappings().all()
+            result = conn.execute(text(query), params)
+            # Not every UPDATE/DELETE used by the admin media workflow has a
+            # RETURNING clause. Calling .mappings() on such a result raises
+            # "This result object does not return rows" and turns a successful
+            # save into a 500 response.
+            if not result.returns_rows:
+                return None
+            rows = result.mappings().all()
             return dict(rows[0]) if rows else None
     except SQLAlchemyError as exc:
         raise CropObservationRepositoryError(str(exc)) from exc
