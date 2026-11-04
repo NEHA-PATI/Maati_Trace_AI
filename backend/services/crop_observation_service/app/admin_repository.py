@@ -178,7 +178,8 @@ def upsert_crop_translation(crop_id: UUID, locale: str, display_name: str, short
 def list_configurations(crop_id: UUID) -> list[dict[str, Any]]:
     return _run(
         """
-        SELECT config_version_id, crop_id, version_number, status, created_at, published_at
+        SELECT config_version_id, crop_id, version_number, status, created_at, published_at,
+               published_by_user_id AS published_by
         FROM crop_observation.crop_config_versions
         WHERE crop_id = :crop_id
         ORDER BY version_number DESC;
@@ -530,7 +531,7 @@ def publish_configuration(config_version_id: UUID, *, published_by_user_id: UUID
         UPDATE crop_observation.crop_config_versions
         SET status = 'PUBLISHED', published_at = now(), published_by_user_id = :published_by
         WHERE config_version_id = :id
-        RETURNING config_version_id, crop_id, version_number, status, created_at, published_at;
+        RETURNING config_version_id, crop_id, version_number, status, created_at, published_at, published_by_user_id AS published_by;
         """,
         {"id": config_version_id, "published_by": published_by_user_id},
     )

@@ -45,7 +45,11 @@ function normalizeMediaConfig(input) {
   };
 }
 
-export default function PracticeEditor({ practice, onDeleted, readOnly }) {
+/**
+ * One practice = one card inside a stage. Always editable — the workflow
+ * hook guarantees a draft exists before any mutation is attempted.
+ */
+export default function PracticeEditor({ practice, onDeleted, workflow }) {
   const [expanded, setExpanded] = useState(false);
   const [fields, setFields] = useState([]);
   const [newFieldCode, setNewFieldCode] = useState("");
@@ -83,11 +87,13 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
     setFields((prev) => [...prev, created]);
     setNewFieldCode("");
     setNewFieldRequired(false);
+    workflow?.changed();
   }
 
   async function handleDeleteField(fieldId) {
     await deleteField(fieldId);
     setFields((prev) => prev.filter((f) => f.field_definition_id !== fieldId));
+    workflow?.changed();
   }
 
   async function handleDeletePractice() {
@@ -104,6 +110,7 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
     try {
       await updateStagePractice(practice.stage_practice_id, { media_config: mediaConfig });
       setMediaConfigStatus("Saved");
+      workflow?.changed();
     } catch (error) {
       setMediaConfigStatus(error?.message || "Could not save media policy");
     }
@@ -116,14 +123,14 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-slate-800">{practice.practice_code}</span>
+          <span className="block truncate text-sm font-semibold text-slate-800">
+            {practice.translations?.find((t) => t.locale === "en-IN")?.display_name || practice.practice_code}
+          </span>
           <span className="block truncate text-[11px] text-slate-400">{summary}</span>
         </div>
-        {!readOnly ? (
-          <button type="button" onClick={handleDeletePractice} className="text-slate-400 hover:text-rose-600">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        ) : null}
+        <button type="button" onClick={handleDeletePractice} className="text-slate-400 hover:text-rose-600" aria-label="Delete practice">
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
 
       {expanded ? (
@@ -144,7 +151,6 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
             assetRole="PRACTICE_GUIDE_IMAGE"
             label="Practice guide image (optional)"
             accept="image/jpeg,image/png,image/webp"
-            readOnly={readOnly}
             compact
           />
 
@@ -152,9 +158,9 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Farmer evidence</p>
-                <p className="mt-1 text-xs text-slate-400">Configure the capture controls shown for this practice. No JSON editing required.</p>
+                <p className="mt-1 text-xs text-slate-400">Photos and voice notes farmers capture for this practice.</p>
               </div>
-              {!readOnly ? <Button size="sm" variant="outline" onClick={handleSaveMediaConfig}>Save evidence settings</Button> : null}
+              <Button size="sm" variant="outline" onClick={handleSaveMediaConfig}>Save evidence settings</Button>
             </div>
 
             <div className="mt-3 grid gap-3 lg:grid-cols-3">
@@ -163,7 +169,6 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
                 enabled={mediaConfig.issue_evidence.enabled}
                 max={mediaConfig.issue_evidence.max_images}
                 maxLimit={2}
-                readOnly={readOnly}
                 onEnabled={(enabled) => patch("issue_evidence", { enabled })}
                 onMax={(max_images) => patch("issue_evidence", { max_images })}
               />
@@ -172,17 +177,16 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
                 enabled={mediaConfig.practice_evidence.enabled}
                 max={mediaConfig.practice_evidence.max_images}
                 maxLimit={2}
-                readOnly={readOnly}
                 onEnabled={(enabled) => patch("practice_evidence", { enabled })}
                 onMax={(max_images) => patch("practice_evidence", { max_images })}
               />
               <div className="rounded-lg border bg-slate-50 p-3">
                 <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                  <input type="checkbox" disabled={readOnly} checked={mediaConfig.voice_note.enabled} onChange={(e) => patch("voice_note", { enabled: e.target.checked })} />
+                  <input type="checkbox" checked={mediaConfig.voice_note.enabled} onChange={(e) => patch("voice_note", { enabled: e.target.checked })} />
                   Farmer voice note
                 </label>
                 <label className="mt-3 block text-xs font-semibold text-slate-500">Maximum seconds</label>
-                <input type="number" min="5" max="60" disabled={readOnly || !mediaConfig.voice_note.enabled} value={mediaConfig.voice_note.max_seconds} onChange={(e) => patch("voice_note", { max_seconds: Math.min(60, Math.max(5, Number(e.target.value) || 60)) })} className="mt-1 h-9 w-full rounded-lg border bg-white px-2 text-sm" />
+                <input type="number" min="5" max="60" disabled={!mediaConfig.voice_note.enabled} value={mediaConfig.voice_note.max_seconds} onChange={(e) => patch("voice_note", { max_seconds: Math.min(60, Math.max(5, Number(e.target.value) || 60)) })} className="mt-1 h-9 w-full rounded-lg border bg-white px-2 text-sm" />
                 <p className="mt-2 text-[11px] text-slate-400">One voice note per record.</p>
               </div>
             </div>
@@ -190,31 +194,29 @@ export default function PracticeEditor({ practice, onDeleted, readOnly }) {
           </div>
 
           {fields.map((field) => (
-            <FieldEditor key={field.field_definition_id} field={field} onDelete={handleDeleteField} readOnly={readOnly} />
+            <FieldEditor key={field.field_definition_id} field={field} onDelete={handleDeleteField} />
           ))}
 
-          {!readOnly ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-300 p-2">
-              <Input placeholder="field_code" value={newFieldCode} onChange={(e) => setNewFieldCode(e.target.value)} className="h-8 w-40 text-sm" />
-              <select value={newFieldType} onChange={(e) => setNewFieldType(e.target.value)} className="h-8 rounded-md border border-slate-200 px-2 text-sm">
-                {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-slate-600"><input type="checkbox" checked={newFieldRequired} onChange={(e) => setNewFieldRequired(e.target.checked)} />required</label>
-              <Button size="sm" onClick={handleAddField}>Add field</Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-300 p-2">
+            <Input placeholder="Field name (e.g. pest_type)" value={newFieldCode} onChange={(e) => setNewFieldCode(e.target.value)} className="h-8 w-48 text-sm" />
+            <select value={newFieldType} onChange={(e) => setNewFieldType(e.target.value)} className="h-8 rounded-md border border-slate-200 px-2 text-sm">
+              {FIELD_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ").toLowerCase()}</option>)}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-slate-600"><input type="checkbox" checked={newFieldRequired} onChange={(e) => setNewFieldRequired(e.target.checked)} />required</label>
+            <Button size="sm" onClick={handleAddField}>Add field</Button>
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-function MediaRuleCard({ title, enabled, max, maxLimit, readOnly, onEnabled, onMax }) {
+function MediaRuleCard({ title, enabled, max, maxLimit, onEnabled, onMax }) {
   return (
     <div className="rounded-lg border bg-slate-50 p-3">
-      <label className="flex items-center gap-2 text-sm font-bold text-slate-800"><input type="checkbox" disabled={readOnly} checked={enabled} onChange={(e) => onEnabled(e.target.checked)} />{title}</label>
+      <label className="flex items-center gap-2 text-sm font-bold text-slate-800"><input type="checkbox" checked={enabled} onChange={(e) => onEnabled(e.target.checked)} />{title}</label>
       <label className="mt-3 block text-xs font-semibold text-slate-500">Maximum images</label>
-      <select disabled={readOnly || !enabled} value={max} onChange={(e) => onMax(Number(e.target.value))} className="mt-1 h-9 w-full rounded-lg border bg-white px-2 text-sm">
+      <select disabled={!enabled} value={max} onChange={(e) => onMax(Number(e.target.value))} className="mt-1 h-9 w-full rounded-lg border bg-white px-2 text-sm">
         {Array.from({ length: maxLimit }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
       </select>
     </div>

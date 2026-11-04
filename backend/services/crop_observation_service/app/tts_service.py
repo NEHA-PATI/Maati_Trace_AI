@@ -202,6 +202,30 @@ def generate_instruction_audio(
 
     container = str(output_format.get("container", settings.cartesia_tts_output_container)).lower()
     mime_type = _MIME_BY_CONTAINER.get(container, "application/octet-stream")
+    physical_token = f"{cache_key}-{uuid4().hex}" if force else cache_key
+    object_key = f"system/tts-cache/{locale}/{physical_token}.{container}"
+
+    # A previous request may have generated and stored the object but failed
+    # before updating tts_generations. Reuse that asset instead of calling
+    # Cartesia again or inserting a duplicate system_media_assets row.
+    if not force:
+        existing_asset = repo.get_system_media_asset_by_object_key(
+            bucket_name="local" if is_local() else settings.crop_observation_s3_bucket,
+            object_key=object_key,
+        )
+        if existing_asset:
+            _bind_instruction(stage_id, locale, existing_asset["asset_id"])
+            repo.upsert_tts_generation(
+                target_type="STAGE", target_id=stage_id, locale=locale,
+                transcript=transcript, profile_id=profile["tts_profile_id"],
+                cache_key=cache_key, status="READY",
+                system_media_asset_id=existing_asset["asset_id"], error_message=None,
+            )
+            return InstructionAudioGenerateResponse(
+                stage_id=stage_id, locale=locale, status="READY",
+                asset_id=existing_asset["asset_id"],
+                content_url=f"/v1/crop-observations/system-media/{existing_asset['asset_id']}/content",
+            )
 
     # Persist provider work state so the admin System/Media & Voice screens can
     # distinguish missing audio from failed provider calls.
@@ -231,8 +255,6 @@ def generate_instruction_audio(
 
         # Normal generation is content addressed. Force creates a fresh
         # physical object so it never mutates audio already used elsewhere.
-        physical_token = f"{cache_key}-{uuid4().hex}" if force else cache_key
-        object_key = f"system/tts-cache/{locale}/{physical_token}.{container}"
         active_backend().put_bytes(object_key=object_key, data=audio_bytes, mime_type=mime_type)
 
         asset = repo.create_system_media_asset(

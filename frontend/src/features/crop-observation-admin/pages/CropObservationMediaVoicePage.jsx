@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Music2, RefreshCw, Volume2 } from "lucide-react";
 
 import {
+  cloneConfiguration,
+  createDraftConfiguration,
   generateConfigurationAudio,
   generateStageInstructionAudio,
   getTtsStatus,
@@ -62,16 +64,39 @@ export default function CropObservationMediaVoicePage() {
 
   useEffect(() => {
     if (!cropCode) return;
-    listConfigurations(cropCode)
-      .then((rows) => {
-        setConfigs(rows);
-        const preferred = rows.find((row) => row.status === "DRAFT");
-        setConfigId(preferred?.config_version_id || "");
-      })
-      .catch(() => {
-        setConfigs([]);
-        setConfigId("");
-      });
+
+    let cancelled = false;
+
+    async function ensureDraftConfiguration() {
+      try {
+        const rows = await listConfigurations(cropCode);
+        if (cancelled) return;
+
+        let selected = rows.find((row) => row.status === "DRAFT");
+        if (!selected) {
+          const published = rows.find((row) => row.status === "PUBLISHED");
+          if (published) {
+            selected = await cloneConfiguration(published.config_version_id);
+          } else {
+            selected = await createDraftConfiguration(cropCode);
+          }
+        }
+
+        const nextRows = await listConfigurations(cropCode);
+        if (cancelled) return;
+
+        setConfigs(nextRows);
+        setConfigId(selected?.config_version_id || nextRows.find((row) => row.status === "DRAFT")?.config_version_id || "");
+      } catch {
+        if (!cancelled) {
+          setConfigs([]);
+          setConfigId("");
+        }
+      }
+    }
+
+    ensureDraftConfiguration();
+    return () => { cancelled = true; };
   }, [cropCode]);
 
   useEffect(() => {
@@ -228,16 +253,22 @@ export default function CropObservationMediaVoicePage() {
       <section className="rounded-2xl border bg-white p-5 shadow-sm">
         <h3 className="font-black text-slate-900">Generate crop instruction audio</h3>
         <p className="mt-1 text-sm text-slate-500">Write the instruction in English and Odia below, save it, then generate the audio. Farmers will hear the generated clip for their selected language.</p>
-        <div className="mt-4 grid gap-3 md:grid-cols-[240px_1fr_auto]">
-          <select value={cropCode} onChange={(e) => setCropCode(e.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm font-semibold">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <select value={cropCode} onChange={(e) => setCropCode(e.target.value)} className="h-10 min-w-[200px] rounded-lg border bg-white px-3 text-sm font-semibold">
             {crops.map((crop) => <option key={crop.crop_code} value={crop.crop_code}>{crop.crop_code}</option>)}
           </select>
-          <select value={configId} onChange={(e) => setConfigId(e.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm">
-            {configs.map((config) => <option key={config.config_version_id} value={config.config_version_id}>v{config.version_number} · {config.status}</option>)}
-          </select>
+          {configs.length > 1 ? (
+            <select value={configId} onChange={(e) => setConfigId(e.target.value)} className="h-10 min-w-[220px] rounded-lg border bg-white px-3 text-sm">
+              {configs.map((config) => <option key={config.config_version_id} value={config.config_version_id}>v{config.version_number} · {config.status}</option>)}
+            </select>
+          ) : (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+              {configId ? "Using the active draft" : "Creating the draft…"}
+            </div>
+          )}
           <button disabled={!configId || configs.find((row) => row.config_version_id === configId)?.status !== "DRAFT" || busy} onClick={generateAll} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Generate missing / changed</button>
         </div>
-        {!configId && configs.length ? <p className="mt-3 text-sm text-amber-700">Only draft configurations can generate audio. Clone the published configuration from the Configuration tab first.</p> : null}
+        {!configId && configs.length ? <p className="mt-3 text-sm text-amber-700">A draft is being prepared for this crop before audio generation begins.</p> : null}
         {message ? <p className="mt-3 text-sm font-medium text-slate-600">{message}</p> : null}
       </section>
 

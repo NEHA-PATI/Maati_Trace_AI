@@ -1273,6 +1273,24 @@ def get_system_media_asset(asset_id: UUID) -> dict[str, Any] | None:
     )
 
 
+def get_system_media_asset_by_object_key(*, bucket_name: str, object_key: str) -> dict[str, Any] | None:
+    """Return an existing ready asset for an idempotent stored object."""
+    return _run_one(
+        """
+        SELECT
+            asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
+            mime_type, byte_size, locale, duration_seconds, storage_backend,
+            original_filename, is_active, upload_status, checksum_sha256,
+            created_by_user_id, upload_expires_at, created_at, updated_at
+        FROM crop_observation.system_media_assets
+        WHERE bucket_name = :bucket_name
+          AND object_key = :object_key
+          AND upload_status = 'READY';
+        """,
+        {"bucket_name": bucket_name, "object_key": object_key},
+    )
+
+
 def create_system_media_asset(
     *,
     asset_type: str,
@@ -1643,6 +1661,8 @@ def create_system_media_asset(
             :original_filename, :upload_status, :created_by_user_id, :is_active,
             :upload_expires_at
         )
+        ON CONFLICT (bucket_name, object_key)
+        DO UPDATE SET updated_at = now()
         RETURNING
             asset_id, asset_type, crop_id, stage_id, bucket_name, object_key,
             mime_type, byte_size, locale, duration_seconds, storage_backend,
