@@ -1,190 +1,94 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronLeft, Smartphone, Monitor } from "lucide-react";
+import { ChevronLeft, Smartphone, Monitor, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import LoadingState from "@/components/ui/LoadingState";
 import { Input } from "@/components/ui/input";
 import {
-  cloneConfiguration,
-  createDraftConfiguration,
   createStage,
+  getCrop,
+  listPracticeTemplates,
   getTtsStatus,
   listTtsProfiles,
-  getCrop,
-  listConfigurations,
-  listPracticeTemplates,
-  listStages,
-  publishConfiguration,
-  upsertTtsProfile,
-  validateConfiguration,
 } from "@/features/crop-observation-admin/api/cropObservationAdminApi";
+import useConfigWorkflow from "@/features/crop-observation-admin/hooks/useConfigWorkflow";
 import StageEditor from "@/features/crop-observation-admin/components/StageEditor";
+import VoicePicker from "@/features/crop-observation-admin/components/VoicePicker";
 
 export default function CropConfigurationEditorPage() {
   const { cropCode } = useParams();
   const navigate = useNavigate();
 
   const [crop, setCrop] = useState(null);
-  const [configs, setConfigs] = useState([]);
-  const [selectedConfigId, setSelectedConfigId] = useState("");
-  const [stages, setStages] = useState([]);
   const [practiceTemplates, setPracticeTemplates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [validation, setValidation] = useState(null);
+  const [ttsStatus, setTtsStatus] = useState(null);
+  const [profiles, setProfiles] = useState([]);
+  const [staticError, setStaticError] = useState("");
   const [previewMobile, setPreviewMobile] = useState(true);
   const [newStageCode, setNewStageCode] = useState("");
-  const [ttsStatus, setTtsStatus] = useState(null);
-  const [voiceDrafts, setVoiceDrafts] = useState({
-    "en-IN": { voice_id: "", voice_name: "" },
-    "or-IN": { voice_id: "", voice_name: "" },
-  });
+  const [addingStage, setAddingStage] = useState(false);
 
-  const selectedConfig = configs.find((c) => c.config_version_id === selectedConfigId);
-  const isDraft = selectedConfig?.status === "DRAFT";
-
-  const loadStages = useCallback(async (configId) => {
-    if (!configId) {
-      setStages([]);
-      return;
-    }
-    setStages(await listStages(configId));
-  }, []);
-
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [cropData, configList, templates] = await Promise.all([
-        getCrop(cropCode),
-        listConfigurations(cropCode),
-        listPracticeTemplates(),
-      ]);
-      const [ttsStatusData, ttsProfileData] = await Promise.all([getTtsStatus(), listTtsProfiles()]);
-      setCrop(cropData);
-      setConfigs(configList);
-      setPracticeTemplates(templates);
-      setTtsStatus(ttsStatusData);
-      setVoiceDrafts({
-        "en-IN": {
-          voice_id: ttsProfileData.find((item) => item.locale === "en-IN")?.voice_id || "",
-          voice_name: ttsProfileData.find((item) => item.locale === "en-IN")?.voice_name || "",
-        },
-        "or-IN": {
-          voice_id: ttsProfileData.find((item) => item.locale === "or-IN")?.voice_id || "",
-          voice_name: ttsProfileData.find((item) => item.locale === "or-IN")?.voice_name || "",
-        },
-      });
-      const preferred = configList.find((c) => c.status === "DRAFT") || configList[0];
-      if (preferred) {
-        setSelectedConfigId(preferred.config_version_id);
-        await loadStages(preferred.config_version_id);
-      }
-    } catch (err) {
-      setError(err?.message || "Could not load configuration.");
-    } finally {
-      setLoading(false);
-    }
-  }, [cropCode, loadStages]);
+  const workflow = useConfigWorkflow(cropCode);
+  const { stages, validation, isEditing, readOnly, canPublish, publishing, justPublished, loading } = workflow;
 
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  async function handleSelectConfig(id) {
-    setSelectedConfigId(id);
-    setValidation(null);
-    await loadStages(id);
-  }
-
-  async function handleCreateDraft() {
-    setBusy(true);
-    setError("");
-    try {
-      const draft = await createDraftConfiguration(cropCode);
-      await loadAll();
-      setSelectedConfigId(draft.config_version_id);
-      await loadStages(draft.config_version_id);
-    } catch (err) {
-      setError(err?.message || "Could not create draft.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCloneAsDraft() {
-    if (!selectedConfigId) return;
-    setBusy(true);
-    setError("");
-    try {
-      const draft = await cloneConfiguration(selectedConfigId);
-      await loadAll();
-      setSelectedConfigId(draft.config_version_id);
-      await loadStages(draft.config_version_id);
-    } catch (err) {
-      setError(err?.message || "Could not clone configuration.");
-    } finally {
-      setBusy(false);
-    }
-  }
+    let cancelled = false;
+    Promise.all([getCrop(cropCode), listPracticeTemplates(), getTtsStatus(), listTtsProfiles()])
+      .then(([cropData, templates, tts, ttsProfiles]) => {
+        if (cancelled) return;
+        setCrop(cropData);
+        setPracticeTemplates(templates);
+        setTtsStatus(tts);
+        setProfiles(ttsProfiles);
+      })
+      .catch((err) => {
+        if (!cancelled) setStaticError(err?.message || "Could not load crop.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cropCode]);
 
   async function handleAddStage() {
-    if (!newStageCode.trim()) return;
-    const created = await createStage(selectedConfigId, {
-      stage_code: newStageCode.trim(),
-      display_order: stages.length,
-      is_initial: stages.length === 0,
-    });
-    setStages((prev) => [...prev, created]);
-    setNewStageCode("");
-  }
-
-  function handleStageDeleted(stageId) {
-    setStages((prev) => prev.filter((s) => s.stage_id !== stageId));
-  }
-
-  async function handleValidate() {
-    setBusy(true);
+    const code = newStageCode.trim().toLowerCase().replace(/\s+/g, "_");
+    if (!code) return;
+    setAddingStage(true);
+    workflow.setError("");
     try {
-      setValidation(await validateConfiguration(selectedConfigId));
+      const configId = await workflow.ensureEditable();
+      if (!configId) return;
+      await createStage(configId, {
+        stage_code: code,
+        display_order: stages.length,
+        is_initial: stages.length === 0,
+      });
+      setNewStageCode("");
+      await workflow.changed();
     } catch (err) {
-      setError(err?.message || "Could not validate.");
+      workflow.setError(err?.message || "Could not add stage.");
     } finally {
-      setBusy(false);
+      setAddingStage(false);
     }
   }
 
   async function handlePublish() {
-    setBusy(true);
-    setError("");
-    try {
-      await publishConfiguration(selectedConfigId);
-      await loadAll();
-    } catch (err) {
-      if (Array.isArray(err?.fields) && err.fields.length) {
-        setValidation({ valid: false, errors: err.fields, warnings: [] });
-      }
-      setError(err?.message || "Could not publish.");
-    } finally {
-      setBusy(false);
-    }
+    await workflow.publish();
   }
 
-  async function handleSaveVoice(locale) {
-    setBusy(true);
-    setError("");
-    try {
-      await upsertTtsProfile(locale, voiceDrafts[locale]);
-    } catch (err) {
-      setError(err?.message || "Could not save TTS profile.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const publishBlockedReason = !isEditing
+    ? null
+    : !validation
+      ? "Checking…"
+      : !validation.valid
+        ? validation.errors?.[0]
+          ? `Fix: ${validation.errors[0].code}${validation.errors[0].stage_code ? ` (${validation.errors[0].stage_code})` : ""}`
+          : "Fix validation errors first"
+        : null;
 
-  if (loading) return <LoadingState label="Loading configuration…" className="px-4 py-8 text-sm text-slate-400" />;
+  if (loading) {
+    return <LoadingState label="Loading configuration…" className="px-4 py-8 text-sm text-slate-400" />;
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -196,51 +100,79 @@ export default function CropConfigurationEditorPage() {
         <ChevronLeft className="h-4 w-4" /> Back to crops
       </button>
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black text-slate-950">{cropCode}</h1>
-        <button
-          type="button"
-          onClick={() => setPreviewMobile((v) => !v)}
-          className="flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"
-        >
-          {previewMobile ? <Smartphone className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
-          {previewMobile ? "Mobile" : "Desktop"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-black text-slate-950">{cropCode}</h1>
+          {publishedLabel(workflow)}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPreviewMobile((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"
+          >
+            {previewMobile ? <Smartphone className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
+            {previewMobile ? "Mobile" : "Desktop"}
+          </button>
+        </div>
       </div>
 
-      {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+      {staticError ? <p className="mt-2 text-sm text-rose-600">{staticError}</p> : null}
+      {workflow.error ? <p className="mt-2 text-sm text-rose-600">{workflow.error}</p> : null}
       {crop && crop.is_active === false ? (
         <p className="mt-2 text-sm text-amber-600">This crop is inactive — farmers won't see it in the catalogue.</p>
       ) : null}
+      {justPublished ? (
+        <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+          ✓ Changes published — new crop cycles use the updated flow.
+        </p>
+      ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <select
-          value={selectedConfigId}
-          onChange={(e) => handleSelectConfig(e.target.value)}
-          className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-        >
-          {configs.map((c) => (
-            <option key={c.config_version_id} value={c.config_version_id}>
-              v{c.version_number} — {c.status}
-            </option>
-          ))}
-        </select>
-        <Button size="sm" variant="outline" onClick={handleCreateDraft} disabled={busy}>
-          New blank draft
-        </Button>
-        {selectedConfigId ? (
-          <Button size="sm" variant="outline" onClick={handleCloneAsDraft} disabled={busy}>
-            Clone as draft
-          </Button>
+      {/* Keep the editing flow focused on the crop lifecycle, not version bookkeeping. */}
+      <div className="sticky top-2 z-10 mt-4 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm">
+            {isEditing ? (
+              validation?.valid ? (
+                <span className="font-semibold text-emerald-700">✓ Ready to publish</span>
+              ) : (
+                <span className="font-medium text-slate-600">{publishBlockedReason || "Editing — changes go live when you publish."}</span>
+              )
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-slate-500">
+                <Pencil className="h-3.5 w-3.5" /> Viewing the live configuration
+              </span>
+            )}
+          </div>
+          {isEditing ? (
+            <Button onClick={handlePublish} disabled={!canPublish}>
+              {publishing ? "Publishing…" : "Publish changes"}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => workflow.startEditing()}>Edit configuration</Button>
+          )}
+        </div>
+        {validation && !validation.valid && isEditing ? (
+          <div className="mt-2 space-y-0.5 text-xs">
+            {validation.errors.map((issue, i) => (
+              <p key={i} className="text-rose-600">
+                ✕ {issue.code}{issue.stage_code ? ` (${issue.stage_code})` : ""}{issue.field_code ? ` — ${issue.field_code}` : ""}
+              </p>
+            ))}
+            {validation.warnings.map((issue, i) => (
+              <p key={i} className="text-amber-600">⚠ {issue.code}{issue.stage_code ? ` (${issue.stage_code})` : ""}</p>
+            ))}
+          </div>
         ) : null}
       </div>
 
+      {/* Voice setup — pick by listening, no provider IDs. Applies at generation time. */}
       <div className="mt-6 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Cartesia instruction audio</p>
+            <p className="text-sm font-semibold text-slate-900">Instruction voices</p>
             <p className="text-xs text-slate-500">
-              Status: {ttsStatus?.enabled ? "enabled" : "disabled"} · API key {ttsStatus?.api_key_configured ? "configured" : "missing"}
+              Pick the voice farmers hear. {ttsStatus?.api_key_configured ? "Cartesia connected." : "Cartesia API key missing — generation disabled."}
             </p>
           </div>
           <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -249,45 +181,21 @@ export default function CropConfigurationEditorPage() {
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {["en-IN", "or-IN"].map((locale) => (
-            <div key={locale} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{locale}</p>
-              <Input
-                className="mt-2"
-                placeholder="Voice ID"
-                value={voiceDrafts[locale]?.voice_id || ""}
-                onChange={(event) =>
-                  setVoiceDrafts((prev) => ({
-                    ...prev,
-                    [locale]: { ...(prev[locale] || {}), voice_id: event.target.value },
-                  }))
-                }
-              />
-              <Input
-                className="mt-2"
-                placeholder="Voice name"
-                value={voiceDrafts[locale]?.voice_name || ""}
-                onChange={(event) =>
-                  setVoiceDrafts((prev) => ({
-                    ...prev,
-                    [locale]: { ...(prev[locale] || {}), voice_name: event.target.value },
-                  }))
-                }
-              />
-              <Button size="sm" variant="outline" className="mt-2" onClick={() => handleSaveVoice(locale)} disabled={busy}>
-                Save voice
-              </Button>
-            </div>
+            <VoicePicker
+              key={locale}
+              locale={locale}
+              profile={profiles.find((p) => p.locale === locale)}
+              onSaved={async () => setProfiles(await listTtsProfiles())}
+            />
           ))}
         </div>
       </div>
 
-      <div
-        className={`mx-auto mt-6 ${previewMobile ? "max-w-[390px] rounded-3xl border-4 border-slate-800 p-2" : ""}`}
-      >
+      <div className={`mx-auto mt-6 ${previewMobile ? "max-w-[390px] rounded-3xl border-4 border-slate-800 p-2" : ""}`}>
         <div className="space-y-3">
           {stages.length === 0 ? (
             <p className="text-sm text-slate-400">
-              {selectedConfigId ? "No stages yet." : "No configuration selected — create a draft to begin."}
+              {readOnly ? "No stages in the live configuration — edit to add some." : "No stages yet — add the first one below."}
             </p>
           ) : null}
           {stages.map((stage) => (
@@ -295,58 +203,36 @@ export default function CropConfigurationEditorPage() {
               key={stage.stage_id}
               stage={stage}
               practiceTemplates={practiceTemplates}
-              onDeleted={handleStageDeleted}
-              readOnly={!isDraft}
+              workflow={workflow}
             />
           ))}
 
-          {isDraft ? (
+          {!readOnly ? (
             <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3">
               <Input
-                placeholder="stage_code"
+                placeholder="New stage name (e.g. flowering)"
                 value={newStageCode}
                 onChange={(e) => setNewStageCode(e.target.value)}
                 className="h-8 text-sm"
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddStage(); }}
               />
-              <Button size="sm" onClick={handleAddStage}>
-                Add stage
+              <Button size="sm" onClick={handleAddStage} disabled={addingStage}>
+                {addingStage ? "Adding…" : "Add stage"}
               </Button>
             </div>
           ) : null}
         </div>
       </div>
-
-      {isDraft ? (
-        <div className="mt-8 space-y-3 border-t border-slate-100 pt-6">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleValidate} disabled={busy}>
-              Validate
-            </Button>
-            <Button onClick={handlePublish} disabled={busy}>
-              Publish
-            </Button>
-          </div>
-
-          {validation ? (
-            <div className="space-y-1 text-sm">
-              <p className={validation.valid ? "text-emerald-600" : "text-rose-600"}>
-                {validation.valid ? "✓ Valid — ready to publish." : "✕ Not ready to publish."}
-              </p>
-              {validation.errors.map((issue, i) => (
-                <p key={i} className="text-rose-600">
-                  ✕ {issue.code} {issue.stage_code ? `(${issue.stage_code})` : ""}{" "}
-                  {issue.field_code ? `— ${issue.field_code}` : ""}
-                </p>
-              ))}
-              {validation.warnings.map((issue, i) => (
-                <p key={i} className="text-amber-600">
-                  ⚠ {issue.code} {issue.stage_code ? `(${issue.stage_code})` : ""}
-                </p>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
+}
+
+function publishedLabel(workflow) {
+  if (workflow.isEditing) {
+    return <p className="text-sm text-amber-700">Draft in progress — your updates are saved here and published when ready.</p>;
+  }
+  if (workflow.published) {
+    return <p className="text-sm text-slate-500">Published and available to farmers.</p>;
+  }
+  return <p className="text-sm text-slate-500">Not published yet.</p>;
 }
