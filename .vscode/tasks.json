@@ -176,7 +176,7 @@
       "args": [
         "-u",
         "-c",
-        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.email_worker', run_name='__main__', alter_sys=True)"
+        "import os; from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; os.environ['MAATITRACE_ENV_FILE'] = str(env_path.resolve()); load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.email_worker', run_name='__main__', alter_sys=True)"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -216,7 +216,9 @@
         "0.0.0.0",
         "--port",
         "8004",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/boundary_index_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -235,7 +237,9 @@
         "0.0.0.0",
         "--port",
         "8005",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/district_boundary_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -275,7 +279,9 @@
         "0.0.0.0",
         "--port",
         "8007",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/stac_catalog_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -294,7 +300,9 @@
         "0.0.0.0",
         "--port",
         "8008",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/raster_processor_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -313,7 +321,9 @@
         "0.0.0.0",
         "--port",
         "8009",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/lakehouse_writer_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -332,7 +342,9 @@
         "0.0.0.0",
         "--port",
         "8010",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/hot_stream_orchestrator_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -351,7 +363,9 @@
         "0.0.0.0",
         "--port",
         "8011",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/analytics_query_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -370,7 +384,9 @@
         "0.0.0.0",
         "--port",
         "8014",
-        "--reload"
+        "--reload",
+        "--env-file",
+        "services/observability_service/.env"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -426,7 +442,7 @@
       "args": [
         "-u",
         "-c",
-        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/fpo_management_service/.env'); assert env_path.is_file(), 'Missing services/fpo_management_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.fpo_management_service.worker', run_name='__main__', alter_sys=True)"
+        "import os; from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/fpo_management_service/.env'); assert env_path.is_file(), 'Missing services/fpo_management_service/.env'; os.environ['MAATITRACE_ENV_FILE'] = str(env_path.resolve()); load_dotenv(env_path, override=True); runpy.run_module('services.fpo_management_service.worker', run_name='__main__', alter_sys=True)"
       ],
       "problemMatcher": [],
       "runOptions": {
@@ -440,7 +456,7 @@
       "args": [
         "-u",
         "-c",
-        "from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.fpo_event_worker', run_name='__main__', alter_sys=True)"
+        "import os; from pathlib import Path; from dotenv import load_dotenv; import runpy; env_path = Path('services/auth_service/.env'); assert env_path.is_file(), 'Missing services/auth_service/.env'; os.environ['MAATITRACE_ENV_FILE'] = str(env_path.resolve()); load_dotenv(env_path, override=True); runpy.run_module('services.auth_service.app.fpo_event_worker', run_name='__main__', alter_sys=True)"
       ],
       "problemMatcher": [],
       "runOptions": {

@@ -79,6 +79,7 @@ import MyFpo from "@/pages/MyFpo";
 import Notifications from "@/pages/Notifications";
 import OurMethod from "@/pages/OurMethod";
 import UseCases from "@/pages/UseCases";
+import FpoUploadsPage from "@/pages/FpoUploadsPage";
 
 function RouteLayout() {
   return (
@@ -104,6 +105,7 @@ export const router = createBrowserRouter(
         { path: "/use-cases", element: <UseCases /> },
         { path: "/our-method", element: <OurMethod /> },
         { path: "/plans", element: <PlansPage /> },
+        { path: "/fpo-uploads", element: <FpoUploadsPage /> },
 
         {
           element: <ProtectedRoute permission="adminDashboard" />,
