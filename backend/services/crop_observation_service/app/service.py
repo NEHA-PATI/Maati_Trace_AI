@@ -33,6 +33,19 @@ from services.crop_observation_service.app.schemas import (
 IST = ZoneInfo("Asia/Kolkata")
 
 
+def normalize_locale(locale: str | None) -> str:
+    """Map browser language tags to the locales stored in the catalogue."""
+    aliases = {
+        "en": "en-IN",
+        "en-in": "en-IN",
+        "or": "or-IN",
+        "or-in": "or-IN",
+        "odia": "or-IN",
+    }
+    value = str(locale or "en-IN").strip()
+    return aliases.get(value.lower(), value)
+
+
 def today_ist():
     return datetime.now(IST).date()
 
@@ -302,6 +315,7 @@ def get_stage_screen(
     *,
     locale: str,
 ) -> ScreenResponse:
+    locale = normalize_locale(locale)
     cycle = repo.get_crop_cycle(crop_cycle_id)
     if cycle is None:
         raise CropObservationError("CROP_CYCLE_NOT_FOUND", "Crop cycle was not found.", 404)

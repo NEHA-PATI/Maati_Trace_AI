@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+import httpx
+
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -81,6 +83,48 @@ def routes():
         "gateway": SERVICE_NAME,
         "routes": get_route_targets(),
     }
+
+
+@app.post("/fpo-uploads", include_in_schema=False)
+async def upload_fpo_file(file: UploadFile = File(...)):
+    """Upload an FPO file to the configured Microsoft Graph folder."""
+    config = (
+        settings.microsoft_tenant_id,
+        settings.microsoft_client_id,
+        settings.microsoft_client_secret,
+        settings.microsoft_drive_id,
+        settings.microsoft_folder_id,
+    )
+    if not all(config):
+        raise HTTPException(status_code=503, detail="Microsoft Graph upload is not configured")
+
+    content = await file.read()
+    token_url = f"https://login.microsoftonline.com/{settings.microsoft_tenant_id}/oauth2/v2.0/token"
+    async with httpx.AsyncClient(timeout=60) as client:
+        token_response = await client.post(token_url, data={
+            "client_id": settings.microsoft_client_id,
+            "client_secret": settings.microsoft_client_secret,
+            "scope": "https://graph.microsoft.com/.default",
+            "grant_type": "client_credentials",
+        })
+        token_response.raise_for_status()
+        token = token_response.json()["access_token"]
+        upload_url = (
+            f"https://graph.microsoft.com/v1.0/drives/{settings.microsoft_drive_id}"
+            f"/items/{settings.microsoft_folder_id}:/{file.filename}:/content"
+        )
+        upload_response = await client.put(
+            upload_url,
+            content=content,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": file.content_type or "application/octet-stream",
+            },
+        )
+        if upload_response.is_error:
+            raise HTTPException(status_code=502, detail="Microsoft Graph rejected the upload")
+
+    return {"filename": file.filename, "status": "uploaded"}
 
 
 @app.get("/api/health/{service_name}/{check}", response_model=HealthResponse)
