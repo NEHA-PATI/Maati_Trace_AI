@@ -1382,7 +1382,7 @@ def get_stage_image(stage_id: UUID) -> dict[str, Any] | None:
 
 
 def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any] | None:
-    return _run_one(
+    direct = _run_one(
         """
         SELECT asset_id, mime_type, duration_seconds
         FROM crop_observation.system_media_assets
@@ -1391,6 +1391,73 @@ def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any
           AND locale = :locale
           AND is_active = true
         ORDER BY created_at DESC
+        LIMIT 1;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+    if direct:
+        return direct
+
+    # Configuration versions clone stages with new UUIDs. Media generated on
+    # the admin draft must still be playable by farmer crop cycles pointing
+    # at the published version. Resolve the asset by the stable crop/stage
+    # code/locale identity as a fallback.
+    direct = _run_one(
+        """
+        SELECT
+            candidate.asset_id, candidate.mime_type, candidate.duration_seconds,
+            candidate.storage_backend, candidate.object_key
+        FROM crop_observation.crop_stages current_stage
+        JOIN crop_observation.crop_config_versions current_config
+          ON current_config.config_version_id = current_stage.config_version_id
+        JOIN crop_observation.crop_stages candidate_stage
+          ON candidate_stage.stage_code = current_stage.stage_code
+        JOIN crop_observation.crop_config_versions candidate_config
+          ON candidate_config.config_version_id = candidate_stage.config_version_id
+         AND candidate_config.crop_id = current_config.crop_id
+        JOIN crop_observation.system_media_bindings binding
+          ON binding.target_type = 'STAGE'
+         AND binding.target_id = candidate_stage.stage_id
+         AND binding.asset_role = 'INSTRUCTION_AUDIO'
+         AND binding.locale = :locale
+         AND binding.is_active = true
+        JOIN crop_observation.system_media_assets candidate
+          ON candidate.asset_id = binding.asset_id
+         AND candidate.upload_status = 'READY'
+         AND candidate.is_active = true
+        WHERE current_stage.stage_id = :stage_id
+        ORDER BY candidate_config.status = 'PUBLISHED' DESC,
+                 candidate.created_at DESC
+        LIMIT 1;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+    if direct:
+        return direct
+    return _run_one(
+        """
+        SELECT candidate.asset_id, candidate.mime_type, candidate.duration_seconds,
+               candidate.storage_backend, candidate.object_key
+        FROM crop_observation.crop_stages current_stage
+        JOIN crop_observation.crop_config_versions current_config
+          ON current_config.config_version_id = current_stage.config_version_id
+        JOIN crop_observation.crop_stages candidate_stage
+          ON candidate_stage.stage_code = current_stage.stage_code
+        JOIN crop_observation.crop_config_versions candidate_config
+          ON candidate_config.config_version_id = candidate_stage.config_version_id
+         AND candidate_config.crop_id = current_config.crop_id
+        JOIN crop_observation.system_media_bindings binding
+          ON binding.target_type = 'STAGE'
+         AND binding.target_id = candidate_stage.stage_id
+         AND binding.asset_role = 'INSTRUCTION_AUDIO'
+         AND binding.locale = :locale
+         AND binding.is_active = true
+        JOIN crop_observation.system_media_assets candidate
+          ON candidate.asset_id = binding.asset_id
+         AND candidate.upload_status = 'READY'
+         AND candidate.is_active = true
+        WHERE current_stage.stage_id = :stage_id
+        ORDER BY candidate_config.status = 'PUBLISHED' DESC, candidate.created_at DESC
         LIMIT 1;
         """,
         {"stage_id": stage_id, "locale": locale},
@@ -1923,7 +1990,7 @@ def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any
     )
     if bound:
         return bound
-    return _run_one(
+    direct = _run_one(
         """
         SELECT asset_id, mime_type, duration_seconds, storage_backend, object_key
         FROM crop_observation.system_media_assets
@@ -1933,6 +2000,36 @@ def get_stage_instruction_audio(stage_id: UUID, *, locale: str) -> dict[str, Any
           AND is_active = true
           AND upload_status = 'READY'
         ORDER BY created_at DESC LIMIT 1;
+        """,
+        {"stage_id": stage_id, "locale": locale},
+    )
+    if direct:
+        return direct
+    return _run_one(
+        """
+        SELECT candidate.asset_id, candidate.mime_type, candidate.duration_seconds,
+               candidate.storage_backend, candidate.object_key
+        FROM crop_observation.crop_stages current_stage
+        JOIN crop_observation.crop_config_versions current_config
+          ON current_config.config_version_id = current_stage.config_version_id
+        JOIN crop_observation.crop_stages candidate_stage
+          ON candidate_stage.stage_code = current_stage.stage_code
+        JOIN crop_observation.crop_config_versions candidate_config
+          ON candidate_config.config_version_id = candidate_stage.config_version_id
+         AND candidate_config.crop_id = current_config.crop_id
+        JOIN crop_observation.system_media_bindings binding
+          ON binding.target_type = 'STAGE'
+         AND binding.target_id = candidate_stage.stage_id
+         AND binding.asset_role = 'INSTRUCTION_AUDIO'
+         AND binding.locale = :locale
+         AND binding.is_active = true
+        JOIN crop_observation.system_media_assets candidate
+          ON candidate.asset_id = binding.asset_id
+         AND candidate.upload_status = 'READY'
+         AND candidate.is_active = true
+        WHERE current_stage.stage_id = :stage_id
+        ORDER BY candidate_config.status = 'PUBLISHED' DESC, candidate.created_at DESC
+        LIMIT 1;
         """,
         {"stage_id": stage_id, "locale": locale},
     )

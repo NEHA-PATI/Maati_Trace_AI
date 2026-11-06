@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from services.crop_observation_service.app import observation_service
+from services.crop_observation_service.app.service import normalize_locale
 from services.crop_observation_service.app import repository as repo
 from services.crop_observation_service.app.dependencies import RequestContext
 from services.crop_observation_service.app.errors import CropObservationError
@@ -156,6 +157,7 @@ def get_practice_history(
     locale: str,
     limit: int,
 ) -> PracticeHistoryResponse:
+    locale = normalize_locale(locale)
     cycle = observation_service.resolve_cycle_and_authorize(context, crop_cycle_id)
 
     stage = repo.get_stage_by_code(cycle["config_version_id"], stage_code)

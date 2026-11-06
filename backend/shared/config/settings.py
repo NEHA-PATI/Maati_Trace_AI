@@ -1,8 +1,30 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _env_file() -> Path:
+    """Resolve the environment file for this service process.
+
+    MAATITRACE_ENV_FILE is deliberately process-scoped: the orchestrator or
+    container runtime must set it before importing this module. There is no
+    root backend .env fallback because services must not inherit each other's
+    configuration.
+    """
+    configured = os.getenv("MAATITRACE_ENV_FILE", "").strip()
+    if not configured:
+        raise RuntimeError(
+            "MAATITRACE_ENV_FILE is required; start the service with its own "
+            "services/<service>/.env file."
+        )
+    candidate = Path(configured)
+    resolved = candidate if candidate.is_absolute() else BACKEND_ROOT / candidate
+    if not resolved.is_file():
+        raise RuntimeError(f"Service environment file does not exist: {resolved}")
+    return resolved
 
 
 class Settings(BaseSettings):
@@ -123,6 +145,13 @@ class Settings(BaseSettings):
     # Dedicated Backend 1 -> ML service credential. Never expose this to the browser.
     ml_service_key: str = ""
 
+    # Microsoft Graph target for FPO uploads
+    microsoft_tenant_id: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_drive_id: str = ""
+    microsoft_folder_id: str = ""
+
     # API gateway upstream connection pool
     gateway_upstream_timeout_seconds: float = 180.0
     gateway_connect_timeout_seconds: float = 10.0
@@ -174,7 +203,7 @@ class Settings(BaseSettings):
     lakehouse_write_retry_attempts: int = 2
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_ROOT / ".env",
+        env_file=_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
