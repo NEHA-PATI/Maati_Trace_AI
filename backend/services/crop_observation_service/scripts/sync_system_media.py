@@ -45,7 +45,8 @@ def main() -> None:
             object_key = item.get("object_key") or item["file"]
             actual_file = (MEDIA_ROOT / item["file"]).resolve()
             if not actual_file.exists():
-                raise RuntimeError(f"Missing file declared in media_manifest.json: {actual_file}")
+                print(f"missing file  {item['file']}")
+                continue
 
             mime_type, _ = mimetypes.guess_type(actual_file.name)
             if mime_type is None:
@@ -54,7 +55,10 @@ def main() -> None:
             crop = conn.execute(
                 text("SELECT crop_id FROM crop_observation.crops WHERE crop_code = :crop_code"),
                 {"crop_code": item["crop_code"]},
-            ).mappings().one()
+            ).mappings().first()
+            if crop is None:
+                print(f"missing crop  {item['crop_code']}")
+                continue
 
             stage_id = None
             if item.get("stage_code"):
@@ -71,7 +75,10 @@ def main() -> None:
                         """
                     ),
                     {"crop_id": crop["crop_id"], "stage_code": item["stage_code"]},
-                ).mappings().one()
+                ).mappings().first()
+                if stage is None:
+                    print(f"missing stage  {item['crop_code']}/{item['stage_code']}")
+                    continue
                 stage_id = stage["stage_id"]
 
             params = {
@@ -91,12 +98,14 @@ def main() -> None:
                     """
                     SELECT asset_id
                     FROM crop_observation.system_media_assets
-                    WHERE asset_type = :asset_type
-                      AND crop_id IS NOT DISTINCT FROM :crop_id
-                      AND stage_id IS NOT DISTINCT FROM :stage_id
-                      AND locale IS NOT DISTINCT FROM :locale
-                      AND object_key = :object_key
-                    ORDER BY created_at DESC
+                    WHERE (bucket_name = 'local' AND object_key = :object_key)
+                       OR (
+                            is_active = true
+                        AND asset_type = :asset_type
+                        AND crop_id IS NOT DISTINCT FROM :crop_id
+                        AND stage_id IS NOT DISTINCT FROM :stage_id
+                        AND locale IS NOT DISTINCT FROM :locale
+                       )
                     LIMIT 1
                     """
                 ),
@@ -109,10 +118,14 @@ def main() -> None:
                     text(
                         """
                         UPDATE crop_observation.system_media_assets
-                        SET bucket_name = 'local',
+                        SET asset_type = :asset_type,
+                            crop_id = :crop_id,
+                            stage_id = :stage_id,
+                            bucket_name = 'local',
                             object_key = :object_key,
                             mime_type = :mime_type,
                             byte_size = :byte_size,
+                            locale = :locale,
                             duration_seconds = :duration_seconds,
                             storage_backend = 'LOCAL',
                             original_filename = :original_filename,
