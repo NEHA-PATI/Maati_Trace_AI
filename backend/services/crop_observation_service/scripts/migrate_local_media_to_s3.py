@@ -62,6 +62,40 @@ def _migrate(table: str, id_column: str, *, dry_run: bool) -> tuple[int, int]:
             raise RuntimeError(f"S3 verification failed for {key}")
 
         with engine.begin() as conn:
+            existing_s3 = conn.execute(
+                text(
+                    f"""
+                    SELECT {id_column} AS asset_id
+                    FROM crop_observation.{table}
+                    WHERE storage_backend = 'S3'
+                      AND bucket_name = :bucket_name
+                      AND object_key = :object_key
+                    LIMIT 1
+                    """
+                ),
+                {"bucket_name": settings.crop_observation_s3_bucket, "object_key": key},
+            ).scalar()
+            if existing_s3 and str(existing_s3) != str(row["asset_id"]):
+                if table == "system_media_assets":
+                    conn.execute(
+                        text(
+                            """
+                            UPDATE crop_observation.system_media_bindings
+                            SET asset_id = :s3_asset_id
+                            WHERE asset_id = :local_asset_id
+                            """
+                        ),
+                        {"s3_asset_id": existing_s3, "local_asset_id": row["asset_id"]},
+                    )
+                conn.execute(
+                    text(
+                        f"DELETE FROM crop_observation.{table} WHERE {id_column} = :asset_id"
+                    ),
+                    {"asset_id": row["asset_id"]},
+                )
+                print(f"MERGED   {table:<20} {key}")
+                moved += 1
+                continue
             conn.execute(
                 text(
                     f"""
