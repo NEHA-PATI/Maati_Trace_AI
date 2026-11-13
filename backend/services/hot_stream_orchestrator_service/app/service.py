@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from shapely.geometry import shape
 
 from services.farm_registry_service.app.area_calculator import calculate_area_acres, validate_farm_polygon
+from shared.geometry_fingerprint import geometry_fingerprint
 from services.farm_registry_service.app.external_clients import (
     create_h3_preview,
     validate_location,
@@ -194,20 +195,40 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
     h3_resolution = int(farm.get("h3_resolution") or 12)
     correlation_id = str(uuid4())
 
-    try:
-        preview = create_h3_preview(
-            polygon=polygon,
-            resolution=h3_resolution,
-            correlation_id=correlation_id,
-        )
-    except FarmRegistryError as exc:
-        raise HotStreamOrchestratorError(
-            f"H3 preview failed: {exc}",
-            code="H3_PREVIEW_ERROR",
-            status_code=422,
-        ) from exc
-    h3_cells = preview.get("h3_cells_bigint") or []
-    h3_cell_count = int(preview.get("cell_count") or len(h3_cells) or 0)
+    current_boundary_hash = geometry_fingerprint(polygon)
+    cached_cells = _static_h3_cells(farm)
+    cache_is_valid = (
+        bool(cached_cells)
+        and str(farm.get("boundary_hash") or "") == current_boundary_hash
+        and int(farm.get("h3_resolution") or 0) == h3_resolution
+        and int(farm.get("h3_cell_count") or 0) == len(cached_cells)
+    )
+
+    if cache_is_valid:
+        h3_cells = cached_cells
+        h3_cell_count = len(cached_cells)
+        preview = {
+            "resolution": h3_resolution,
+            "h3_cells_bigint": h3_cells,
+            "cell_count": h3_cell_count,
+            "bbox": bbox,
+            "cached": True,
+        }
+    else:
+        try:
+            preview = create_h3_preview(
+                polygon=polygon,
+                resolution=h3_resolution,
+                correlation_id=correlation_id,
+            )
+        except FarmRegistryError as exc:
+            raise HotStreamOrchestratorError(
+                f"H3 preview failed: {exc}",
+                code="H3_PREVIEW_ERROR",
+                status_code=422,
+            ) from exc
+        h3_cells = preview.get("h3_cells_bigint") or []
+        h3_cell_count = int(preview.get("cell_count") or len(h3_cells) or 0)
 
     if h3_cells or h3_cell_count:
         if not farm.get("h3_cells") or int(farm.get("h3_cell_count") or 0) != int(h3_cell_count):
@@ -245,6 +266,7 @@ def ensure_farm_analysis_ready(farm_id: UUID) -> dict[str, Any]:
         h3_cell_count=h3_cell_count if h3_cells else None,
         area_acres=area_acres if area_acres is not None else None,
         bbox=bbox,
+        boundary_hash=current_boundary_hash,
     )
 
     if updated is not None:
@@ -970,6 +992,10 @@ def run_latest_analysis(
         except Exception as exc:
             checkpoint("grid_context", "completed_with_warnings", error=exc)
 
+        # Grid materialization updates the job stage to ``grid_context``.
+        # Explicitly checkpoint the next stage before entering the feature
+        # engine so status polling reflects the work that is actually running.
+        checkpoint("intelligence", "running")
         try:
             intelligence = materialize_intelligence(
                 farm_id,

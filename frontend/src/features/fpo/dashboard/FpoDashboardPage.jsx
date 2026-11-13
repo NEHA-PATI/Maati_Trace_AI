@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import FpoFeatureGate from "@/features/fpo/access/FpoFeatureGate";
 import { getFpoDashboardReport } from "@/features/fpo/api/fpoDashboardApi";
 import { getFpoFarmMonitoring } from "@/features/fpo/api/fpoFarmerApi";
+import FpoFarmPortfolioMap from "@/components/ui-custom/FpoFarmPortfolioMap";
 
 const EMPTY_FARMS = [];
 
@@ -64,9 +65,14 @@ export default function FpoDashboardPage() {
         </header>
 
         <section aria-label="Portfolio summary" className="grid gap-4 sm:grid-cols-3">
-          <Metric label="Active farmers" value={report.data?.portfolio?.active_farmer_count} icon={CheckCircle2} />
+          <Metric label="My farmers" value={report.data?.portfolio?.active_farmer_count} icon={CheckCircle2} />
           <Metric label="Active farms" value={activeFarmCount} icon={MapPinned} />
           <Metric label="Area covered" value={farmsQuery.isSuccess ? `${area.toFixed(1)} ac` : "—"} icon={MapPinned} />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="mb-4"><h2 className="font-black text-slate-950">Farm portfolio map</h2><p className="mt-1 text-sm text-slate-500">See every consent-authorized farm boundary at a glance.</p></div>
+          <FpoFarmPortfolioMap farms={farms} />
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6">

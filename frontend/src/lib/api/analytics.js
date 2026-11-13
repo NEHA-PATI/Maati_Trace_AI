@@ -53,8 +53,12 @@ export async function getCropFormulas(cropCode = "") {
   const query = cropCode ? `?crop_code=${encodeURIComponent(cropCode)}` : "";
   return extractItems(await analyticsClient.request(`/v1/analytics/formulas${query}`));
 }
-export async function getLatestGridCalculations(farmId, resultDate = "") {
-  const query = resultDate ? `?result_date=${encodeURIComponent(resultDate)}` : "";
+export async function getLatestGridCalculations(farmId, resultDate = "", predictionKey = "", compact = true) {
+  const params = new URLSearchParams();
+  if (resultDate) params.set("result_date", resultDate);
+  if (predictionKey) params.set("prediction_key", predictionKey);
+  if (compact) params.set("compact", "true");
+  const query = params.toString() ? `?${params.toString()}` : "";
   return extractItems(await analyticsClient.request(`/v1/analytics/farms/${farmId}/grid-calculations/latest${query}`));
 }
 export async function getLatestFarmCalculations(farmId, scope = "farm", resultDate = "") {

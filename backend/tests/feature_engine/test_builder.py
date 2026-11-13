@@ -2,7 +2,11 @@ from datetime import date
 
 import pytest
 
-from services.analytics_query_service.app.feature_engine.builder import build_feature_rows
+from services.analytics_query_service.app.feature_engine.builder import (
+    _date_index,
+    _nearest_before,
+    build_feature_rows,
+)
 
 
 def _farm():
@@ -80,3 +84,23 @@ def test_feature_builder_never_uses_observation_after_feature_date():
     assert len(rows) == 1
     assert rows[0]["feature_date"] == date(2026, 8, 10)
     assert rows[0]["features"]["ndvi"] == pytest.approx(0.4)
+
+
+def test_date_indexed_lookup_matches_latest_observation_before_target():
+    indexed = _date_index(
+        [
+            {"observation_date": date(2026, 8, 1), "value": 1},
+            {"observation_date": date(2026, 8, 10), "value": 2},
+            {"observation_date": date(2026, 8, 20), "value": 3},
+        ],
+        "observation_date",
+    )
+
+    result = _nearest_before(
+        indexed,
+        date(2026, 8, 15),
+        date_key="observation_date",
+        max_age_days=30,
+    )
+
+    assert result["value"] == 2

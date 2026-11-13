@@ -148,6 +148,7 @@ export function toFpoForm(
   user,
 ) {
   return {
+    profile_version: profile?.profile_version || 1,
     legal_name: profile?.legal_name || "",
     display_name: profile?.display_name || "",
     organisation_type: profile?.organisation_type || "",
@@ -170,6 +171,7 @@ export function toFpoForm(
     registration_type:
       profile?.registration_type
       || "",
+    registration_authority: profile?.registration_authority || "",
     date_of_registration:
       dateOnly(
         profile
@@ -201,6 +203,7 @@ export function toFpoForm(
       profile?.contact_email
       || user?.email
       || "",
+    preferred_language: profile?.preferred_language || "en",
     profile_image_url:
       profile?.profile_image_url
       || "",
@@ -225,6 +228,7 @@ export function toFpoForm(
       || "",
     pincode:
       profile?.pincode || "",
+    postal_code: profile?.postal_code || "",
     office_address:
       profile?.office_address
       || "",
@@ -336,9 +340,17 @@ export function buildFpoPayload(
   values,
   dirtyFields,
   setupRequired,
+  currentProfileVersion,
 ) {
   const keys = dirtyKeys(dirtyFields);
   const payload = {};
+
+  if (!setupRequired) {
+    const version = currentProfileVersion ?? values.profile_version;
+    if (version !== undefined && version !== null) {
+      payload.profile_version = Number(version);
+    }
+  }
 
   const shouldInclude = (field) =>
     setupRequired || keys.has(field);
@@ -360,6 +372,7 @@ export function buildFpoPayload(
     "fpo_name",
     "registration_number",
     "registration_type",
+    "registration_authority",
     "date_of_registration",
     "promoted_by",
     "promoting_institution_name",
@@ -368,9 +381,11 @@ export function buildFpoPayload(
     "contact_phone",
     "alternate_phone",
     "contact_email",
+    "preferred_language",
     "profile_image_url",
     "gram_panchayat",
     "pincode",
+    "postal_code",
     "office_address",
     "member_count",
     "active_member_count",

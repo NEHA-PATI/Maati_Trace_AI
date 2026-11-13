@@ -148,6 +148,13 @@ def test_fpo_pending_database_location_is_hidden():
     now = datetime.now(timezone.utc)
     row = {
         "fpo_id": uuid4(),
+        "organization_id": uuid4(),
+        "public_fpo_id": "MT-FPO-OD-000001",
+        "provisioning_status": "READY",
+        "lifecycle_status": "ACTIVE",
+        "organization_verification_status": "PROFILE_INCOMPLETE",
+        "class_code": "A",
+        "commercial_status": "NOT_STARTED",
         "fpo_name": "Green FPO",
         "registration_number": None,
         "registration_type": None,
@@ -190,6 +197,8 @@ def test_fpo_pending_database_location_is_hidden():
             envelope
         )
     )
+
+    assert validated.profile.public_fpo_id == "MT-FPO-OD-000001"
 
     assert (
         validated.profile

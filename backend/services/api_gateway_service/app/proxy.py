@@ -24,6 +24,7 @@ ROUTE_TARGETS = {
     # /api/fpo-portal/.... Both are owned by the same service.
     "fpo": settings.fpo_management_service_url,
     "admin-fpo": settings.fpo_management_service_url,
+    "admin-profiles": settings.profile_service_url,
     # Farmer/FPO consent endpoints are owned by FPO Management Service.
     # Keep the public prefix aligned with the domain API contract.
     "farmer": settings.fpo_management_service_url,
@@ -96,6 +97,12 @@ def _build_target_url(prefix: str, rest_path: str, query_string: bytes) -> str:
     if not base_url:
         raise GatewayProxyError(f"Unsupported gateway route: {prefix}")
 
+    # FPO profile editing/readiness APIs are owned by Profile Service even
+    # though their public URL is under /api/fpo for the FPO-facing contract.
+    # Keep the broader /api/fpo/* namespace routed to FPO Management.
+    if prefix == "fpo" and rest_path.startswith("me/profile"):
+        base_url = settings.profile_service_url
+
     clean_base = base_url.rstrip("/")
 
     # Public gateway path:
@@ -120,6 +127,8 @@ def _build_target_url(prefix: str, rest_path: str, query_string: bytes) -> str:
         # /api/fpo/me/... -> http://fpo-management/v1/fpo/me/...
         target_path = f"/v1/fpo/{rest_path}" if rest_path else "/v1/fpo"
     elif prefix == "admin-fpo":
+        target_path = f"/v1/admin/fpo/{rest_path}" if rest_path else "/v1/admin/fpo"
+    elif prefix == "admin-profiles":
         target_path = f"/v1/admin/fpo/{rest_path}" if rest_path else "/v1/admin/fpo"
     else:
         target_path = f"/v1/{prefix}"

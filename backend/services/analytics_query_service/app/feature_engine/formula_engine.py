@@ -181,19 +181,25 @@ def calculate_h3_predictions(
     results: list[dict[str, Any]] = []
     formulas = sorted(formulas, key=lambda f: (int(f.get("execution_order") or 100), f.get("prediction_key") or ""))
 
+    # Validate the contract once per batch. Doing this inside the feature-row
+    # loop repeated the same O(F) work for every H3/date row.
+    formula_versions = {
+        str(formula.get("crop_profile_version"))
+        for formula in formulas
+        if formula.get("crop_profile_version")
+    }
+    feature_versions = {
+        str(row.get("crop_profile_version"))
+        for row in feature_rows
+        if row.get("crop_profile_version")
+    }
+    if formula_versions and feature_versions and formula_versions != feature_versions:
+        raise FormulaEngineError(
+            "Formula/profile version mismatch: "
+            f"features={sorted(feature_versions)}, formulas={sorted(formula_versions)}"
+        )
+
     for feature_row in feature_rows:
-        feature_profile_version = feature_row.get("crop_profile_version")
-        for formula in formulas:
-            formula_profile_version = formula.get("crop_profile_version")
-            if (
-                feature_profile_version
-                and formula_profile_version
-                and str(feature_profile_version) != str(formula_profile_version)
-            ):
-                raise FormulaEngineError(
-                    "Formula/profile version mismatch: "
-                    f"feature={feature_profile_version}, formula={formula_profile_version}"
-                )
         features = feature_row.get("features") or {}
         quality = feature_row.get("quality") or {}
         calculated: dict[str, dict[str, Any]] = {}

@@ -108,6 +108,47 @@ ISO-8601 strings and UUIDs are strings in JSON.
 
 ## 2. Class A — foundation, access, relationships and FPO workspace
 
+## 1.2 FPO-02 organization profile contract
+
+The Profile Service owns the editable FPO profile. The stable public identity is read
+from `fpo_organizations`; clients must never send or update `public_fpo_id`, lifecycle,
+class, or verification status through profile mutations.
+
+Apply the FPO-02 forward migrations in order:
+
+```powershell
+psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f data_contracts/sql/fpo_sql/20261110_42_fpo_profile_identity_projection.sql
+psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f data_contracts/sql/fpo_sql/20261110_43_fpo_profile_v2_contract.sql
+```
+
+Owner profile routes are authenticated and scoped to the caller's FPO membership:
+
+| Method and path | Purpose |
+|---|---|
+| `GET /v1/fpo/me/profile/structured` | Read normalized commodities, services and service areas |
+| `GET /v1/fpo/me/profile/readiness` | Read machine-readable readiness blockers and warnings |
+| `GET/POST/DELETE /v1/fpo/me/profile/commodities[/{commodityCode}]` | Manage normalized commodities |
+| `GET/POST/DELETE /v1/fpo/me/profile/services[/{serviceCode}]` | Manage normalized services |
+| `GET/POST/DELETE /v1/fpo/me/profile/service-areas[/{serviceAreaId}]` | Manage canonical geography areas |
+
+Every existing profile `PATCH` must include the current `profile_version`. A stale
+version returns `409 FPO_PROFILE_VERSION_CONFLICT`; an omitted version returns
+`409 FPO_PROFILE_VERSION_REQUIRED`. Child records use retire semantics and remain
+recoverable in the database history.
+
+Admin profile review is exposed through the gateway at `/api/admin-profiles/fpo/...`
+and is read-only:
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/admin-profiles/fpo/organizations/{fpoId}/profile` | Live profile, readiness, history, and submitted snapshot comparison |
+| `GET /api/admin-profiles/fpo/organizations/{fpoId}/profile/history` | Profile change history |
+| `GET /api/admin-profiles/fpo/organizations/{fpoId}/profile/readiness` | Admin readiness view |
+
+Profile updates classify changes as `SAFE`, `REVIEW_WARNING`, or
+`REVERIFICATION_REQUIRED`. Legal changes set `verification_refresh_required`; they
+do not silently revoke an approved organization.
+
 Class A is the foundation layer. It is not exposed under a literal `/class-a` URL.
 The implemented routes are the portal, verification, relationship, entitlement,
 directory, dashboard, alert, and admin feature-control routes.

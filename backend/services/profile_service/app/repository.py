@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+
+
+CHECK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+
+def _public_fpo_id(state_code: int, sequence_number: int) -> str:
+    event_time = datetime.now(timezone.utc)
+    check = CHECK_ALPHABET[sequence_number % len(CHECK_ALPHABET)]
+    return f"MTFPO-S{state_code:02d}-{event_time.year % 100:02d}-{sequence_number:06d}-{check}"
 
 
 FARMER_SELECT = """
@@ -51,6 +61,21 @@ FARMER_SELECT = """
 
 FPO_SELECT = """
     f.fpo_id,
+    org.fpo_id AS organization_id,
+    org.public_fpo_id,
+    org.provisioning_status,
+    org.lifecycle_status,
+    org.verification_status AS organization_verification_status,
+    (
+        SELECT assignment.class_code
+        FROM public.fpo_class_assignments assignment
+        WHERE assignment.fpo_id = org.fpo_id
+          AND assignment.is_active = TRUE
+          AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
+        ORDER BY assignment.assigned_at DESC
+        LIMIT 1
+    ) AS class_code,
+    org.commercial_status,
     f.legal_name,
     f.display_name,
     f.organisation_type,
@@ -71,6 +96,7 @@ FPO_SELECT = """
     f.fpo_name,
     f.registration_number,
     f.registration_type,
+    f.registration_authority,
     f.date_of_registration,
     f.promoted_by,
     f.promoting_institution_name,
@@ -79,6 +105,7 @@ FPO_SELECT = """
     f.contact_phone,
     f.alternate_phone,
     f.contact_email,
+    f.preferred_language,
     f.state_name,
     f.district_name,
     f.district_code,
@@ -87,10 +114,17 @@ FPO_SELECT = """
     f.village_name,
     f.gram_panchayat,
     f.pincode,
+    f.postal_code,
+    f.state_code,
+    f.village_code,
+    f.gram_panchayat_code,
+    f.gram_panchayat_name,
     f.office_address,
     COALESCE((SELECT array_agg(c.commodity_code ORDER BY c.priority, c.commodity_code) FROM public.fpo_profile_commodities c WHERE c.fpo_id = f.fpo_id), f.main_commodities) AS main_commodities,
     f.member_count,
     f.active_member_count,
+    f.female_member_count,
+    f.year_established,
     COALESCE((SELECT array_agg(s.service_code ORDER BY s.service_code) FROM public.fpo_profile_services s WHERE s.fpo_id = f.fpo_id AND s.is_active = TRUE), f.services_provided) AS services_provided,
     f.profile_completion_percentage,
     f.verification_readiness_percentage,
@@ -100,7 +134,9 @@ FPO_SELECT = """
     f.created_at,
     f.updated_at,
     f.profile_version,
-    f.onboarding_completed_at
+    f.onboarding_completed_at,
+    f.profile_status,
+    f.verification_refresh_required
 """
 
 
@@ -426,6 +462,8 @@ def get_fpo_by_id(
             f"""
             SELECT {FPO_SELECT}
             FROM fpos f
+            LEFT JOIN public.fpo_organizations org
+              ON org.profile_fpo_id = f.fpo_id
             WHERE f.fpo_id = :fpo_id
               AND f.is_active = TRUE
             LIMIT 1;
@@ -448,6 +486,8 @@ def list_fpos(
             f"""
             SELECT {FPO_SELECT}
             FROM fpos f
+            LEFT JOIN public.fpo_organizations org
+              ON org.profile_fpo_id = f.fpo_id
             WHERE f.is_active = TRUE
             ORDER BY f.created_at DESC, f.fpo_id
             LIMIT :limit
@@ -458,6 +498,126 @@ def list_fpos(
     ).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def list_fpo_commodities(conn: Connection, fpo_id: UUID | str) -> list[dict[str, Any]]:
+    rows = conn.execute(text("""
+        SELECT commodity_code AS profile_commodity_id, fpo_id AS profile_id,
+               commodity_code, variety_code, is_primary, declared_farmer_count,
+               declared_area_acres, season_codes, status, created_at, updated_at
+        FROM public.fpo_profile_commodities
+        WHERE fpo_id = :fpo_id AND status = 'ACTIVE'
+        ORDER BY is_primary DESC, commodity_code
+    """), {"fpo_id": str(fpo_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def upsert_fpo_commodity(conn: Connection, fpo_id: UUID | str, values: dict[str, Any]) -> dict[str, Any]:
+    row = conn.execute(text("""
+        INSERT INTO public.fpo_profile_commodities
+            (fpo_id, commodity_code, variety_code, is_primary, declared_farmer_count,
+             declared_area_acres, season_codes, status, created_at, updated_at)
+        VALUES (:fpo_id, :commodity_code, :variety_code, :is_primary, :declared_farmer_count,
+                :declared_area_acres, :season_codes, 'ACTIVE', now(), now())
+        ON CONFLICT (fpo_id, commodity_code) DO UPDATE SET
+            variety_code = EXCLUDED.variety_code,
+            is_primary = EXCLUDED.is_primary,
+            declared_farmer_count = EXCLUDED.declared_farmer_count,
+            declared_area_acres = EXCLUDED.declared_area_acres,
+            season_codes = EXCLUDED.season_codes,
+            status = 'ACTIVE', updated_at = now()
+        RETURNING commodity_code AS profile_commodity_id, fpo_id AS profile_id,
+                  commodity_code, variety_code, is_primary, declared_farmer_count,
+                  declared_area_acres, season_codes, status, created_at, updated_at
+    """), {"fpo_id": str(fpo_id), **values}).mappings().one()
+    return dict(row)
+
+
+def retire_fpo_commodity(conn: Connection, fpo_id: UUID | str, commodity_code: str) -> None:
+    conn.execute(text("""
+        UPDATE public.fpo_profile_commodities
+        SET status = 'RETIRED', is_primary = false, updated_at = now()
+        WHERE fpo_id = :fpo_id AND commodity_code = :commodity_code
+    """), {"fpo_id": str(fpo_id), "commodity_code": commodity_code})
+
+
+def list_fpo_services(conn: Connection, fpo_id: UUID | str) -> list[dict[str, Any]]:
+    rows = conn.execute(text("""
+        SELECT service_code AS profile_service_id, fpo_id AS profile_id,
+               service_code, details->>'display_name' AS display_name,
+               details->>'description' AS description,
+               NULLIF(details->>'active_from', '')::date AS active_from,
+               status, created_at, updated_at
+        FROM public.fpo_profile_services
+        WHERE fpo_id = :fpo_id AND status = 'ACTIVE'
+        ORDER BY service_code
+    """), {"fpo_id": str(fpo_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def upsert_fpo_service(conn: Connection, fpo_id: UUID | str, values: dict[str, Any]) -> dict[str, Any]:
+    details = {key: values.get(key) for key in ("display_name", "description", "active_from")}
+    row = conn.execute(text("""
+        INSERT INTO public.fpo_profile_services
+            (fpo_id, service_code, details, status, is_active, created_at, updated_at)
+        VALUES (:fpo_id, :service_code, CAST(:details AS jsonb), 'ACTIVE', true, now(), now())
+        ON CONFLICT (fpo_id, service_code) DO UPDATE SET
+            details = EXCLUDED.details, status = 'ACTIVE', is_active = true, updated_at = now()
+        RETURNING service_code AS profile_service_id, fpo_id AS profile_id,
+                  service_code, details->>'display_name' AS display_name,
+                  details->>'description' AS description,
+                  NULLIF(details->>'active_from', '')::date AS active_from,
+                  status, created_at, updated_at
+    """), {"fpo_id": str(fpo_id), "details": json.dumps(details), **values}).mappings().one()
+    return dict(row)
+
+
+def retire_fpo_service(conn: Connection, fpo_id: UUID | str, service_code: str) -> None:
+    conn.execute(text("""
+        UPDATE public.fpo_profile_services
+        SET status = 'RETIRED', is_active = false, updated_at = now()
+        WHERE fpo_id = :fpo_id AND service_code = :service_code
+    """), {"fpo_id": str(fpo_id), "service_code": service_code})
+
+
+def list_fpo_service_areas(conn: Connection, fpo_id: UUID | str) -> list[dict[str, Any]]:
+    rows = conn.execute(text("""
+        SELECT service_area_id, area.fpo_id AS profile_id, area.geography_level,
+               area.state_code, states.state_name, area.district_code,
+               districts.district_name, area.block_code, blocks.block_name,
+               area.village_code, area.is_primary, area.status,
+               area.created_at, area.updated_at
+        FROM public.fpo_profile_service_areas
+        AS area
+        LEFT JOIN public.states ON states.state_code = area.state_code
+        LEFT JOIN public.districts ON districts.district_code = area.district_code
+        LEFT JOIN public.blocks ON blocks.block_code = area.block_code
+        WHERE area.fpo_id = :fpo_id AND area.status = 'ACTIVE'
+        ORDER BY area.is_primary DESC, area.geography_level, area.service_area_id
+    """), {"fpo_id": str(fpo_id)}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def create_fpo_service_area(conn: Connection, fpo_id: UUID | str, values: dict[str, Any]) -> dict[str, Any]:
+    row = conn.execute(text("""
+        INSERT INTO public.fpo_profile_service_areas
+            (fpo_id, geography_level, state_code, district_code, block_code,
+             village_code, is_primary, status, is_active, created_at, updated_at)
+        VALUES (:fpo_id, :geography_level, :state_code, :district_code, :block_code,
+                :village_code, :is_primary, 'ACTIVE', true, now(), now())
+        RETURNING service_area_id, fpo_id AS profile_id, geography_level, state_code,
+                  district_code, block_code, village_code, is_primary, status,
+                  created_at, updated_at
+    """), {"fpo_id": str(fpo_id), **values}).mappings().one()
+    return dict(row)
+
+
+def retire_fpo_service_area(conn: Connection, fpo_id: UUID | str, service_area_id: UUID) -> None:
+    conn.execute(text("""
+        UPDATE public.fpo_profile_service_areas
+        SET status = 'RETIRED', is_active = false, updated_at = now()
+        WHERE fpo_id = :fpo_id AND service_area_id = :service_area_id
+    """), {"fpo_id": str(fpo_id), "service_area_id": str(service_area_id)})
 
 
 def create_fpo_with_membership(
@@ -473,6 +633,13 @@ def create_fpo_with_membership(
         text(
             f"""
             INSERT INTO fpos (
+                legal_name,
+                display_name,
+                organisation_type,
+                registration_authority,
+                website_url,
+                organisation_description,
+                operating_since_year,
                 fpo_name,
                 registration_number,
                 registration_type,
@@ -485,6 +652,7 @@ def create_fpo_with_membership(
                 contact_phone,
                 alternate_phone,
                 contact_email,
+                preferred_language,
 
                 state_name,
                 district_name,
@@ -494,11 +662,18 @@ def create_fpo_with_membership(
                 village_name,
                 gram_panchayat,
                 pincode,
+                postal_code,
+                state_code,
                 office_address,
+                village_code,
+                gram_panchayat_code,
+                gram_panchayat_name,
 
                 main_commodities,
                 member_count,
                 active_member_count,
+                female_member_count,
+                year_established,
                 services_provided,
 
                 {verification_column}
@@ -508,6 +683,13 @@ def create_fpo_with_membership(
                 is_active
             )
             VALUES (
+                :legal_name,
+                :display_name,
+                :organisation_type,
+                :registration_authority,
+                :website_url,
+                :organisation_description,
+                :operating_since_year,
                 :fpo_name,
                 :registration_number,
                 :registration_type,
@@ -520,6 +702,7 @@ def create_fpo_with_membership(
                 :contact_phone,
                 :alternate_phone,
                 :contact_email,
+                :preferred_language,
 
                 :state_name,
                 :district_name,
@@ -529,11 +712,18 @@ def create_fpo_with_membership(
                 :village_name,
                 :gram_panchayat,
                 :pincode,
+                :postal_code,
+                :state_code,
                 :office_address,
+                :village_code,
+                :gram_panchayat_code,
+                :gram_panchayat_name,
 
                 :main_commodities,
                 :member_count,
                 :active_member_count,
+                :female_member_count,
+                :year_established,
                 :services_provided,
 
                 {verification_value}
@@ -555,9 +745,9 @@ def create_fpo_with_membership(
     fpo_id = row["fpo_id"]
 
     conn.execute(text("DELETE FROM public.fpo_profile_commodities WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
-    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(:commodities::text[]) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
+    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(CAST(:commodities AS text[])) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
     conn.execute(text("DELETE FROM public.fpo_profile_services WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
-    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(:services::text[]) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
+    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(CAST(:services AS text[])) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
 
     conn.execute(
         text(
@@ -589,9 +779,9 @@ def create_fpo_with_membership(
     )
 
     conn.execute(text("DELETE FROM public.fpo_profile_commodities WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
-    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(:commodities::text[]) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
+    conn.execute(text("INSERT INTO public.fpo_profile_commodities (fpo_id, commodity_code, priority) SELECT :fpo_id, value, CASE WHEN ordinality = 1 THEN 'PRIMARY' ELSE 'SECONDARY' END FROM unnest(CAST(:commodities AS text[])) WITH ORDINALITY AS values(value, ordinality) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "commodities": values.get("main_commodities") or []})
     conn.execute(text("DELETE FROM public.fpo_profile_services WHERE fpo_id = :fpo_id"), {"fpo_id": str(fpo_id)})
-    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(:services::text[]) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
+    conn.execute(text("INSERT INTO public.fpo_profile_services (fpo_id, service_code) SELECT :fpo_id, value FROM unnest(CAST(:services AS text[])) AS values(value) ON CONFLICT DO NOTHING"), {"fpo_id": str(fpo_id), "services": values.get("services_provided") or []})
 
     created = get_fpo_by_id(conn, fpo_id)
 
@@ -604,14 +794,72 @@ def create_fpo_with_membership(
     return created
 
 
+def ensure_fpo_organization_for_profile(
+    conn: Connection,
+    *,
+    user_id: UUID | str,
+    profile_fpo_id: UUID | str,
+    state_name: str | None,
+) -> dict[str, Any]:
+    """Link a direct FPO profile setup to its organization identity.
+
+    Auth-event provisioning normally creates this row first. Direct signup
+    setup must also be safe when that event is delayed or was not delivered.
+    """
+    current = conn.execute(text("""
+        SELECT fpo_id, profile_fpo_id, public_fpo_id, provisioning_status,
+               provisioning_step
+        FROM public.fpo_organizations
+        WHERE auth_user_id = :user_id
+        FOR UPDATE
+    """), {"user_id": str(user_id)}).mappings().first()
+    if current:
+        if current["profile_fpo_id"] and str(current["profile_fpo_id"]) != str(profile_fpo_id):
+            raise ValueError("FPO_PROFILE_LINK_CONFLICT")
+        row = conn.execute(text("""
+            UPDATE public.fpo_organizations
+            SET profile_fpo_id = :profile_fpo_id,
+                provisioning_status = 'READY', provisioning_step = 'COMPLETED',
+                provisioning_error = NULL, provisioning_error_code = NULL,
+                updated_at = now(), version = version + 1
+            WHERE fpo_id = :organization_id
+            RETURNING fpo_id, public_fpo_id, provisioning_status, provisioning_step,
+                      profile_fpo_id
+        """), {"organization_id": str(current["fpo_id"]), "profile_fpo_id": str(profile_fpo_id)}).mappings().one()
+        return dict(row)
+
+    state_code = conn.execute(text("""
+        SELECT state_code FROM public.states
+        WHERE lower(state_name) = lower(:state_name)
+        ORDER BY state_code LIMIT 1
+    """), {"state_name": state_name or "Odisha"}).scalar() or 21
+    sequence = int(conn.execute(text("SELECT nextval('public.fpo_public_number_seq')")).scalar_one())
+    row = conn.execute(text("""
+        INSERT INTO public.fpo_organizations
+            (auth_user_id, public_fpo_id, lifecycle_status, provisioning_status,
+             provisioning_step, verification_status, profile_fpo_id)
+        VALUES (:user_id, :public_fpo_id, 'ONBOARDING', 'READY', 'COMPLETED',
+                'PROFILE_INCOMPLETE', :profile_fpo_id)
+        RETURNING fpo_id, public_fpo_id, provisioning_status, provisioning_step,
+                  profile_fpo_id
+    """), {
+        "user_id": str(user_id),
+        "public_fpo_id": _public_fpo_id(int(state_code), sequence),
+        "profile_fpo_id": str(profile_fpo_id),
+    }).mappings().one()
+    return dict(row)
+
+
 def update_fpo_profile(
     conn: Connection,
     *,
     fpo_id: UUID | str,
     values: dict[str, Any],
     profile_complete: bool,
+    expected_profile_version: int | None = None,
+    change_classification: str = "SAFE",
 ) -> dict[str, Any] | None:
-    conn.execute(
+    result = conn.execute(
         text(
             """
             UPDATE fpos
@@ -632,6 +880,7 @@ def update_fpo_profile(
                 fpo_name = :fpo_name,
                 registration_number = :registration_number,
                 registration_type = :registration_type,
+                registration_authority = :registration_authority,
                 date_of_registration =
                     :date_of_registration,
                 promoted_by = :promoted_by,
@@ -645,6 +894,7 @@ def update_fpo_profile(
                 contact_phone = :contact_phone,
                 alternate_phone = :alternate_phone,
                 contact_email = :contact_email,
+                preferred_language = :preferred_language,
 
                 state_name = :state_name,
                 district_name = :district_name,
@@ -654,12 +904,19 @@ def update_fpo_profile(
                 village_name = :village_name,
                 gram_panchayat = :gram_panchayat,
                 pincode = :pincode,
+                postal_code = :postal_code,
+                state_code = :state_code,
+                village_code = :village_code,
+                gram_panchayat_code = :gram_panchayat_code,
+                gram_panchayat_name = :gram_panchayat_name,
                 office_address = :office_address,
 
                 main_commodities = :main_commodities,
                 member_count = :member_count,
                 active_member_count =
                     :active_member_count,
+                female_member_count = :female_member_count,
+                year_established = :year_established,
                 services_provided =
                     :services_provided,
 
@@ -676,18 +933,28 @@ def update_fpo_profile(
                 END,
 
                 profile_version = profile_version + 1,
+                verification_refresh_required = CASE
+                    WHEN :change_classification = 'REVERIFICATION_REQUIRED' THEN TRUE
+                    ELSE verification_refresh_required
+                END,
                 updated_at = now()
 
             WHERE fpo_id = :fpo_id
-              AND is_active = TRUE;
+              AND is_active = TRUE
+              AND (:expected_profile_version IS NULL OR profile_version = :expected_profile_version);
             """
         ),
         {
             **values,
             "fpo_id": str(fpo_id),
             "profile_complete": profile_complete,
+            "expected_profile_version": expected_profile_version,
+            "change_classification": change_classification,
         },
     )
+
+    if result.rowcount == 0:
+        return None
 
     return get_fpo_by_id(conn, fpo_id)
 
@@ -778,3 +1045,73 @@ def record_profile_audit_event(
             "ip_address": ip_address,
         },
     )
+
+
+def record_profile_change(
+    conn: Connection,
+    *,
+    profile_id: UUID | str,
+    organization_id: UUID | str | None,
+    actor_user_id: UUID | str | None,
+    previous_version: int,
+    new_version: int,
+    changed_fields: list[str],
+    classification: str,
+    correlation_id: str,
+) -> None:
+    fields_json = json.dumps(sorted(set(changed_fields)))
+    conn.execute(text("""
+        INSERT INTO public.fpo_profile_change_history
+            (profile_id, actor_user_id, previous_profile_version, new_profile_version,
+             changed_fields, change_classification, correlation_id)
+        VALUES (:profile_id, :actor_user_id, :previous_version, :new_version,
+                CAST(:changed_fields AS jsonb), :classification, :correlation_id)
+    """), {
+        "profile_id": str(profile_id),
+        "actor_user_id": str(actor_user_id) if actor_user_id else None,
+        "previous_version": previous_version,
+        "new_version": new_version,
+        "changed_fields": fields_json,
+        "classification": classification,
+        "correlation_id": correlation_id,
+    })
+    conn.execute(text("""
+        INSERT INTO public.fpo_profile_events
+            (event_type, profile_id, organization_id, actor_user_id, correlation_id,
+             profile_version, changed_fields, payload)
+        VALUES (:event_type, :profile_id, :organization_id, :actor_user_id, :correlation_id,
+                :profile_version, CAST(:changed_fields AS jsonb), CAST(:payload AS jsonb))
+    """), {
+        "event_type": "fpo.profile.updated",
+        "profile_id": str(profile_id),
+        "organization_id": str(organization_id) if organization_id else None,
+        "actor_user_id": str(actor_user_id) if actor_user_id else None,
+        "correlation_id": correlation_id,
+        "profile_version": new_version,
+        "changed_fields": fields_json,
+        "payload": json.dumps({
+            "profile_id": str(profile_id),
+            "organization_id": str(organization_id) if organization_id else None,
+            "profile_version": new_version,
+            "changed_fields": sorted(set(changed_fields)),
+            "change_classification": classification,
+        }),
+    })
+
+
+def list_profile_history(conn: Connection, profile_id: UUID | str, limit: int = 100) -> list[dict[str, Any]]:
+    rows = conn.execute(text("""
+        SELECT history_id, profile_id, actor_user_id, previous_profile_version,
+               new_profile_version, changed_fields, change_classification,
+               correlation_id, request_channel, created_at
+        FROM public.fpo_profile_change_history
+        WHERE profile_id = :profile_id
+        ORDER BY created_at DESC
+        LIMIT :limit
+    """), {"profile_id": str(profile_id), "limit": limit}).mappings().all()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["changed_fields"] = item.get("changed_fields") or []
+        result.append(item)
+    return result

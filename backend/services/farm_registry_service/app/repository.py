@@ -32,6 +32,7 @@ FARM_SELECT = """
     h3_cell_count,
     area_acres,
     bbox,
+    boundary_hash,
     is_active,
     created_at,
     updated_at
@@ -96,7 +97,8 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
             h3_cells,
             h3_cell_count,
             area_acres,
-            bbox
+            bbox,
+            boundary_hash
         )
         VALUES (
             :farmer_id,
@@ -119,7 +121,8 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
             CAST(:h3_cells AS bigint[]),
             :h3_cell_count,
             :area_acres,
-            CAST(:bbox AS jsonb)
+            CAST(:bbox AS jsonb),
+            :boundary_hash
         )
         RETURNING {FARM_SELECT};
         """
@@ -146,6 +149,7 @@ def create_farm(data: dict[str, Any]) -> dict[str, Any]:
         "h3_cell_count": data["h3_cell_count"],
         "area_acres": data.get("area_acres"),
         "bbox": json.dumps(data.get("bbox")),
+        "boundary_hash": data.get("boundary_hash"),
     }
     try:
         with engine.begin() as conn:
@@ -297,6 +301,7 @@ def update_farm_derived_fields(
     h3_cell_count: int | None = None,
     area_acres: float | None = None,
     bbox: list[float] | None = None,
+    boundary_hash: str | None = None,
 ) -> dict[str, Any] | None:
     query = text(
         f"""
@@ -309,6 +314,7 @@ def update_farm_derived_fields(
             h3_cell_count = COALESCE(:h3_cell_count, h3_cell_count),
             area_acres = COALESCE(:area_acres, area_acres),
             bbox = COALESCE(CAST(:bbox AS jsonb), bbox),
+            boundary_hash = COALESCE(:boundary_hash, boundary_hash),
             updated_at = now()
         WHERE farm_id = :farm_id
           AND is_active = TRUE
@@ -324,6 +330,7 @@ def update_farm_derived_fields(
         "h3_cell_count": h3_cell_count,
         "area_acres": area_acres,
         "bbox": json.dumps(bbox) if bbox is not None else None,
+        "boundary_hash": boundary_hash,
     }
     try:
         with engine.begin() as conn:

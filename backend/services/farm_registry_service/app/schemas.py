@@ -86,6 +86,7 @@ class FarmResponse(StrictModel):
     h3_cell_count: int
     area_acres: Decimal | None = None
     bbox: list[float] | None = None
+    boundary_hash: str | None = None
     is_active: bool
     created_at: datetime | None = None
     updated_at: datetime | None = None

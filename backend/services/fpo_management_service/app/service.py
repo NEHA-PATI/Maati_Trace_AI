@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import hashlib
 import os
+import re
 import httpx
 from uuid import UUID
+from sqlalchemy import text
 
 from shared.db.postgres import engine
 from services.fpo_management_service.app.config import FpoManagementConfig
@@ -26,6 +28,7 @@ from services.fpo_management_service.app.repository import (
     complete_fpo_provisioning,
     get_verification_for_user,
     create_document_upload_intent,
+    create_document_replacement_intent,
     get_document_upload_target,
     finalize_document_upload,
     list_verification_documents,
@@ -69,6 +72,11 @@ from services.fpo_management_service.app.repository import (
     authorize_fpo_farm_intelligence,
     create_support_ticket,
     list_support_tickets,
+    claim_verification_case,
+    assign_verification_case,
+    release_verification_case,
+    escalate_verification_case,
+    decide_verification_case,
 )
 from services.fpo_management_service.app.class_b import (
     import_template, create_import_intent, upload_import_content, validate_import,
@@ -226,10 +234,18 @@ def process_document_scan_batch(batch_size: int) -> int:
                     mark_document_scan_result(conn, document_id=document["document_id"], scan_status="QUARANTINED", error="Stored document checksum mismatch", verified_checksum=verified_checksum)
                 processed += 1
                 continue
-            if os.getenv("FPO_DOCUMENT_SCAN_MODE", "disabled").strip().lower() == "disabled":
-                status, error = "NOT_REQUIRED", None
-            else:
-                status, error = scan_with_clamav(data)
+            mime = str(document["mime_type"]).lower()
+            magic_matches = {
+                "application/pdf": data.startswith(b"%PDF-"),
+                "image/jpeg": data.startswith(b"\xff\xd8\xff"),
+                "image/png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+            }
+            if not magic_matches.get(mime, False):
+                with engine.begin() as conn:
+                    mark_document_scan_result(conn, document_id=document["document_id"], scan_status="QUARANTINED", error="Declared MIME type does not match stored file signature", verified_checksum=verified_checksum)
+                processed += 1
+                continue
+            status, error = scan_with_clamav(data)
             with engine.begin() as conn:
                 mark_document_scan_result(conn, document_id=document["document_id"], scan_status=status, error=error, verified_checksum=verified_checksum)
             processed += 1
@@ -237,6 +253,36 @@ def process_document_scan_batch(batch_size: int) -> int:
             logger.exception("fpo_document_scan_failed", extra={"document_id": str(document["document_id"])})
             with engine.begin() as conn:
                 mark_document_scan_result(conn, document_id=document["document_id"], scan_status="FAILED", error=str(exc))
+    return processed
+
+
+def process_storage_deletion_batch(batch_size: int) -> int:
+    with engine.begin() as conn:
+        rows = conn.execute(text("""
+            SELECT deletion_id, document_id, object_key
+            FROM public.fpo_verification_storage_deletions
+            WHERE status IN ('PENDING','RETRY') AND next_attempt_at <= now()
+            ORDER BY created_at
+            FOR UPDATE SKIP LOCKED LIMIT :limit
+        """), {"limit": max(1, min(batch_size, 100))}).mappings().all()
+        for row in rows:
+            conn.execute(text("UPDATE public.fpo_verification_storage_deletions SET status='PROCESSING', attempts=attempts+1, updated_at=now() WHERE deletion_id=:id"), {"id": str(row["deletion_id"])})
+    processed = 0
+    for row in rows:
+        try:
+            delete_bytes(object_key=row["object_key"])
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE public.fpo_verification_storage_deletions SET status='DELETED', deleted_at=now(), updated_at=now() WHERE deletion_id=:id"), {"id": str(row["deletion_id"])})
+            processed += 1
+        except DocumentStorageError as exc:
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE public.fpo_verification_storage_deletions
+                    SET status = CASE WHEN attempts >= 5 THEN 'DEAD' ELSE 'RETRY' END,
+                        next_attempt_at = now() + make_interval(secs => CASE WHEN attempts = 1 THEN 30 WHEN attempts = 2 THEN 120 WHEN attempts = 3 THEN 600 ELSE 1800 END),
+                        last_error = :error, updated_at = now()
+                    WHERE deletion_id = :id
+                """), {"id": str(row["deletion_id"]), "error": str(exc)[:1000]})
     return processed
 
 
@@ -330,6 +376,12 @@ def document_upload_intent(user_id, document_type, filename, mime_type, size_byt
     return {**result, **create_upload_url(object_key=result["object_key"], mime_type=mime_type, document_id=str(result["document_id"]))}
 
 
+def document_replacement_intent(user_id, document_id, filename, mime_type, size_bytes, checksum):
+    with engine.begin() as conn:
+        result = create_document_replacement_intent(conn, user_id=user_id, document_id=document_id, filename=filename, mime_type=mime_type, size_bytes=size_bytes, checksum=checksum)
+    return {**result, **create_upload_url(object_key=result["object_key"], mime_type=mime_type, document_id=str(result["document_id"]))}
+
+
 def upload_document_content(user_id, document_id, content_type: str, data: bytes):
     with engine.connect() as conn:
         target = get_document_upload_target(conn, user_id=user_id, document_id=document_id)
@@ -337,6 +389,14 @@ def upload_document_content(user_id, document_id, content_type: str, data: bytes
         raise ValueError("Uploaded content type does not match the upload intent")
     if len(data) != int(target["size_bytes"]):
         raise ValueError("Uploaded content size does not match the upload intent")
+    declared = target["mime_type"].lower()
+    signatures = {
+        "application/pdf": data.startswith(b"%PDF-"),
+        "image/jpeg": data.startswith(b"\xff\xd8\xff"),
+        "image/png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+    }
+    if not signatures.get(declared, False):
+        raise ValueError("Uploaded bytes do not match the declared document type")
     store_bytes(object_key=target["object_key"], data=data)
     return {"document_id": str(document_id), "upload_status": "UPLOADED", "next_step": "FINALIZE"}
 
@@ -349,21 +409,44 @@ def document_upload_finalize(user_id, document_id, checksum):
 def document_delete(user_id, document_id):
     with engine.begin() as conn:
         row = delete_verification_document(conn, user_id=user_id, document_id=document_id)
-    try:
-        delete_bytes(object_key=row["object_key"])
-    except DocumentStorageError:
-        logger.warning("fpo_document_storage_cleanup_failed", extra={"document_id": str(document_id)})
-    return {"document_id": row["document_id"], "deleted": True, "original_filename": row["original_filename"]}
+    return {"document_id": row["document_id"], "deleted": True, "cleanup": "QUEUED", "original_filename": row["original_filename"]}
 
 
-def admin_validate_document(admin_user_id, document_id, validation_status, reason):
+def admin_validate_document(admin_user_id, document_id, validation_status, reason, case_id=None, expected_case_version=None):
     with engine.begin() as conn:
-        return validate_verification_document(conn, admin_user_id=admin_user_id, document_id=document_id, validation_status=validation_status, reason=reason)
+        return validate_verification_document(conn, admin_user_id=admin_user_id, document_id=document_id, validation_status=validation_status, reason=reason, case_id=case_id, expected_case_version=expected_case_version)
 
 
-def submit_verification_request(user_id):
+def submit_verification_request(user_id, expected_profile_version=None, confirmation=True):
+    if not confirmation:
+        raise ValueError("FPO_VERIFICATION_CONFIRMATION_REQUIRED")
     with engine.begin() as conn:
-        return submit_verification(conn, user_id)
+        return submit_verification(conn, user_id, expected_profile_version=expected_profile_version)
+
+
+def admin_claim_verification_case(admin_user_id, case_id):
+    with engine.begin() as conn:
+        return claim_verification_case(conn, case_id=case_id, reviewer_user_id=admin_user_id)
+
+
+def admin_assign_verification_case(admin_user_id, case_id, reviewer_user_id, reason):
+    with engine.begin() as conn:
+        return assign_verification_case(conn, case_id=case_id, reviewer_user_id=reviewer_user_id, assigned_by=admin_user_id, reason=reason)
+
+
+def admin_release_verification_case(admin_user_id, case_id, reason):
+    with engine.begin() as conn:
+        return release_verification_case(conn, case_id=case_id, reviewer_user_id=admin_user_id, reason=reason)
+
+
+def admin_escalate_verification_case(admin_user_id, case_id, reason):
+    with engine.begin() as conn:
+        return escalate_verification_case(conn, case_id=case_id, actor_user_id=admin_user_id, reason=reason)
+
+
+def admin_decide_verification_case(admin_user_id, case_id, payload):
+    with engine.begin() as conn:
+        return decide_verification_case(conn, case_id=case_id, reviewer_user_id=admin_user_id, **payload)
 
 
 def review_verification_request(fpo_id, reviewer_user_id, status, note):

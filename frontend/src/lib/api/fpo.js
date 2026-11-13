@@ -35,10 +35,10 @@ export function getFpoVerificationStatus() {
   return fpoManagementClient.request("/v1/fpo-portal/verification");
 }
 
-export function submitFpoVerification() {
+export function submitFpoVerification(payload = {}) {
   return fpoManagementClient.request("/v1/fpo-portal/verification/submit", {
     method: "POST",
-    body: {},
+    body: payload,
   });
 }
 
@@ -69,6 +69,22 @@ export function reviewFpoVerification(fpoId, status, note = "") {
   );
 }
 
+export function claimFpoVerificationCase(caseId) {
+  return fpoManagementClient.request(`/v1/admin/fpo/verification-cases/${caseId}/claim`, { method: "POST" });
+}
+export function assignFpoVerificationCase(caseId, reviewerUserId, reason) {
+  return fpoManagementClient.request(`/v1/admin/fpo/verification-cases/${caseId}/assign`, { method: "POST", body: { reviewer_user_id: reviewerUserId, reason } });
+}
+export function releaseFpoVerificationCase(caseId, reason) {
+  return fpoManagementClient.request(`/v1/admin/fpo/verification-cases/${caseId}/release`, { method: "POST", body: { reason } });
+}
+export function escalateFpoVerificationCase(caseId, reason) {
+  return fpoManagementClient.request(`/v1/admin/fpo/verification-cases/${caseId}/escalate`, { method: "POST", body: { reason } });
+}
+export function decideFpoVerificationCase(caseId, payload) {
+  return fpoManagementClient.request(`/v1/admin/fpo/verification-cases/${caseId}/decision`, { method: "POST", body: payload });
+}
+
 export function getFpoAdminDocuments(fpoId) {
   return fpoManagementClient.request(
     `/v1/fpo-portal/admin/organizations/${fpoId}/verification/documents`,
@@ -95,10 +111,10 @@ export function updateFpoAdminChecklist(resultId, result, note = "") {
   );
 }
 
-export function validateFpoDocument(documentId, validationStatus, reason = "") {
+export function validateFpoDocument(documentId, validationStatus, reason = "", caseId = null, expectedCaseVersion = null) {
   return fpoManagementClient.request(
     `/v1/fpo-portal/admin/verification/documents/${documentId}`,
-    { method: "PATCH", body: { validation_status: validationStatus, reason } },
+    { method: "PATCH", body: { validation_status: validationStatus, reason, ...(caseId ? { case_id: caseId } : {}), ...(expectedCaseVersion ? { expected_case_version: expectedCaseVersion } : {}) } },
   );
 }
 

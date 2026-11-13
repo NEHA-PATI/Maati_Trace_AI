@@ -234,6 +234,18 @@ async def admin_fpo_proxy(rest_path: str, request: Request):
 
 
 @app.api_route(
+    "/api/admin-profiles/{rest_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    dependencies=[Depends(require_roles("admin"))],
+)
+async def admin_profiles_proxy(rest_path: str, request: Request):
+    try:
+        return await proxy_request(prefix="admin-profiles", rest_path=rest_path, request=request)
+    except GatewayProxyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"code": "API_GATEWAY_PROXY_ERROR", "message": str(exc)}) from exc
+
+
+@app.api_route(
     "/api/{prefix}/{rest_path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )

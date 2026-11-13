@@ -177,12 +177,13 @@ export default function LandIntelligence() {
     const completedResultDate = statusSnapshot?.latest_completed_run?.result_date
       ? String(statusSnapshot.latest_completed_run.result_date).slice(0, 10)
       : "";
+    const needsRawGridValues = !CALCULATED_METRICS.some((metric) => metric.key === selectedParameter);
     const [farmPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
       getFarmGridCells(farmId).catch(() => []),
-      getLatestGridValues(farmId).catch(() => []),
+      needsRawGridValues ? getLatestGridValues(farmId).catch(() => []) : Promise.resolve([]),
       getFarmH3Cells(farmId).catch(() => []),
-      getLatestGridCalculations(farmId, completedResultDate).catch(() => []),
+      getLatestGridCalculations(farmId, completedResultDate, selectedParameter).catch(() => []),
       getLatestFarmCalculations(farmId, "farm", completedResultDate).catch(() => []),
     ]);
 
@@ -221,7 +222,7 @@ export default function LandIntelligence() {
     return () => {
       cancelled = true;
     };
-  }, [farmId]);
+  }, [farmId, selectedParameter]);
 
   useEffect(() => {
     if (user?.role !== "farmer") return;

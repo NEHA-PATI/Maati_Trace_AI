@@ -56,6 +56,25 @@ from services.profile_service.app.schemas import (
     HealthResponse,
     ProfileEnvelope,
     ProfileExportResponse,
+    FpoCommodityRequest,
+    FpoCommodityResponse,
+    FpoProfileReadinessResponse,
+    FpoServiceAreaRequest,
+    FpoServiceAreaResponse,
+    FpoServiceRequest,
+    FpoServiceResponse,
+    FpoAdminProfileResponse,
+)
+from services.profile_service.app.fpo_profile_structured import (
+    add_commodity,
+    add_service,
+    add_service_area,
+    get_structured_profile,
+    get_profile_readiness,
+    get_admin_profile,
+    remove_commodity,
+    remove_service,
+    remove_service_area,
 )
 from services.profile_service.app.service import (
     export_my_profile,
@@ -397,6 +416,90 @@ async def patch_my_fpo_profile(
         context,
         payload,
     )
+
+
+@app.get("/v1/fpo/me/profile/commodities", response_model=list[FpoCommodityResponse])
+def get_my_fpo_commodities(context: RequestContext = Depends(get_request_context)):
+    return get_structured_profile(context)["commodities"]
+
+
+@app.get("/v1/fpo/me/profile/structured")
+def get_my_fpo_structured_profile(context: RequestContext = Depends(get_request_context)):
+    return get_structured_profile(context)
+
+
+@app.post("/v1/fpo/me/profile/commodities", response_model=FpoCommodityResponse, status_code=201)
+def post_my_fpo_commodity(payload: FpoCommodityRequest, context: RequestContext = Depends(get_request_context)):
+    return add_commodity(context, payload.model_dump())
+
+
+@app.delete("/v1/fpo/me/profile/commodities/{commodity_code}")
+def delete_my_fpo_commodity(commodity_code: str, context: RequestContext = Depends(get_request_context)):
+    return remove_commodity(context, commodity_code)
+
+
+@app.patch("/v1/fpo/me/profile/commodities/{commodity_code}", response_model=FpoCommodityResponse)
+def patch_my_fpo_commodity(commodity_code: str, payload: FpoCommodityRequest, context: RequestContext = Depends(get_request_context)):
+    values = payload.model_dump()
+    values["commodity_code"] = commodity_code
+    return add_commodity(context, values)
+
+
+@app.get("/v1/fpo/me/profile/services", response_model=list[FpoServiceResponse])
+def get_my_fpo_services(context: RequestContext = Depends(get_request_context)):
+    return get_structured_profile(context)["services"]
+
+
+@app.post("/v1/fpo/me/profile/services", response_model=FpoServiceResponse, status_code=201)
+def post_my_fpo_service(payload: FpoServiceRequest, context: RequestContext = Depends(get_request_context)):
+    return add_service(context, payload.model_dump())
+
+
+@app.delete("/v1/fpo/me/profile/services/{service_code}")
+def delete_my_fpo_service(service_code: str, context: RequestContext = Depends(get_request_context)):
+    return remove_service(context, service_code)
+
+
+@app.patch("/v1/fpo/me/profile/services/{service_code}", response_model=FpoServiceResponse)
+def patch_my_fpo_service(service_code: str, payload: FpoServiceRequest, context: RequestContext = Depends(get_request_context)):
+    values = payload.model_dump()
+    values["service_code"] = service_code
+    return add_service(context, values)
+
+
+@app.get("/v1/fpo/me/profile/service-areas", response_model=list[FpoServiceAreaResponse])
+def get_my_fpo_service_areas(context: RequestContext = Depends(get_request_context)):
+    return get_structured_profile(context)["service_areas"]
+
+
+@app.post("/v1/fpo/me/profile/service-areas", response_model=FpoServiceAreaResponse, status_code=201)
+def post_my_fpo_service_area(payload: FpoServiceAreaRequest, context: RequestContext = Depends(get_request_context)):
+    return add_service_area(context, payload.model_dump())
+
+
+@app.delete("/v1/fpo/me/profile/service-areas/{service_area_id}")
+def delete_my_fpo_service_area(service_area_id: UUID, context: RequestContext = Depends(get_request_context)):
+    return remove_service_area(context, service_area_id)
+
+
+@app.get("/v1/fpo/me/profile/readiness", response_model=FpoProfileReadinessResponse)
+def get_my_fpo_profile_readiness(context: RequestContext = Depends(get_request_context)):
+    return get_profile_readiness(context)
+
+
+@app.get("/v1/admin/fpo/organizations/{fpo_id}/profile", response_model=FpoAdminProfileResponse)
+def get_admin_fpo_profile(fpo_id: UUID, context: RequestContext = Depends(get_request_context)):
+    return get_admin_profile(context, fpo_id)
+
+
+@app.get("/v1/admin/fpo/organizations/{fpo_id}/profile/history")
+def get_admin_fpo_profile_history(fpo_id: UUID, context: RequestContext = Depends(get_request_context)):
+    return get_admin_profile(context, fpo_id)["history"]
+
+
+@app.get("/v1/admin/fpo/organizations/{fpo_id}/profile/readiness")
+def get_admin_fpo_profile_readiness(fpo_id: UUID, context: RequestContext = Depends(get_request_context)):
+    return get_admin_profile(context, fpo_id)["readiness"]
 
 
 @app.get(

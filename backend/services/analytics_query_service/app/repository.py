@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import math
+from numbers import Integral
 from collections import defaultdict
 from typing import Any
 from uuid import UUID
 
 from shapely.geometry import Point, Polygon, mapping, shape
+from shapely.strtree import STRtree
 import uuid
 import h3
 from sqlalchemy import text
@@ -1214,8 +1216,7 @@ def upsert_farm_grid_h3_crosswalk(rows: list[dict[str, Any]]) -> int:
 
     try:
         with engine.begin() as conn:
-            for row in rows:
-                conn.execute(query, row)
+            conn.execute(query, rows)
     except SQLAlchemyError as exc:
         raise AnalyticsQueryRepositoryError(f"Failed to upsert crosswalk rows: {exc}") from exc
 
@@ -1290,8 +1291,7 @@ def upsert_farm_grid_daily_values(rows: list[dict[str, Any]]) -> int:
 
     try:
         with engine.begin() as conn:
-            for row in rows:
-                conn.execute(query, row)
+            conn.execute(query, rows)
     except SQLAlchemyError as exc:
         raise AnalyticsQueryRepositoryError(f"Failed to upsert grid daily values: {exc}") from exc
 
@@ -1299,6 +1299,51 @@ def upsert_farm_grid_daily_values(rows: list[dict[str, Any]]) -> int:
 
 
 def materialize_grid_for_farm(farm_id: UUID | str) -> dict[str, Any]:
+    # Large farms can have tens of thousands of display cells. Reusing a
+    # complete persisted grid context avoids rebuilding the O(grid_cells x
+    # h3_cells) polygon crosswalk on every latest-analysis run.
+    try:
+        with engine.begin() as conn:
+            cached = conn.execute(
+                text(
+                    """
+                    SELECT
+                        (SELECT COUNT(*) FROM farm_grid_cells WHERE farm_id = :farm_id) AS grid_cells,
+                        (SELECT COUNT(*) FROM farm_grid_h3_crosswalk WHERE farm_id = :farm_id) AS crosswalk_rows,
+                        (SELECT COUNT(*) FROM farm_grid_daily_values WHERE farm_id = :farm_id) AS grid_values,
+                        (SELECT MAX(snapshot_date) FROM h3_sentinel2_features
+                         WHERE farm_id = :farm_id AND COALESCE(valid_fraction, 0) > 0) AS latest_feature_date,
+                        (SELECT MAX(snapshot_date) FROM farm_grid_daily_values
+                         WHERE farm_id = :farm_id) AS latest_grid_date
+                    """
+                ),
+                {"farm_id": str(farm_id)},
+            ).mappings().one()
+        cache_counts_ready = all(
+            int(cached[key] or 0) > 0
+            for key in ("grid_cells", "crosswalk_rows", "grid_values")
+        )
+        cache_is_current = (
+            cached["latest_feature_date"] is None
+            or cached["latest_grid_date"] == cached["latest_feature_date"]
+        )
+        if cache_counts_ready and cache_is_current:
+            return {
+                "farm_id": str(farm_id),
+                "status": "succeeded",
+                "grid_size_meters": GRID_SIZE_METERS,
+                "grid_cells_created": int(cached["grid_cells"]),
+                "crosswalk_rows_created": int(cached["crosswalk_rows"]),
+                "grid_values_created": int(cached["grid_values"]),
+                "processed_h3_cell_count": len(get_latest_features(farm_id, usable_only=True)),
+                "value_source": "cached_grid_context",
+                "warnings": [],
+            }
+    except SQLAlchemyError:
+        # Fall through to normal materialization if the cache check cannot
+        # be evaluated (for example during an initial schema deployment).
+        pass
+
     features = get_latest_features(farm_id, usable_only=True)
 
     if not features:
@@ -1355,8 +1400,29 @@ def materialize_grid_for_farm(farm_id: UUID | str) -> dict[str, Any]:
 
     crosswalk_rows: list[dict[str, Any]] = []
 
+    # Query only nearby H3 polygons. The old implementation compared every
+    # grid cell with every H3 cell (O(G*C)); STRtree reduces this to spatial
+    # candidates plus actual intersections.
+    h3_items = list(h3_polys.items())
+    h3_tree = STRtree([polygon for _, polygon in h3_items]) if h3_items else None
+
     for cell, grid_poly, grid_area in grid_polys:
-        for h3_index, h3_poly in h3_polys.items():
+        if h3_tree is None:
+            continue
+        candidates = h3_tree.query(grid_poly)
+        for candidate in candidates:
+            # Shapely 2 returns integer indexes. Supporting geometry returns
+            # as well keeps this compatible with older Shapely deployments.
+            if isinstance(candidate, Integral):
+                h3_index, h3_poly = h3_items[int(candidate)]
+            else:
+                candidate_index = next(
+                    (index for index, (_, polygon) in enumerate(h3_items) if polygon is candidate),
+                    None,
+                )
+                if candidate_index is None:
+                    continue
+                h3_index, h3_poly = h3_items[candidate_index]
             try:
                 intersection = grid_poly.intersection(h3_poly)
 
@@ -1505,8 +1571,7 @@ def upsert_farm_h3_daily_trends(rows: list[dict[str, Any]]) -> int:
 
     try:
         with engine.begin() as conn:
-            for row in rows:
-                conn.execute(query, row)
+            conn.execute(query, rows)
     except SQLAlchemyError as exc:
         raise AnalyticsQueryRepositoryError(f"Failed to upsert h3 daily trends: {exc}") from exc
 

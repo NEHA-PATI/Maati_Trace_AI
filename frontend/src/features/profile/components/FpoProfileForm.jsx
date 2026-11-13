@@ -76,6 +76,7 @@ export function FpoProfileForm({
   saving,
   exporting,
   savedAt,
+  showControls = true,
 }) {
   const [submitError, setSubmitError] =
     useState(null);
@@ -142,6 +143,7 @@ export function FpoProfileForm({
         values,
         dirtyFields,
         setupRequired,
+        profile?.profile_version,
       );
 
     if (
@@ -185,6 +187,7 @@ export function FpoProfileForm({
 
   return (
     <form
+      id="fpo-profile-form"
       onSubmit={handleSubmit(onSubmit)}
       className="space-y-5"
     >
@@ -249,6 +252,7 @@ export function FpoProfileForm({
               "registration_type",
             )}
           />
+          <ProfileInput label="Registration authority" error={errors.registration_authority} {...register("registration_authority")} />
           <ProfileInput
             type="date"
             label="Date of registration"
@@ -332,6 +336,11 @@ export function FpoProfileForm({
               "contact_email",
             )}
           />
+          <ProfileSelect label="Preferred language" error={errors.preferred_language} {...register("preferred_language")}>
+            <option value="en">English</option>
+            <option value="hi">हिन्दी</option>
+            <option value="or">ଓଡ଼ିଆ</option>
+          </ProfileSelect>
           <ProfileInput
             label="Profile image URL"
             error={
@@ -347,7 +356,11 @@ export function FpoProfileForm({
             <p className="font-bold text-[#33492A]">Verification documents</p>
             <p className="mt-1 text-sm text-[#58734B]">Upload registration evidence and submit it for administrator review.</p>
           </div>
-          <Link to="/fpo/verification" className="rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A]">Manage documents</Link>
+          {profile ? (
+            <Link to="/fpo/verification" className="rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A]">Manage documents</Link>
+          ) : (
+            <span className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#687064]">Available after profile setup</span>
+          )}
         </div>
       </ProfileSection>
 
@@ -535,6 +548,7 @@ export function FpoProfileForm({
             error={errors.pincode}
             {...register("pincode")}
           />
+          <ProfileInput label="Postal code" error={errors.postal_code} {...register("postal_code")} />
         </ProfileGrid>
         <ProfileTextarea
           label="Office address"
@@ -636,12 +650,12 @@ export function FpoProfileForm({
         </p>
       </ProfileSection>
 
-      <ProfileControls
+      {showControls ? <ProfileControls
         saving={saving}
         exporting={exporting}
         savedAt={savedAt}
         onExport={onExport}
-      />
+      /> : null}
     </form>
   );
 }

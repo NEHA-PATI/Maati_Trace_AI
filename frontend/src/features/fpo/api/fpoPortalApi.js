@@ -16,10 +16,10 @@ export function getFpoVerification() {
   return fpoManagementClient.request("/v1/fpo-portal/verification");
 }
 
-export function submitFpoVerification() {
+export function submitFpoVerification(payload = {}) {
   return fpoManagementClient.request("/v1/fpo-portal/verification/submit", {
     method: "POST",
-    body: {},
+    body: payload,
   });
 }
 
@@ -72,6 +72,10 @@ export function deleteFpoVerificationDocument(documentId) {
   return fpoManagementClient.request(`/v1/fpo/me/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+export function createFpoDocumentReplacementIntent(documentId, payload) {
+  return fpoManagementClient.request(`/v1/fpo/me/documents/${documentId}/replacement-intent`, { method: "POST", body: payload });
 }
 
 export function getFpoImportTemplate(importType) {

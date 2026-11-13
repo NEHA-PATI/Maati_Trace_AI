@@ -9,6 +9,7 @@ from services.farm_registry_service.app.area_calculator import (
     FarmGeometryError,
     calculate_area_acres,
 )
+from shared.geometry_fingerprint import geometry_fingerprint
 from services.farm_registry_service.app.dependencies import RequestContext
 from services.farm_registry_service.app.errors import (
     FarmRegistryError,
@@ -235,6 +236,7 @@ def register_farm(context: RequestContext, payload: FarmRegisterRequest) -> dict
                 "h3_cell_count": h3_result["cell_count"],
                 "area_acres": area_acres,
                 "bbox": h3_result.get("bbox"),
+                "boundary_hash": geometry_fingerprint(payload.polygon),
             }
         )
     except FarmRegistryRepositoryError as exc:

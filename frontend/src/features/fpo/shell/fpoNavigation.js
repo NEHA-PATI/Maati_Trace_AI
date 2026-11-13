@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Bell,
+  CloudLightning,
   BriefcaseBusiness,
   CalendarDays,
   FileCheck,
@@ -41,6 +42,7 @@ export const FPO_NAV_GROUPS = [
       { to: "/fpo/geography", label: "Area performance", icon: MapPinned, feature: "BASIC_REPORTS" },
       { to: "/fpo/crops", label: "Crop performance", icon: Sprout, feature: "BASIC_REPORTS" },
       { to: "/fpo/reports", label: "Reports", icon: FileText, feature: "BASIC_REPORTS" },
+      { to: "/fpo/natural-disasters", label: "Natural disasters", icon: CloudLightning, feature: "FARM_MAP" },
     ],
   },
   {

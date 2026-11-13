@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import os
 import httpx
 from datetime import datetime
 from typing import Literal
@@ -37,9 +38,15 @@ from services.fpo_management_service.app.service import (
     admin_verification_checklist,
     update_admin_verification_checklist,
     document_upload_intent,
+    document_replacement_intent,
     upload_document_content,
     document_upload_finalize,
     document_delete,
+    admin_claim_verification_case,
+    admin_assign_verification_case,
+    admin_release_verification_case,
+    admin_escalate_verification_case,
+    admin_decide_verification_case,
     admin_validate_document,
     decide_relationship,
     discover_fpo_directory,
@@ -126,6 +133,7 @@ def fpo_domain_error(exc: ValueError, fallback: str, *, status_code: int = 403) 
         "FPO_REJECTED": "FPO verification was rejected.",
         "FPO_SUSPENDED": "FPO access is suspended.",
         "FPO_PLAN_NOT_ASSIGNED": "No published FPO plan is assigned.",
+        "FPO_INTELLIGENCE_UNAVAILABLE": "Farm intelligence is temporarily unavailable.",
     }
     return HTTPException(status_code=status_code, detail={"code": code, "message": messages.get(code, str(exc))})
 
@@ -232,6 +240,30 @@ class VerificationDecision(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class VerificationSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_profile_version: int | None = Field(default=None, ge=1)
+    confirmation: bool = True
+
+
+class VerificationCaseActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class VerificationAssignRequest(VerificationCaseActionRequest):
+    reviewer_user_id: UUID
+
+
+class VerificationCaseDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: str = Field(pattern="^(APPROVE|CHANGES_REQUIRED|REJECT)$")
+    reason_code: str = Field(min_length=3, max_length=120)
+    note: str = Field(min_length=3, max_length=4000)
+    expected_case_version: int = Field(ge=1)
+    required_actions: list[dict] = Field(default_factory=list, max_length=20)
+
+
 class DocumentUploadIntentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     document_type: str = Field(min_length=2, max_length=80)
@@ -246,10 +278,16 @@ class DocumentFinalizeRequest(BaseModel):
     checksum: str = Field(min_length=32, max_length=128)
 
 
+class DocumentReplacementRequest(DocumentUploadIntentRequest):
+    pass
+
+
 class DocumentValidationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    validation_status: str = Field(pattern="^(VALID|INVALID)$")
+    validation_status: str = Field(pattern="^(VALID|INVALID|REPLACEMENT_REQUIRED)$")
     reason: str | None = Field(default=None, max_length=1000)
+    case_id: UUID | None = None
+    expected_case_version: int | None = Field(default=None, ge=1)
 
 
 class VerificationChecklistUpdate(BaseModel):
@@ -558,6 +596,8 @@ def live():
 
 @app.get("/health/ready")
 def ready():
+    if config.app_env in {"prod", "production"} and os.getenv("FPO_DOCUMENT_SCAN_MODE", "required").strip().lower() == "disabled":
+        raise HTTPException(status_code=503, detail={"service": "fpo_management_service", "status": "not_ready", "code": "MALWARE_SCANNER_DISABLED"})
     if (
         len(config.internal_event_token.encode("utf-8")) < 32
         or len(config.profile_internal_service_token.encode("utf-8")) < 32
@@ -1454,6 +1494,16 @@ async def finalize_verification_document(document_id: UUID, payload: DocumentFin
         raise HTTPException(status_code=409, detail={"code": "FPO_DOCUMENT_FINALIZE_FAILED", "message": str(exc)}) from exc
 
 
+@app.post("/v1/fpo/me/documents/{document_id}/replacement-intent", status_code=201)
+async def create_verification_document_replacement(document_id: UUID, payload: DocumentReplacementRequest, user=Depends(current_user)):
+    if user.get("role") != "fpo":
+        raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can replace verification documents."})
+    try:
+        return await run_in_threadpool(document_replacement_intent, user["user_id"], document_id, payload.filename, payload.mime_type, payload.size_bytes, payload.checksum)
+    except (ValueError, DocumentStorageError) as exc:
+        raise HTTPException(status_code=422, detail={"code": "FPO_DOCUMENT_REPLACEMENT_FAILED", "message": str(exc)}) from exc
+
+
 @app.delete("/v1/fpo/me/documents/{document_id}")
 async def delete_verification_document_endpoint(document_id: UUID, user=Depends(current_user)):
     if user.get("role") != "fpo":
@@ -1481,11 +1531,67 @@ async def upload_verification_document_content(document_id: UUID, request: Reque
 
 
 @app.post("/v1/fpo-portal/verification/submit", status_code=201)
-async def submit_verification(user=Depends(current_user)):
+async def submit_verification(payload: VerificationSubmitRequest = VerificationSubmitRequest(), user=Depends(current_user)):
     try:
-        return await run_in_threadpool(submit_verification_request, user["user_id"])
+        return await run_in_threadpool(submit_verification_request, user["user_id"], payload.expected_profile_version, payload.confirmation)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_NOT_READY", "message": str(exc)}) from exc
+
+
+def _admin_only(user):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
+
+
+@app.post("/v1/admin/fpo/verification-cases/{case_id}/claim")
+async def claim_verification_case_endpoint(case_id: UUID, user=Depends(current_user)):
+    _admin_only(user)
+    try:
+        return await run_in_threadpool(admin_claim_verification_case, user["user_id"], case_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_CASE_CLAIM_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/v1/admin/fpo/verification-cases/{case_id}/assign")
+async def assign_verification_case_endpoint(case_id: UUID, payload: VerificationAssignRequest, user=Depends(current_user)):
+    _admin_only(user)
+    try:
+        return await run_in_threadpool(admin_assign_verification_case, user["user_id"], case_id, payload.reviewer_user_id, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_CASE_ASSIGN_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/v1/admin/fpo/verification-cases/{case_id}/release")
+async def release_verification_case_endpoint(case_id: UUID, payload: VerificationCaseActionRequest, user=Depends(current_user)):
+    _admin_only(user)
+    try:
+        return await run_in_threadpool(admin_release_verification_case, user["user_id"], case_id, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_CASE_RELEASE_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/v1/admin/fpo/verification-cases/{case_id}/escalate")
+async def escalate_verification_case_endpoint(case_id: UUID, payload: VerificationCaseActionRequest, user=Depends(current_user)):
+    _admin_only(user)
+    try:
+        return await run_in_threadpool(admin_escalate_verification_case, user["user_id"], case_id, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_CASE_ESCALATION_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/v1/admin/fpo/verification-cases/{case_id}/decision")
+async def decide_verification_case_endpoint(case_id: UUID, payload: VerificationCaseDecisionRequest, user=Depends(current_user)):
+    _admin_only(user)
+    try:
+        return await run_in_threadpool(admin_decide_verification_case, user["user_id"], case_id, payload.model_dump(exclude_unset=True, exclude={"decision", "reason_code", "note", "expected_case_version", "required_actions"}) | {
+            "decision": payload.decision,
+            "reason_code": payload.reason_code,
+            "note": payload.note,
+            "expected_case_version": payload.expected_case_version,
+            "required_actions": payload.required_actions,
+        })
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "FPO_VERIFICATION_DECISION_FAILED", "message": str(exc)}) from exc
 
 
 @app.patch("/v1/fpo-portal/admin/organizations/{fpo_id}/verification")
@@ -1517,7 +1623,16 @@ async def read_admin_verification_document_content(document_id: UUID, user=Depen
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
     try:
         target, content = await run_in_threadpool(admin_verification_document_content, document_id)
-        return Response(content=content, media_type=target["mime_type"], headers={"Content-Disposition": f'inline; filename="{target["original_filename"]}"'})
+        return Response(
+            content=content,
+            media_type=target["mime_type"],
+            headers={
+                "Content-Disposition": f'inline; filename="{target["original_filename"]}"',
+                "Cache-Control": "no-store, no-cache, must-revalidate, private",
+                "Pragma": "no-cache",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"code": "FPO_DOCUMENT_NOT_FOUND", "message": str(exc)}) from exc
     except DocumentStorageError as exc:
@@ -1562,7 +1677,7 @@ async def update_verification_document(document_id: UUID, payload: DocumentValid
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Administrator access is required."})
     try:
-        return await run_in_threadpool(admin_validate_document, user["user_id"], document_id, payload.validation_status, payload.reason)
+        return await run_in_threadpool(admin_validate_document, user["user_id"], document_id, payload.validation_status, payload.reason, payload.case_id, payload.expected_case_version)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "FPO_DOCUMENT_VALIDATION_FAILED", "message": str(exc)}) from exc
 
@@ -1763,7 +1878,7 @@ async def read_farmer_directory(
 
 @app.get("/v1/fpo/me/farmers/{farmer_id}")
 async def read_fpo_farmer_detail(farmer_id: UUID, user=Depends(current_user)):
-    if user.get("role") != "fpo":
+    if user.get("role") not in {"fpo", "admin"}:
         raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can read farmer details."})
     try:
         return await run_in_threadpool(farmer_detail, user["user_id"], farmer_id)
@@ -1773,7 +1888,7 @@ async def read_fpo_farmer_detail(farmer_id: UUID, user=Depends(current_user)):
 
 @app.get("/v1/fpo/me/farmers/{farmer_id}/farms")
 async def read_fpo_farmer_farms(farmer_id: UUID, user=Depends(current_user)):
-    if user.get("role") != "fpo":
+    if user.get("role") not in {"fpo", "admin"}:
         raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can read farmer farms."})
     try:
         return await run_in_threadpool(farmer_farms, user["user_id"], farmer_id)
@@ -1794,13 +1909,16 @@ async def read_fpo_farm_monitoring(query: str | None = None, user=Depends(curren
 
 @app.get("/v1/fpo/me/farmers/{farmer_id}/farms/{farm_id}/intelligence")
 async def read_fpo_farm_intelligence(farmer_id: UUID, farm_id: UUID, user=Depends(current_user)):
-    if user.get("role") != "fpo":
+    # Read-only FPO portfolio endpoints accept both FPO users and platform
+    # admins. Keep intelligence access consistent with dashboard/monitoring.
+    if user.get("role") not in {"fpo", "admin"}:
         raise HTTPException(status_code=403, detail={"code": "FPO_ROLE_REQUIRED", "message": "Only FPO accounts can read farm intelligence."})
     try:
         return await run_in_threadpool(farmer_farm_intelligence, user["user_id"], farmer_id, farm_id)
     except ValueError as exc:
         if str(exc).startswith("FPO_"):
-            raise fpo_domain_error(exc, "FPO_FARM_SCOPE_FORBIDDEN") from exc
+            status_code = 503 if str(exc) == "FPO_INTELLIGENCE_UNAVAILABLE" else 403
+            raise fpo_domain_error(exc, "FPO_FARM_SCOPE_FORBIDDEN", status_code=status_code) from exc
         raise HTTPException(status_code=403, detail={"code": "FPO_FARM_SCOPE_FORBIDDEN", "message": str(exc)}) from exc
 
 

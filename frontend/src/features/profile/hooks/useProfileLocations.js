@@ -7,10 +7,10 @@ import { profileLocationApi } from "@/features/profile/api/profileLocationApi";
 
 function optionName(item) {
   return (
-    item?.name
-    || item?.state_name
-    || item?.district_name
+    item?.district_name
     || item?.block_name
+    || item?.state_name
+    || item?.name
     || String(item || "")
   );
 }
@@ -70,6 +70,14 @@ export function useProfileLocations({
 
   useEffect(() => {
     let active = true;
+
+    if (!stateName) {
+      setDistricts([]);
+      setBlocks([]);
+      return () => {
+        active = false;
+      };
+    }
 
     setLoading((current) => ({
       ...current,

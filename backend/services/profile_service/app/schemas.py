@@ -299,6 +299,7 @@ class FpoProfileSetupRequest(StrictModel):
         default=None,
         max_length=100,
     )
+    registration_authority: str | None = Field(default=None, max_length=200)
     date_of_registration: date | None = None
     promoted_by: str | None = Field(
         default=None,
@@ -320,6 +321,7 @@ class FpoProfileSetupRequest(StrictModel):
     contact_phone: str
     alternate_phone: str | None = None
     contact_email: EmailStr
+    preferred_language: Literal["en", "hi", "or"] = "en"
 
     state_name: str = Field(
         default="Odisha",
@@ -347,6 +349,11 @@ class FpoProfileSetupRequest(StrictModel):
         max_length=150,
     )
     pincode: str | None = None
+    postal_code: str | None = None
+    state_code: int | None = Field(default=None, gt=0)
+    village_code: str | None = Field(default=None, max_length=100)
+    gram_panchayat_code: str | None = Field(default=None, max_length=100)
+    gram_panchayat_name: str | None = Field(default=None, max_length=150)
     office_address: str | None = Field(
         default=None,
         min_length=5,
@@ -365,6 +372,8 @@ class FpoProfileSetupRequest(StrictModel):
         default=None,
         ge=0,
     )
+    female_member_count: int | None = Field(default=None, ge=0)
+    year_established: int | None = Field(default=None, ge=1900, le=2100)
     services_provided: list[str] = Field(
         default_factory=list,
         max_length=50,
@@ -472,6 +481,7 @@ class FpoProvisioningProfileRequest(StrictModel):
 
 
 class FpoProfileUpdate(FpoProfileSetupRequest):
+    profile_version: int | None = Field(default=None, ge=1)
     fpo_name: str | None = Field(
         default=None,
         min_length=2,
@@ -522,6 +532,13 @@ class FpoProfileUpdate(FpoProfileSetupRequest):
 
 class FpoProfileResponse(StrictModel):
     fpo_id: UUID
+    organization_id: UUID | None = None
+    public_fpo_id: str | None = None
+    provisioning_status: str | None = None
+    lifecycle_status: str | None = None
+    organization_verification_status: str | None = None
+    class_code: str | None = None
+    commercial_status: str | None = None
     legal_name: str | None = None
     display_name: str | None = None
     organisation_type: str | None = None
@@ -542,6 +559,7 @@ class FpoProfileResponse(StrictModel):
     fpo_name: str
     registration_number: str | None = None
     registration_type: str | None = None
+    registration_authority: str | None = None
     date_of_registration: date | None = None
     promoted_by: str | None = None
     promoting_institution_name: str | None = None
@@ -551,6 +569,7 @@ class FpoProfileResponse(StrictModel):
     contact_phone: str | None = None
     alternate_phone: str | None = None
     contact_email: EmailStr | None = None
+    preferred_language: str = "en"
 
     state_name: str
     district_name: str | None = None
@@ -560,11 +579,18 @@ class FpoProfileResponse(StrictModel):
     village_name: str | None = None
     gram_panchayat: str | None = None
     pincode: str | None = None
+    postal_code: str | None = None
+    state_code: int | None = None
+    village_code: str | None = None
+    gram_panchayat_code: str | None = None
+    gram_panchayat_name: str | None = None
     office_address: str | None = None
 
     main_commodities: list[str]
     member_count: int | None = None
     active_member_count: int | None = None
+    female_member_count: int | None = None
+    year_established: int | None = None
     services_provided: list[str]
     profile_completion_percentage: int = Field(default=0, ge=0, le=100)
     verification_readiness_percentage: int = Field(default=0, ge=0, le=100)
@@ -577,6 +603,113 @@ class FpoProfileResponse(StrictModel):
     updated_at: datetime
     profile_version: int
     current_user_fpo_role: str | None = None
+    profile_status: str = "DRAFT"
+    verification_refresh_required: bool = False
+
+
+class FpoProfileHistoryItem(StrictModel):
+    history_id: UUID
+    profile_id: UUID
+    actor_user_id: UUID | None = None
+    previous_profile_version: int
+    new_profile_version: int
+    changed_fields: list[str]
+    change_classification: str
+    correlation_id: str | None = None
+    request_channel: str
+    created_at: datetime
+
+
+class FpoAdminProfileResponse(StrictModel):
+    organization: dict[str, Any]
+    profile: FpoProfileResponse
+    readiness: "FpoProfileReadinessResponse"
+    history: list[FpoProfileHistoryItem]
+    submitted_snapshot: dict[str, Any] | None = None
+    changed_after_submission: list[str]
+    reverification_fields: list[str]
+
+
+class FpoProfileReadinessRequirement(StrictModel):
+    code: str
+    section: str
+    field: str | None = None
+
+
+class FpoProfileReadinessResponse(StrictModel):
+    ready: bool
+    percentage: int = Field(ge=0, le=100)
+    calculation_version: str
+    blocking_requirements: list[FpoProfileReadinessRequirement]
+    warnings: list[FpoProfileReadinessRequirement]
+    profile_version: int
+
+
+class FpoCommodityRequest(StrictModel):
+    commodity_code: str = Field(min_length=2, max_length=100)
+    variety_code: str | None = Field(default=None, max_length=100)
+    is_primary: bool = False
+    declared_farmer_count: int | None = Field(default=None, ge=0)
+    declared_area_acres: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=4)
+    season_codes: list[str] = Field(default_factory=list, max_length=12)
+
+
+class FpoCommodityResponse(FpoCommodityRequest):
+    profile_commodity_id: str
+    profile_id: UUID
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class FpoServiceRequest(StrictModel):
+    service_code: str = Field(min_length=2, max_length=100)
+    display_name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    active_from: date | None = None
+
+
+class FpoServiceResponse(FpoServiceRequest):
+    profile_service_id: str
+    profile_id: UUID
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+GeographyLevel = Literal["STATE", "DISTRICT", "BLOCK", "VILLAGE"]
+
+
+class FpoServiceAreaRequest(StrictModel):
+    geography_level: GeographyLevel
+    state_code: int = Field(gt=0)
+    district_code: int | None = Field(default=None, gt=0)
+    block_code: int | None = Field(default=None, gt=0)
+    village_code: str | None = Field(default=None, max_length=100)
+    is_primary: bool = False
+
+    @model_validator(mode="after")
+    def validate_geography(self):
+        required = {
+            "STATE": (self.state_code,),
+            "DISTRICT": (self.state_code, self.district_code),
+            "BLOCK": (self.state_code, self.district_code, self.block_code),
+            "VILLAGE": (self.state_code, self.district_code, self.block_code, self.village_code),
+        }[self.geography_level]
+        if any(value in (None, "") for value in required):
+            raise ValueError(f"{self.geography_level} service areas require their complete geography")
+        return self
+
+
+class FpoServiceAreaResponse(FpoServiceAreaRequest):
+    service_area_id: UUID
+    profile_id: UUID
+    state_name: str | None = None
+    district_name: str | None = None
+    block_name: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class FarmerProfileEnvelope(StrictModel):

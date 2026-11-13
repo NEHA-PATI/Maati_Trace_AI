@@ -1,10 +1,13 @@
 import { motion as Motion } from "framer-motion";
 import {
   BadgeCheck,
+  Check,
+  Copy,
   Building2,
   Clock3,
   UserRound,
 } from "lucide-react";
+import { useState } from "react";
 
 import { GrowthRing } from "@/features/profile/components/GrowthRing";
 
@@ -13,20 +16,28 @@ export function ProfileHeader({
   profile,
   profileType,
   completionPercentage,
+  readinessPercentage,
   onboardingStatus,
 }) {
+  const [copied, setCopied] = useState(false);
   const isFpo = profileType === "fpo";
   const AvatarIcon = isFpo
     ? Building2
     : UserRound;
-  const isCompleted =
-    onboardingStatus === "completed";
+  const effectivePercentage = isFpo && readinessPercentage != null
+    ? readinessPercentage
+    : completionPercentage;
+  const isCompleted = isFpo
+    ? readinessPercentage === 100
+    : onboardingStatus === "completed";
   const StatusIcon = isCompleted
     ? BadgeCheck
     : Clock3;
   const statusLabel = isCompleted
-    ? "Completed"
-    : "Pending";
+    ? "Complete"
+    : isFpo
+      ? "Incomplete"
+      : "Pending";
 
   const title = isFpo
     ? profile?.fpo_name
@@ -39,6 +50,13 @@ export function ProfileHeader({
     ? profile?.contact_email
       || user?.email
     : user?.email;
+
+  const copyPublicId = async () => {
+    if (!profile?.public_fpo_id) return;
+    await navigator.clipboard.writeText(profile.public_fpo_id);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
 
   return (
     <Motion.div
@@ -104,7 +122,7 @@ export function ProfileHeader({
 
           <div className="flex items-center gap-3 border-t border-[#E3E8DE] pt-4 md:border-t-0 md:pt-0">
             <GrowthRing
-              value={completionPercentage}
+              value={effectivePercentage}
             />
             <div
               className={`flex min-h-11 items-center gap-2 rounded-2xl border px-4 py-2.5 shadow-sm ${
@@ -132,6 +150,19 @@ export function ProfileHeader({
             </div>
           </div>
         </div>
+        {isFpo ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#E3E8DE] pt-4 text-xs">
+            <span className="font-semibold uppercase tracking-[0.16em] text-[#8A9A84]">Public FPO ID</span>
+            <span className="rounded-lg bg-[#F5F8F2] px-3 py-2 font-mono font-bold text-[#33492A]">{profile?.public_fpo_id || "Preparing identity"}</span>
+            <button type="button" onClick={copyPublicId} disabled={!profile?.public_fpo_id} className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE8D5] px-3 py-2 font-bold text-[#4B6B3A] hover:bg-[#F5F8F2] disabled:cursor-not-allowed disabled:opacity-50">
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <span className="rounded-full bg-[#EEF6E9] px-3 py-1.5 font-bold text-[#4B6B3A]">{profile?.class_code || "Class pending"}</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 font-bold text-slate-600">{String(profile?.lifecycle_status || "ONBOARDING").replaceAll("_", " ")}</span>
+            <span className="rounded-full bg-amber-50 px-3 py-1.5 font-bold text-amber-700">Readiness {readinessPercentage ?? profile?.verification_readiness_percentage ?? 0}%</span>
+          </div>
+        ) : null}
       </div>
     </Motion.div>
   );

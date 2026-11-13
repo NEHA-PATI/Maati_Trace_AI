@@ -792,8 +792,10 @@ def get_verification_for_user(conn: Connection, user_id: UUID | str) -> dict[str
             SELECT o.fpo_id, o.public_fpo_id, o.verification_status,
                    o.verification_level, o.discoverable,
                    s.submission_id, s.status AS submission_status,
-                   s.reviewer_note, s.reviewed_at, s.created_at AS submitted_at
+                   s.reviewer_note, s.reviewed_at, s.created_at AS submitted_at,
+                   p.profile_version
             FROM public.fpo_organizations o
+            LEFT JOIN public.fpos p ON p.fpo_id = o.profile_fpo_id
             LEFT JOIN LATERAL (
                 SELECT * FROM public.fpo_verification_submissions
                 WHERE fpo_id = o.fpo_id
@@ -846,9 +848,10 @@ def create_document_upload_intent(
     row = conn.execute(text("""
         INSERT INTO public.fpo_verification_documents
             (fpo_id, submission_id, document_type, object_key, original_filename,
-             mime_type, size_bytes, checksum, uploaded_by, upload_status, scan_status, validation_status)
+             mime_type, declared_mime_type, size_bytes, checksum, declared_checksum,
+             uploaded_by, upload_status, scan_status, validation_status)
         VALUES (:fpo_id, :submission_id, :document_type, :object_key, :filename,
-                :mime_type, :size_bytes, :checksum, :uploaded_by, 'UPLOADING', 'PENDING', 'PENDING')
+                :mime_type, :mime_type, :size_bytes, :checksum, :checksum, :uploaded_by, 'UPLOADING', 'PENDING', 'PENDING')
         RETURNING document_id, fpo_id, submission_id, document_type, object_key,
                   original_filename, mime_type, size_bytes, checksum, upload_status,
                   scan_status, validation_status, created_at
@@ -861,11 +864,50 @@ def create_document_upload_intent(
     return {**dict(row), "upload_url": None, "upload_url_status": "STORAGE_ADAPTER_REQUIRED"}
 
 
+def create_document_replacement_intent(conn: Connection, *, user_id: UUID | str, document_id: UUID | str, filename: str, mime_type: str, size_bytes: int, checksum: str) -> dict[str, Any]:
+    old = conn.execute(text("""
+        SELECT d.* FROM public.fpo_verification_documents d
+        JOIN public.fpo_organizations o ON o.fpo_id = d.fpo_id AND o.auth_user_id = :user_id
+        WHERE d.document_id = :document_id AND d.deleted_at IS NULL
+        FOR UPDATE
+    """), {"user_id": str(user_id), "document_id": str(document_id)}).mappings().first()
+    if not old:
+        raise ValueError("FPO_DOCUMENT_NOT_FOUND")
+    if old["upload_status"] != "AVAILABLE" or old["scan_status"] not in {"CLEAN", "QUARANTINED", "DEAD"}:
+        raise ValueError("FPO_DOCUMENT_NOT_READY_FOR_REPLACEMENT")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", filename.strip())[:180] or "document"
+    new_id = uuid4()
+    row = conn.execute(text("""
+        INSERT INTO public.fpo_verification_documents
+            (document_id, fpo_id, document_type, document_version, object_key, original_filename,
+             mime_type, declared_mime_type, size_bytes, checksum, declared_checksum,
+             uploaded_by, upload_status, scan_status, validation_status, supersedes_document_id)
+        VALUES (:document_id, :fpo_id, :document_type, :document_version, :object_key, :filename,
+                :mime_type, :mime_type, :size_bytes, :checksum, :checksum,
+                :uploaded_by, 'UPLOADING', 'PENDING', 'PENDING', :supersedes)
+        RETURNING document_id, fpo_id, document_type, document_version, object_key,
+                  original_filename, mime_type, size_bytes, checksum, upload_status,
+                  scan_status, validation_status, created_at
+    """), {
+        "document_id": str(new_id), "fpo_id": str(old["fpo_id"]), "document_type": old["document_type"],
+        "document_version": int(old.get("document_version") or 1) + 1,
+        "object_key": f"fpo-verification/{old['fpo_id']}/{new_id}/{int(old.get('document_version') or 1) + 1}/source",
+        "filename": safe_name, "mime_type": mime_type.lower(), "size_bytes": size_bytes,
+        "checksum": checksum.lower(), "uploaded_by": str(user_id), "supersedes": str(old["document_id"]),
+    }).mappings().one()
+    conn.execute(text("""
+        UPDATE public.fpo_verification_documents
+        SET replaced_by_document_id = :replacement, updated_at = now()
+        WHERE document_id = :document_id
+    """), {"replacement": str(new_id), "document_id": str(document_id)})
+    return {**dict(row), "supersedes_document_id": old["document_id"]}
+
+
 def finalize_document_upload(conn: Connection, *, user_id: UUID | str, document_id: UUID | str, checksum: str) -> dict[str, Any]:
     row = conn.execute(text("""
         UPDATE public.fpo_verification_documents d
         SET upload_status = 'AVAILABLE',
-            scan_status = :scan_status,
+            scan_status = 'QUEUED',
             storage_version = storage_version + 1,
             updated_at = now()
         FROM public.fpo_organizations o
@@ -874,7 +916,7 @@ def finalize_document_upload(conn: Connection, *, user_id: UUID | str, document_
           AND d.checksum = :checksum
         RETURNING d.document_id, d.upload_status, d.scan_status, d.validation_status,
                   d.checksum, d.object_key, d.updated_at
-    """), {"document_id": str(document_id), "user_id": str(user_id), "checksum": checksum.lower(), "scan_status": "NOT_REQUIRED" if os.getenv("FPO_DOCUMENT_SCAN_MODE", "disabled").strip().lower() == "disabled" else "QUEUED"}).mappings().first()
+    """), {"document_id": str(document_id), "user_id": str(user_id), "checksum": checksum.lower()}).mappings().first()
     if not row:
         raise ValueError("Upload intent was not found or is no longer active")
     return {**dict(row), "next_step": "MALWARE_SCAN_AND_VALIDATION"}
@@ -899,7 +941,8 @@ def get_document_upload_target(conn: Connection, *, user_id: UUID | str, documen
 def list_verification_documents(conn: Connection, *, user_id: UUID | str) -> list[dict[str, Any]]:
     rows = conn.execute(text("""
         SELECT d.document_id, d.submission_id, d.document_type, d.original_filename,
-               d.mime_type, d.size_bytes, d.upload_status, d.scan_status,
+               d.mime_type, d.size_bytes, d.document_version, d.upload_status, d.scan_status,
+               d.verified_checksum,
                d.validation_status, d.validation_reason, d.created_at
         FROM public.fpo_verification_documents d
         JOIN public.fpo_organizations o ON o.fpo_id = d.fpo_id AND o.auth_user_id = :user_id
@@ -912,7 +955,8 @@ def list_verification_documents(conn: Connection, *, user_id: UUID | str) -> lis
 def delete_verification_document(conn: Connection, *, user_id: UUID | str, document_id: UUID | str) -> dict[str, Any]:
     row = conn.execute(text("""
         UPDATE public.fpo_verification_documents d
-        SET deleted_at = now(), updated_at = now()
+        SET deleted_at = now(), deletion_status = 'QUEUED', deleted_by = :user_id,
+            deletion_reason = 'OWNER_REQUEST', updated_at = now()
         FROM public.fpo_organizations o
         WHERE d.document_id = :document_id
           AND d.fpo_id = o.fpo_id
@@ -923,6 +967,10 @@ def delete_verification_document(conn: Connection, *, user_id: UUID | str, docum
     """), {"document_id": str(document_id), "user_id": str(user_id)}).mappings().first()
     if not row:
         raise ValueError("This document cannot be removed after verification submission, or it was not found")
+    conn.execute(text("""
+        INSERT INTO public.fpo_verification_storage_deletions (document_id, object_key)
+        VALUES (:document_id, :object_key)
+    """), {"document_id": str(row["document_id"]), "object_key": row["object_key"]})
     return dict(row)
 
 
@@ -956,7 +1004,7 @@ def list_verification_checklist(conn: Connection, *, fpo_id: UUID | str) -> list
                r.checked_by, r.checked_at, c.submission_id
         FROM public.fpo_verification_checklist_results r
         JOIN public.fpo_verification_cases c ON c.case_id = r.case_id
-        WHERE c.fpo_id = :fpo_id AND c.status IN ('OPEN','CLAIMED','CHANGES_REQUIRED')
+        WHERE c.fpo_id = :fpo_id AND c.status IN ('OPEN','CLAIMED','UNDER_REVIEW','CHANGES_REQUIRED')
         ORDER BY r.checklist_key
     """), {"fpo_id": str(fpo_id)}).mappings().all()
     return [dict(row) for row in rows]
@@ -971,6 +1019,7 @@ def update_verification_checklist(conn: Connection, *, admin_user_id: UUID | str
             checked_at = now()
         FROM public.fpo_verification_cases c
         WHERE r.checklist_result_id = :result_id AND c.case_id = r.case_id
+          AND c.status = 'UNDER_REVIEW' AND c.assigned_reviewer_id = :admin_user_id
         RETURNING r.checklist_result_id, r.case_id, r.checklist_key, r.result, r.note, r.checked_by, r.checked_at, c.fpo_id
     """), {"result_id": str(result_id), "result": result, "note": note, "admin_user_id": str(admin_user_id)}).mappings().first()
     if not row:
@@ -979,15 +1028,27 @@ def update_verification_checklist(conn: Connection, *, admin_user_id: UUID | str
     return dict(row)
 
 
-def validate_verification_document(conn: Connection, *, admin_user_id: UUID | str, document_id: UUID | str, validation_status: str, reason: str | None) -> dict[str, Any]:
+def validate_verification_document(conn: Connection, *, admin_user_id: UUID | str, document_id: UUID | str, validation_status: str, reason: str | None, case_id: UUID | str | None = None, expected_case_version: int | None = None) -> dict[str, Any]:
+    if validation_status not in {"VALID", "INVALID", "REPLACEMENT_REQUIRED"}:
+        raise ValueError("FPO_DOCUMENT_VALIDATION_STATUS_INVALID")
+    if validation_status != "VALID" and not reason:
+        raise ValueError("FPO_DOCUMENT_VALIDATION_REASON_REQUIRED")
     row = conn.execute(text("""
         UPDATE public.fpo_verification_documents
         SET validation_status = :validation_status,
             validated_by = :admin_user_id, validated_at = now(), validation_reason = :reason,
             updated_at = now()
         WHERE document_id = :document_id AND upload_status = 'AVAILABLE' AND deleted_at IS NULL
+          AND (:case_id IS NULL OR EXISTS (
+              SELECT 1 FROM public.fpo_verification_submission_documents sd
+              JOIN public.fpo_verification_cases c ON c.submission_id = sd.submission_id
+              WHERE sd.document_id = public.fpo_verification_documents.document_id
+                AND c.case_id = :case_id
+                AND (:expected_case_version IS NULL OR c.case_version = :expected_case_version)
+          ))
+          AND (:validation_status <> 'VALID' OR scan_status = 'CLEAN')
         RETURNING document_id, fpo_id, scan_status, validation_status, validation_reason, validated_at
-    """), {"document_id": str(document_id), "admin_user_id": str(admin_user_id), "validation_status": validation_status, "reason": reason}).mappings().first()
+    """), {"document_id": str(document_id), "admin_user_id": str(admin_user_id), "validation_status": validation_status, "reason": reason, "case_id": str(case_id) if case_id else None, "expected_case_version": expected_case_version}).mappings().first()
     if not row:
         raise ValueError("Available verification document was not found")
     record_fpo_audit_event(conn, fpo_id=row["fpo_id"], actor_user_id=admin_user_id, action="FPO_DOCUMENT_VALIDATED", target_type="verification_document", target_id=document_id, metadata={"validation_status": validation_status, "reason": reason})
@@ -995,12 +1056,24 @@ def validate_verification_document(conn: Connection, *, admin_user_id: UUID | st
 
 
 def claim_document_scan_batch(conn: Connection, *, batch_size: int) -> list[dict[str, Any]]:
+    conn.execute(text("""
+        INSERT INTO public.fpo_verification_document_events (document_id, fpo_id, event_type, metadata)
+        SELECT document_id, fpo_id, 'SCAN_LEASE_EXPIRED',
+               jsonb_build_object('previous_worker_id', scan_worker_id, 'previous_lease_expires_at', scan_lease_expires_at)
+        FROM public.fpo_verification_documents
+        WHERE upload_status = 'AVAILABLE' AND deleted_at IS NULL
+          AND scan_status = 'SCANNING' AND scan_lease_expires_at < now()
+    """))
     rows = conn.execute(text("""
         WITH candidates AS (
             SELECT document_id
             FROM public.fpo_verification_documents
             WHERE upload_status = 'AVAILABLE' AND deleted_at IS NULL
-              AND scan_status IN ('PENDING','QUEUED','RETRY','FAILED') AND scan_next_attempt_at <= now()
+              AND scan_attempts < 5
+              AND (
+                  (scan_status IN ('PENDING','QUEUED','RETRY','FAILED') AND scan_next_attempt_at <= now())
+                  OR (scan_status = 'SCANNING' AND scan_lease_expires_at < now())
+              )
             ORDER BY created_at
             FOR UPDATE SKIP LOCKED LIMIT :batch_size
         )
@@ -1010,7 +1083,8 @@ def claim_document_scan_batch(conn: Connection, *, batch_size: int) -> list[dict
             scan_lease_expires_at = now() + interval '5 minutes', updated_at = now()
         FROM candidates c
         WHERE d.document_id = c.document_id
-        RETURNING d.document_id, d.object_key, d.size_bytes, d.mime_type, d.checksum, d.scan_attempts
+        RETURNING d.document_id, d.object_key, d.size_bytes, d.mime_type, d.checksum,
+                  d.scan_attempts, d.scan_worker_id
     """), {"batch_size": max(1, min(batch_size, 100)), "worker_id": os.getenv("HOSTNAME", "fpo-document-worker")}).mappings().all()
     return [dict(row) for row in rows]
 
@@ -1019,37 +1093,48 @@ def mark_document_scan_result(conn: Connection, *, document_id: UUID | str, scan
     if scan_status in {"CLEAN", "NOT_REQUIRED"}:
         conn.execute(text("""
             UPDATE public.fpo_verification_documents
-            SET scan_status = :scan_status, verified_checksum = :verified_checksum, scan_error = NULL, scanned_at = now(), scan_locked_at = NULL, scan_worker_id = NULL, scan_lease_expires_at = NULL, updated_at = now()
+        SET scan_status = :scan_status, verified_checksum = :verified_checksum,
+            scan_engine = :scan_engine, scan_engine_version = :scan_engine_version,
+            scan_signature_version = :scan_signature_version,
+            scan_error = NULL, scanned_at = now(), scan_locked_at = NULL, scan_worker_id = NULL, scan_lease_expires_at = NULL, updated_at = now()
             WHERE document_id = :document_id
-        """), {"document_id": str(document_id), "scan_status": scan_status, "verified_checksum": verified_checksum})
+        """), {"document_id": str(document_id), "scan_status": scan_status, "verified_checksum": verified_checksum, "scan_engine": os.getenv("FPO_CLAMAV_HOST", "clamav"), "scan_engine_version": os.getenv("FPO_CLAMAV_VERSION", "configured"), "scan_signature_version": "magic-v1"})
         return
     if scan_status in {"INFECTED", "QUARANTINED"}:
         conn.execute(text("""
             UPDATE public.fpo_verification_documents
-            SET scan_status = :scan_status, verified_checksum = :verified_checksum, scan_error = :error, scanned_at = now(), scan_locked_at = NULL, scan_worker_id = NULL, scan_lease_expires_at = NULL, updated_at = now()
+            SET scan_status = :scan_status, verified_checksum = :verified_checksum,
+                scan_engine = :scan_engine, scan_engine_version = :scan_engine_version,
+                scan_signature_version = 'magic-v1', scan_error = :error, scanned_at = now(), scan_locked_at = NULL, scan_worker_id = NULL, scan_lease_expires_at = NULL, updated_at = now()
             WHERE document_id = :document_id
-        """), {"document_id": str(document_id), "scan_status": scan_status, "verified_checksum": verified_checksum, "error": (error or "Document quarantined")[:1000]})
+        """), {"document_id": str(document_id), "scan_status": scan_status, "verified_checksum": verified_checksum, "error": (error or "Document quarantined")[:1000], "scan_engine": os.getenv("FPO_CLAMAV_HOST", "clamav"), "scan_engine_version": os.getenv("FPO_CLAMAV_VERSION", "configured")})
         return
+    next_status = "DEAD" if scan_status not in {"CLEAN", "INFECTED", "QUARANTINED"} and int((conn.execute(text("SELECT scan_attempts FROM public.fpo_verification_documents WHERE document_id = :document_id"), {"document_id": str(document_id)}).scalar() or 0)) >= 5 else scan_status
     conn.execute(text("""
         UPDATE public.fpo_verification_documents
-        SET scan_status = :scan_status, scan_error = :error, scanned_at = now(),
+        SET scan_status = :scan_status, scan_error = :error, scan_error_code = :error_code, scanned_at = now(),
             scan_locked_at = NULL, scan_worker_id = NULL, scan_lease_expires_at = NULL,
-            scan_next_attempt_at = now() + make_interval(secs => LEAST(3600, power(2, scan_attempts)::integer * 30)),
+            scan_next_attempt_at = CASE
+                WHEN :scan_status = 'DEAD' THEN NULL
+                ELSE now() + make_interval(secs => CASE scan_attempts WHEN 1 THEN 30 WHEN 2 THEN 120 WHEN 3 THEN 600 WHEN 4 THEN 1800 ELSE 1800 END)
+            END,
             updated_at = now()
         WHERE document_id = :document_id
-    """), {"document_id": str(document_id), "scan_status": scan_status, "error": (error or "Scan failed")[:1000]})
+    """), {"document_id": str(document_id), "scan_status": next_status, "error": (error or "Scan failed")[:1000], "error_code": "SCAN_MAX_ATTEMPTS" if next_status == "DEAD" else "SCAN_TEMPORARY_FAILURE"})
 
 
-def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]:
+def submit_verification(conn: Connection, user_id: UUID | str, *, expected_profile_version: int | None = None) -> dict[str, Any]:
     org = conn.execute(
         text(
             """
             SELECT o.fpo_id, o.public_fpo_id, o.verification_status,
                    o.profile_fpo_id, p.onboarding_completed_at,
-                   p.fpo_name, p.registration_number, p.registration_type,
+            p.fpo_name, p.legal_name, p.display_name, p.registration_number, p.registration_type,
+            p.cin, p.gstin, p.operating_since_year,
                    p.state_name, p.district_name, p.district_code,
                    p.contact_person_name, p.contact_phone, p.contact_email,
-                   p.main_commodities, p.services_provided, p.member_count
+                   p.main_commodities, p.services_provided, p.member_count,
+                   p.profile_version
             FROM public.fpo_organizations o
             LEFT JOIN public.fpos p ON p.fpo_id = o.profile_fpo_id
             WHERE o.auth_user_id = :user_id
@@ -1062,18 +1147,22 @@ def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]
         raise ValueError("FPO organization has not been provisioned")
     if not org.get("profile_fpo_id") or not org.get("onboarding_completed_at"):
         raise ValueError("Complete the FPO profile before submitting verification")
+    if expected_profile_version is not None and int(org.get("profile_version") or 0) != int(expected_profile_version):
+        raise ValueError("FPO_PROFILE_VERSION_CONFLICT")
     if org["verification_status"] in {"SUBMITTED", "UNDER_REVIEW", "APPROVED"}:
         raise ValueError("This FPO verification is already submitted")
     required_documents = conn.execute(text("""
         SELECT document_type FROM public.fpo_required_document_policies
-        WHERE is_required = TRUE AND registration_type IN ('DEFAULT', COALESCE(:registration_type, 'DEFAULT'))
+        WHERE is_required = TRUE AND status = 'PUBLISHED'
+          AND effective_from <= now() AND (effective_until IS NULL OR effective_until > now())
+          AND registration_type IN ('DEFAULT', COALESCE(:registration_type, 'DEFAULT'))
     """), {"registration_type": org.get("registration_type")}).scalars().all()
     # The submission creates the admin review case. Document validation is
     # performed by the administrator after submission, so it cannot be a
     # prerequisite here.
     document_state = conn.execute(text("""
         SELECT count(*) AS total,
-               count(*) FILTER (WHERE upload_status = 'AVAILABLE' AND scan_status IN ('CLEAN','NOT_REQUIRED')) AS ready
+               count(*) FILTER (WHERE upload_status = 'AVAILABLE' AND scan_status = 'CLEAN' AND verified_checksum IS NOT NULL) AS ready
         FROM public.fpo_verification_documents
         WHERE fpo_id = :fpo_id AND deleted_at IS NULL
     """), {"fpo_id": str(org["fpo_id"])}).mappings().one()
@@ -1089,7 +1178,7 @@ def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]
             WHERE d.fpo_id = :fpo_id AND d.deleted_at IS NULL
               AND d.document_type = required.document_type
               AND d.upload_status = 'AVAILABLE'
-              AND d.scan_status IN ('CLEAN','NOT_REQUIRED')
+              AND d.scan_status = 'CLEAN' AND d.verified_checksum IS NOT NULL
         )
     """), {"required_documents": required_documents or [], "fpo_id": str(org["fpo_id"])}).scalars().all()
     if missing_documents:
@@ -1098,21 +1187,35 @@ def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]
     snapshot = {
         key: org.get(key)
         for key in (
-            "fpo_name", "registration_number", "registration_type", "state_name",
+            "fpo_name", "legal_name", "display_name", "registration_number", "registration_type",
+            "cin", "gstin", "operating_since_year", "state_name",
             "district_name", "district_code", "contact_person_name", "contact_phone",
             "contact_email", "main_commodities", "services_provided", "member_count",
         )
     }
+    previous = conn.execute(text("""
+        SELECT submission_id, submission_version
+        FROM public.fpo_verification_submissions
+        WHERE fpo_id = :fpo_id
+        ORDER BY created_at DESC
+        LIMIT 1
+    """), {"fpo_id": str(org["fpo_id"])}).mappings().first()
     submission = conn.execute(
         text(
             """
             INSERT INTO public.fpo_verification_submissions
-                (fpo_id, submitted_by, status, profile_snapshot)
-            VALUES (:fpo_id, :submitted_by, 'SUBMITTED', CAST(:snapshot AS jsonb))
-            RETURNING submission_id, status, created_at;
+                (fpo_id, profile_id, profile_version, submitted_by, status, profile_snapshot,
+                 profile_snapshot_hash, required_document_policy_version, checklist_policy_version,
+                 submitted_at, submission_number, submission_version, previous_submission_id)
+            VALUES (:fpo_id, :profile_id, :profile_version, :submitted_by, 'SUBMITTED', CAST(:snapshot AS jsonb),
+                    encode(digest(CAST(:snapshot AS jsonb)::text, 'sha256'), 'hex'), 'fpo-documents-v1',
+                    'fpo-verification-v1', now(),
+                    'FPOVER-' || to_char(now(), 'YYYY') || '-' || right(replace(gen_random_uuid()::text, '-', ''), 8),
+                    :submission_version, :previous_submission_id)
+            RETURNING submission_id, status, created_at, submission_number;
             """
         ),
-        {"fpo_id": str(org["fpo_id"]), "submitted_by": str(user_id), "snapshot": json.dumps(snapshot, default=str)},
+        {"fpo_id": str(org["fpo_id"]), "profile_id": str(org["profile_fpo_id"]), "profile_version": org.get("profile_version"), "submitted_by": str(user_id), "snapshot": json.dumps(snapshot, default=str), "submission_version": int(previous["submission_version"] or 0) + 1 if previous else 1, "previous_submission_id": str(previous["submission_id"]) if previous else None},
     ).mappings().one()
     conn.execute(text("""
         INSERT INTO public.fpo_verification_submission_documents
@@ -1121,7 +1224,7 @@ def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]
         FROM public.fpo_verification_documents
         WHERE fpo_id = :fpo_id AND deleted_at IS NULL
           AND upload_status = 'AVAILABLE'
-          AND scan_status IN ('CLEAN','NOT_REQUIRED')
+              AND scan_status = 'CLEAN' AND verified_checksum IS NOT NULL
         ON CONFLICT (submission_id, document_id) DO NOTHING
     """), {"submission_id": str(submission["submission_id"]), "fpo_id": str(org["fpo_id"])})
     conn.execute(
@@ -1136,17 +1239,21 @@ def submit_verification(conn: Connection, user_id: UUID | str) -> dict[str, Any]
     )
     case_id = conn.execute(
         text("""
-            INSERT INTO public.fpo_verification_cases (fpo_id, submission_id, status)
-            VALUES (:fpo_id, :submission_id, 'OPEN')
+            INSERT INTO public.fpo_verification_cases
+                (fpo_id, submission_id, status, case_number, checklist_policy_version, case_version)
+            VALUES (:fpo_id, :submission_id, 'OPEN',
+                    'FPOCASE-' || to_char(now(), 'YYYY') || '-' || right(replace(gen_random_uuid()::text, '-', ''), 8),
+                    'fpo-verification-v1', 1)
             RETURNING case_id
         """),
         {"fpo_id": str(org["fpo_id"]), "submission_id": str(submission["submission_id"])},
     ).scalar_one()
-    for checklist_key in ("IDENTITY", "REGISTRATION", "CONTACT", "GEOGRAPHY", "OPERATIONS"):
+    for checklist_key in ("LEGAL_NAME_MATCH", "REGISTRATION_NUMBER_MATCH", "REGISTRATION_TYPE_MATCH", "REGISTRATION_CERTIFICATE_VALID", "PAN_MATCH", "AUTHORIZED_REPRESENTATIVE_CONFIRMED", "REGISTERED_ADDRESS_MATCH", "CONTACT_DETAILS_VERIFIED", "REQUIRED_DOCUMENTS_PRESENT", "DOCUMENTS_SCAN_SAFE", "DOCUMENTS_ADMIN_VALID", "PROFILE_SNAPSHOT_CURRENT", "DUPLICATE_ORGANIZATION_CHECK", "RISK_FLAGS_REVIEWED"):
         conn.execute(text("""
-            INSERT INTO public.fpo_verification_checklist_results (case_id, checklist_key)
-            VALUES (:case_id, :checklist_key) ON CONFLICT (case_id, checklist_key) DO NOTHING
+            INSERT INTO public.fpo_verification_checklist_results (case_id, checklist_key, policy_version)
+            VALUES (:case_id, :checklist_key, 'fpo-verification-v1') ON CONFLICT (case_id, checklist_key) DO NOTHING
         """), {"case_id": str(case_id), "checklist_key": checklist_key})
+    _case_event(conn, case_id=case_id, event_type="CASE_CREATED", actor_user_id=user_id, metadata={"submission_id": str(submission["submission_id"])})
     return {"fpo_id": org["fpo_id"], "public_fpo_id": org["public_fpo_id"], **dict(submission)}
 
 
@@ -1158,33 +1265,10 @@ def review_verification(
     status: str,
     note: str | None,
 ) -> dict[str, Any]:
-    allowed = {"UNDER_REVIEW", "APPROVED", "CHANGES_REQUIRED", "REJECTED", "SUSPENDED"}
-    if status not in allowed:
-        raise ValueError("Unsupported verification decision")
-    submission = conn.execute(
-        text(
-            """
-            SELECT submission_id FROM public.fpo_verification_submissions
-            WHERE fpo_id = :fpo_id AND status IN ('SUBMITTED', 'UNDER_REVIEW')
-            ORDER BY created_at DESC LIMIT 1 FOR UPDATE;
-            """
-        ),
-        {"fpo_id": str(fpo_id)},
-    ).mappings().first()
-    if not submission:
-        raise ValueError("No open verification submission exists")
-    if status == "APPROVED":
-        if not note or len(note.strip()) < 3:
-            raise ValueError("An approval reason is required")
-        documents = conn.execute(text("""
-            SELECT COUNT(*) AS total,
-                   COUNT(*) FILTER (WHERE d.validation_status = 'VALID' AND d.scan_status IN ('CLEAN','NOT_REQUIRED')) AS valid
-            FROM public.fpo_verification_submission_documents sd
-            JOIN public.fpo_verification_documents d ON d.document_id = sd.document_id
-            WHERE sd.submission_id = :submission_id
-        """), {"submission_id": str(submission["submission_id"])}).mappings().one()
-        if documents["total"] == 0 or documents["total"] != documents["valid"]:
-            raise ValueError("Every submitted verification document must be administratively valid")
+    # The old organization-level endpoint is retained only for compatibility.
+    # All FPO-03 decisions must use the case-scoped decision endpoint so that
+    # assignment, checklist, snapshot and optimistic-lock rules cannot be bypassed.
+    raise ValueError("FPO_DEDICATED_DECISION_REQUIRED")
     conn.execute(
         text(
             """
@@ -1258,7 +1342,10 @@ def list_verification_queue(conn: Connection, *, status: str | None = None) -> l
                    a.class_code,
                    s.submission_id, s.status AS submission_status,
                    s.submitted_by, s.created_at AS submitted_at,
-                   s.reviewer_note, s.reviewed_at
+                   s.reviewer_note, s.reviewed_at,
+                   c.case_id, c.case_number, c.status AS case_status,
+                   c.case_version, c.assigned_reviewer_id, c.priority, c.sla_due_at,
+                   c.risk_flags
             FROM public.fpo_organizations o
             LEFT JOIN public.fpos p ON p.fpo_id = o.profile_fpo_id
             LEFT JOIN LATERAL (
@@ -1273,6 +1360,7 @@ def list_verification_queue(conn: Connection, *, status: str | None = None) -> l
                 WHERE fpo_id = o.fpo_id
                 ORDER BY created_at DESC LIMIT 1
             ) s ON TRUE
+            LEFT JOIN public.fpo_verification_cases c ON c.submission_id = s.submission_id
             -- Only submitted organizations are verification cases. Profile
             -- onboarding is not actionable by the verification reviewer and
             -- must not expose Accept/Reject controls.
@@ -1284,6 +1372,173 @@ def list_verification_queue(conn: Connection, *, status: str | None = None) -> l
         {"status": status.upper() if status else None},
     ).mappings().all()
     return [dict(row) for row in rows]
+
+
+def _case_event(conn: Connection, *, case_id: UUID | str, event_type: str, actor_user_id: UUID | str | None, reason: str | None = None, metadata: dict[str, Any] | None = None) -> None:
+    conn.execute(text("""
+        INSERT INTO public.fpo_verification_case_events
+            (case_id, event_type, actor_user_id, reason, metadata)
+        VALUES (:case_id, :event_type, :actor_user_id, :reason, CAST(:metadata AS jsonb))
+    """), {
+        "case_id": str(case_id), "event_type": event_type,
+        "actor_user_id": str(actor_user_id) if actor_user_id else None,
+        "reason": reason, "metadata": json.dumps(metadata or {}, default=str),
+    })
+
+
+def claim_verification_case(conn: Connection, *, case_id: UUID | str, reviewer_user_id: UUID | str) -> dict[str, Any]:
+    row = conn.execute(text("""
+        UPDATE public.fpo_verification_cases
+        SET status = 'UNDER_REVIEW', assigned_reviewer_id = :reviewer,
+            assigned_at = now(), review_started_at = COALESCE(review_started_at, now()),
+            case_version = case_version + 1, updated_at = now()
+        WHERE case_id = :case_id AND status IN ('OPEN','CLAIMED')
+          AND assigned_reviewer_id IS NULL
+        RETURNING *
+    """), {"case_id": str(case_id), "reviewer": str(reviewer_user_id)}).mappings().first()
+    if not row:
+        raise ValueError("FPO_VERIFICATION_CASE_ALREADY_ASSIGNED_OR_CLOSED")
+    _case_event(conn, case_id=case_id, event_type="CASE_CLAIMED", actor_user_id=reviewer_user_id)
+    return dict(row)
+
+
+def assign_verification_case(conn: Connection, *, case_id: UUID | str, reviewer_user_id: UUID | str, assigned_by: UUID | str, reason: str) -> dict[str, Any]:
+    if not reason or len(reason.strip()) < 3:
+        raise ValueError("FPO_CASE_ASSIGNMENT_REASON_REQUIRED")
+    row = conn.execute(text("""
+        UPDATE public.fpo_verification_cases
+        SET status = CASE WHEN status = 'OPEN' THEN 'CLAIMED' ELSE status END,
+            assigned_reviewer_id = :reviewer, assigned_at = now(),
+            case_version = case_version + 1, updated_at = now()
+        WHERE case_id = :case_id AND status IN ('OPEN','CLAIMED','UNDER_REVIEW')
+        RETURNING *
+    """), {"case_id": str(case_id), "reviewer": str(reviewer_user_id)}).mappings().first()
+    if not row:
+        raise ValueError("FPO_VERIFICATION_CASE_NOT_ASSIGNABLE")
+    _case_event(conn, case_id=case_id, event_type="CASE_ASSIGNED", actor_user_id=assigned_by, reason=reason, metadata={"reviewer_user_id": str(reviewer_user_id)})
+    return dict(row)
+
+
+def release_verification_case(conn: Connection, *, case_id: UUID | str, reviewer_user_id: UUID | str, reason: str) -> dict[str, Any]:
+    if not reason or len(reason.strip()) < 3:
+        raise ValueError("FPO_CASE_RELEASE_REASON_REQUIRED")
+    row = conn.execute(text("""
+        UPDATE public.fpo_verification_cases
+        SET status = 'OPEN', assigned_reviewer_id = NULL, assigned_at = NULL,
+            case_version = case_version + 1, updated_at = now()
+        WHERE case_id = :case_id AND assigned_reviewer_id = :reviewer
+          AND status IN ('CLAIMED','UNDER_REVIEW')
+        RETURNING *
+    """), {"case_id": str(case_id), "reviewer": str(reviewer_user_id)}).mappings().first()
+    if not row:
+        raise ValueError("FPO_VERIFICATION_CASE_RELEASE_NOT_ALLOWED")
+    _case_event(conn, case_id=case_id, event_type="CASE_RELEASED", actor_user_id=reviewer_user_id, reason=reason)
+    return dict(row)
+
+
+def escalate_verification_case(conn: Connection, *, case_id: UUID | str, actor_user_id: UUID | str, reason: str) -> dict[str, Any]:
+    if not reason or len(reason.strip()) < 3:
+        raise ValueError("FPO_CASE_ESCALATION_REASON_REQUIRED")
+    row = conn.execute(text("""
+        UPDATE public.fpo_verification_cases
+        SET priority = 'HIGH', escalated_at = now(),
+            case_version = case_version + 1, updated_at = now()
+        WHERE case_id = :case_id AND status NOT IN ('CLOSED','APPROVED','REJECTED')
+        RETURNING *
+    """), {"case_id": str(case_id)}).mappings().first()
+    if not row:
+        raise ValueError("FPO_VERIFICATION_CASE_NOT_ESCALATABLE")
+    _case_event(conn, case_id=case_id, event_type="CASE_ESCALATED", actor_user_id=actor_user_id, reason=reason)
+    return dict(row)
+
+
+def decide_verification_case(conn: Connection, *, case_id: UUID | str, reviewer_user_id: UUID | str, decision: str, reason_code: str, note: str, expected_case_version: int, required_actions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    if decision not in {"APPROVE", "CHANGES_REQUIRED", "REJECT"}:
+        raise ValueError("FPO_VERIFICATION_DECISION_INVALID")
+    if not reason_code or not note or len(note.strip()) < 3:
+        raise ValueError("FPO_VERIFICATION_DECISION_REASON_REQUIRED")
+    case = conn.execute(text("""
+        SELECT c.*, s.status AS submission_status, s.profile_snapshot,
+               s.profile_snapshot_hash,
+               encode(digest(s.profile_snapshot::text, 'sha256'), 'hex') AS calculated_snapshot_hash,
+               s.submission_id, s.fpo_id
+        FROM public.fpo_verification_cases c
+        JOIN public.fpo_verification_submissions s ON s.submission_id = c.submission_id
+        WHERE c.case_id = :case_id
+        FOR UPDATE OF c, s
+    """), {"case_id": str(case_id)}).mappings().first()
+    if not case:
+        raise ValueError("FPO_VERIFICATION_CASE_NOT_FOUND")
+    if case["assigned_reviewer_id"] != UUID(str(reviewer_user_id)):
+        raise ValueError("FPO_VERIFICATION_CASE_REVIEWER_REQUIRED")
+    if case["status"] != "UNDER_REVIEW":
+        raise ValueError("FPO_VERIFICATION_CASE_NOT_UNDER_REVIEW")
+    if int(case["case_version"]) != int(expected_case_version):
+        raise ValueError("FPO_VERIFICATION_CASE_VERSION_CONFLICT")
+    if case["profile_snapshot_hash"] != case["calculated_snapshot_hash"]:
+        raise ValueError("FPO_VERIFICATION_SNAPSHOT_HASH_INVALID")
+    live_profile = conn.execute(text("""
+        SELECT fpo_name, legal_name, display_name, registration_number, registration_type,
+               cin, gstin, operating_since_year, state_name, district_name, district_code,
+               contact_person_name, contact_phone, contact_email, main_commodities,
+               services_provided, member_count
+        FROM public.fpos f
+        JOIN public.fpo_organizations o ON o.profile_fpo_id = f.fpo_id
+        WHERE o.fpo_id = :fpo_id
+    """), {"fpo_id": str(case["fpo_id"])}).mappings().first()
+    if not live_profile:
+        raise ValueError("FPO_PROFILE_NOT_FOUND")
+    identity_fields = (
+        "fpo_name", "legal_name", "display_name", "registration_number", "registration_type",
+        "cin", "gstin", "operating_since_year", "state_name", "district_name", "district_code",
+        "contact_person_name", "contact_phone", "contact_email", "main_commodities",
+        "services_provided", "member_count",
+    )
+    if any(case["profile_snapshot"].get(field) != live_profile.get(field) for field in identity_fields):
+        raise ValueError("FPO_VERIFICATION_SNAPSHOT_STALE")
+    if decision == "APPROVE":
+        checks = conn.execute(text("""
+            SELECT count(*) AS total, count(*) FILTER (WHERE result IN ('PASS','NOT_APPLICABLE')) AS complete,
+                   count(*) FILTER (WHERE result = 'FAIL') AS failed
+            FROM public.fpo_verification_checklist_results WHERE case_id = :case_id
+        """), {"case_id": str(case_id)}).mappings().one()
+        if int(checks["total"]) == 0 or int(checks["complete"]) != int(checks["total"]) or int(checks["failed"]) > 0:
+            raise ValueError("FPO_VERIFICATION_CHECKLIST_INCOMPLETE")
+        docs = conn.execute(text("""
+            SELECT count(*) AS total,
+                   count(*) FILTER (WHERE d.validation_status = 'VALID' AND d.scan_status = 'CLEAN' AND d.verified_checksum IS NOT NULL) AS valid
+            FROM public.fpo_verification_submission_documents sd
+            JOIN public.fpo_verification_documents d ON d.document_id = sd.document_id
+            WHERE sd.submission_id = :submission_id AND d.deleted_at IS NULL
+        """), {"submission_id": str(case["submission_id"])}).mappings().one()
+        if int(docs["total"]) == 0 or int(docs["valid"]) != int(docs["total"]):
+            raise ValueError("FPO_VERIFICATION_DOCUMENT_VALIDATION_INCOMPLETE")
+    next_submission_status = {"APPROVE": "APPROVED", "CHANGES_REQUIRED": "CHANGES_REQUIRED", "REJECT": "REJECTED"}[decision]
+    conn.execute(text("""
+        UPDATE public.fpo_verification_submissions
+        SET status = :status, decision_reason_code = :reason_code, decision_note = :note,
+            decided_by = :reviewer, decided_at = now(), reviewer_user_id = :reviewer,
+            reviewer_note = :note, reviewed_at = now(), updated_at = now()
+        WHERE submission_id = :submission_id
+    """), {"status": next_submission_status, "reason_code": reason_code, "note": note, "reviewer": str(reviewer_user_id), "submission_id": str(case["submission_id"])})
+    conn.execute(text("""
+        UPDATE public.fpo_verification_cases
+        SET status = :case_status, closed_at = now(), case_version = case_version + 1, updated_at = now()
+        WHERE case_id = :case_id AND case_version = :expected
+    """), {"case_status": "CLOSED", "case_id": str(case_id), "expected": expected_case_version})
+    org_status = {"APPROVE": "APPROVED", "CHANGES_REQUIRED": "CHANGES_REQUIRED", "REJECT": "REJECTED"}[decision]
+    conn.execute(text("""
+        UPDATE public.fpo_organizations
+        SET verification_status = :status,
+            verification_level = CASE WHEN :status = 'APPROVED' THEN 'STANDARD' ELSE verification_level END,
+            approved_at = CASE WHEN :status = 'APPROVED' THEN now() ELSE approved_at END,
+            approved_by = CASE WHEN :status = 'APPROVED' THEN :reviewer ELSE approved_by END,
+            updated_at = now(), version = version + 1
+        WHERE fpo_id = :fpo_id
+    """), {"status": org_status, "reviewer": str(reviewer_user_id), "fpo_id": str(case["fpo_id"])})
+    _case_event(conn, case_id=case_id, event_type=f"DECISION_{decision}", actor_user_id=reviewer_user_id, reason=note, metadata={"reason_code": reason_code, "required_actions": required_actions or []})
+    record_fpo_audit_event(conn, fpo_id=case["fpo_id"], actor_user_id=reviewer_user_id, action=f"FPO_VERIFICATION_{decision}", target_type="verification_case", target_id=case_id, metadata={"reason_code": reason_code})
+    return {"case_id": case_id, "submission_id": case["submission_id"], "decision": decision, "verification_status": org_status, "required_actions": required_actions or []}
 
 
 def get_admin_overview(conn: Connection) -> dict[str, Any]:
@@ -2239,7 +2494,7 @@ def list_fpo_farmer_portfolio(
                 AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now())
                 AND 'PROFILE_READ'=ANY(c.scopes) AND 'FARM_READ'=ANY(c.scopes)
           )
-          AND (:query IS NULL OR lower(farmer_name) LIKE lower(:pattern) OR farmer_id::text = :query)
+          AND (:query IS NULL OR lower(farmer_name) LIKE lower(:pattern) OR lower(COALESCE(phone_masked, '')) LIKE lower(:pattern) OR farmer_id::text = :query)
           AND (:district_code IS NULL OR district_code = :district_code)
           AND (:block_code IS NULL OR block_code = :block_code)
           AND (:relationship_status IS NULL OR relationship_status = :relationship_status)
@@ -2269,7 +2524,7 @@ def get_fpo_farmer_detail(conn: Connection, *, user_id: UUID | str, farmer_id: U
     row = conn.execute(text("""
         SELECT r.relationship_id, r.fpo_id, r.status AS relationship_status,
                fp.farmer_id, fp.full_name, u.email,
-               NULLIF(COALESCE(fp.phone_number, u.phone_number, ''), '') AS phone_number,
+               COALESCE(portfolio.phone_masked, 'Not available') AS phone_number,
                COALESCE(fp.profile_image_url, u.profile_image_url) AS profile_image_url,
                fp.gender, fp.aadhaar_last4, fp.kyc_status,
                fp.state_name, fp.district_name, fp.block_name, fp.village_name,
@@ -2281,6 +2536,8 @@ def get_fpo_farmer_detail(conn: Connection, *, user_id: UUID | str, farmer_id: U
         JOIN public.fpo_organizations o ON o.fpo_id = r.fpo_id AND o.auth_user_id = :user_id
         JOIN public.farmer_profiles fp ON fp.farmer_id = r.farmer_profile_id
         LEFT JOIN public.users u ON u.user_id = fp.user_id
+        LEFT JOIN public.fpo_farmer_portfolio portfolio
+          ON portfolio.fpo_id = r.fpo_id AND portfolio.farmer_id = fp.farmer_id
         LEFT JOIN LATERAL (
             SELECT * FROM public.fpo_farmer_relationship_consents
             WHERE relationship_id = r.relationship_id AND revoked_at IS NULL
@@ -2290,7 +2547,7 @@ def get_fpo_farmer_detail(conn: Connection, *, user_id: UUID | str, farmer_id: U
         WHERE fp.farmer_id = :farmer_id AND r.status = 'ACTIVE'
           AND r.farm_id IS NOT NULL AND 'PROFILE_READ'=ANY(c.scopes)
           AND 'FARM_READ'=ANY(c.scopes)
-          AND 'CONTACT_DIRECT_READ'=ANY(c.scopes)
+          AND 'CONTACT_MASKED_READ'=ANY(c.scopes)
         LIMIT 1
     """), {"user_id": str(user_id), "farmer_id": str(farmer_id)}).mappings().first()
     if not row:
@@ -2350,7 +2607,7 @@ def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: st
             SELECT DISTINCT ON (f.farm_id)
                    f.farm_id, f.farmer_id, f.farm_name, f.state_name, f.district_name,
                    f.block_name, f.village_name, f.crop_code, f.crop_name, f.crop_stage,
-                   f.area_acres, f.updated_at
+                   f.area_acres, f.polygon_geojson, f.updated_at
             FROM public.farms f
             JOIN public.fpo_farmer_relationships r
               ON r.farm_id=f.farm_id AND r.fpo_id=:fpo_id AND r.status='ACTIVE'
@@ -2368,6 +2625,12 @@ def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: st
                        WHERE search_fp.fpo_id=:fpo_id
                          AND search_fp.farmer_id=f.farmer_id
                          AND lower(COALESCE(search_fp.farmer_name,'')) LIKE lower(:pattern)
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM public.fpo_farmer_portfolio search_phone
+                       WHERE search_phone.fpo_id=:fpo_id
+                         AND search_phone.farmer_id=f.farmer_id
+                         AND lower(COALESCE(search_phone.phone_masked,'')) LIKE lower(:pattern)
                    ))
             ORDER BY f.farm_id, c.captured_at DESC
         ), latest_predictions AS (
@@ -2399,9 +2662,9 @@ def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: st
             SELECT farm_id, MAX(snapshot_date) AS latest_observation_date
             FROM public.h3_sentinel2_features GROUP BY farm_id
         )
-        SELECT p.farm_id, p.farmer_id, COALESCE(fp.farmer_name, 'Farmer') AS farmer_name, p.farm_name, p.state_name, p.district_name,
+        SELECT p.farm_id, p.farmer_id, COALESCE(fp.farmer_name, 'Farmer') AS farmer_name, fp.phone_masked, p.farm_name, p.state_name, p.district_name,
                p.block_name, p.village_name, p.crop_code, p.crop_name, p.crop_stage,
-               p.area_acres, p.updated_at, pr.latest_analysis_date, o.latest_observation_date,
+               p.area_acres, p.polygon_geojson, p.updated_at, pr.latest_analysis_date, o.latest_observation_date,
                COALESCE(pr.overall_status, 'NO_DATA') AS overall_status,
                COALESCE(ar.open_alert_count, 0) AS open_alert_count,
                ar.highest_alert_severity, COALESCE(pr.predictions, '[]'::jsonb) AS predictions

@@ -20,6 +20,8 @@ import { useNavigate } from "react-router-dom";
 import "@/features/profile/profile-design.css";
 import { FarmerProfileForm } from "@/features/profile/components/FarmerProfileForm";
 import { FpoProfileForm } from "@/features/profile/components/FpoProfileForm";
+import { FpoStructuredSections } from "@/features/profile/components/FpoStructuredSections";
+import { ProfileControls } from "@/features/profile/components/ProfileControls";
 import { ProfileHeader } from "@/features/profile/components/ProfileHeader";
 import { ProfileNavigation } from "@/features/profile/components/ProfileNavigation";
 import {
@@ -48,16 +50,36 @@ const FARMER_NAV = [
 
 const FPO_NAV = [
   { id: "organisation", label: "Organisation", icon: Building2 },
-  { id: "contact", label: "Contact", icon: UserRound },
-  { id: "location", label: "Location", icon: MapPinned },
-  { id: "operations", label: "Operations", icon: Sprout },
+  { id: "contact", label: "Representative", icon: UserRound },
+  { id: "location", label: "Registered address", icon: MapPinned },
+  { id: "operations", label: "Members & operations", icon: Sprout },
+  { id: "commodities", label: "Commodities", icon: Sprout },
+  { id: "services", label: "Services", icon: Sprout },
+  { id: "service-areas", label: "Service areas", icon: MapPinned },
+  { id: "review", label: "Review & readiness", icon: ShieldCheck },
   { id: "verification", label: "Verification", icon: ShieldCheck },
   { id: "export", label: "Export", icon: FileText },
 ];
 
 function ProfileMissingFields({
   missingFields,
+  setupRequired = false,
 }) {
+  if (setupRequired) {
+    return (
+      <Motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl border border-[#DCE8D5] bg-[#F5F8F2] p-4 text-sm text-[#33492A]"
+      >
+        <p className="mt-font-display font-semibold">Let’s set up your FPO profile</p>
+        <p className="mt-1 leading-6 text-[#687064]">
+          Complete the highlighted organisation and representative details, then save once to create your FPO workspace.
+        </p>
+      </Motion.div>
+    );
+  }
+
   if (!missingFields.length) {
     return (
       <Motion.div
@@ -127,6 +149,7 @@ export function ProfileSettingsPage() {
   const [verification, setVerification] = useState(null);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationError, setVerificationError] = useState("");
+  const [fpoReadiness, setFpoReadiness] = useState(null);
 
   useEffect(() => {
     if (profileType === "fpo") {
@@ -156,6 +179,14 @@ export function ProfileSettingsPage() {
     } finally {
       setVerificationLoading(false);
     }
+  };
+
+  const handleFpoSave = async (payload, isSetup) => {
+    const nextEnvelope = await saveFpoProfile(payload, isSetup);
+    if (isSetup) {
+      navigate("/fpo/me", { replace: true, state: { profileCreated: true } });
+    }
+    return nextEnvelope;
   };
 
   if (loading) {
@@ -223,6 +254,7 @@ export function ProfileSettingsPage() {
             completionPercentage={
               completionPercentage
             }
+            readinessPercentage={fpoReadiness?.percentage}
             onboardingStatus={
               onboardingStatus
             }
@@ -253,6 +285,7 @@ export function ProfileSettingsPage() {
                 missingFields={
                   missingFields
                 }
+                setupRequired={setupRequired}
               />
 
               {profileType === "fpo" ? (
@@ -264,10 +297,12 @@ export function ProfileSettingsPage() {
                     saving={saving}
                     exporting={exporting}
                     savedAt={savedAt}
-                    onSave={saveFpoProfile}
+                    onSave={handleFpoSave}
                     onExport={handleExport}
+                    showControls={false}
                   />
-                  <section className="rounded-2xl border border-[#E3E8DE] bg-white p-5 shadow-[0_4px_14px_rgba(43,61,35,0.04)]">
+                  {profile ? <FpoStructuredSections onReadinessChange={setFpoReadiness} /> : null}
+                  {profile ? <section className="rounded-2xl border border-[#E3E8DE] bg-white p-5 shadow-[0_4px_14px_rgba(43,61,35,0.04)]">
                   <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8A9A84]">Verification</p>
@@ -277,10 +312,18 @@ export function ProfileSettingsPage() {
                     <span className="rounded-full bg-[#F1F5EF] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-[#58734B]">{String(verification?.verification_status || "PROFILE_INCOMPLETE").replaceAll("_", " ")}</span>
                   </div>
                   {verificationError ? <p className="mt-3 text-sm text-rose-600">{verificationError}</p> : null}
-                  <button type="button" onClick={handleSubmitVerification} disabled={verificationLoading || !profile || Boolean(verification?.verification_status && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(verification.verification_status))} className="mt-4 rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A] disabled:cursor-not-allowed disabled:opacity-50">
+                  <button type="button" onClick={handleSubmitVerification} disabled={verificationLoading || !profile || !fpoReadiness?.ready || Boolean(verification?.verification_status && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(verification.verification_status))} className="mt-4 rounded-xl bg-[#4B6B3A] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#33492A] disabled:cursor-not-allowed disabled:opacity-50">
                     {verificationLoading ? "Submitting…" : "Submit for verification"}
                   </button>
-                  </section>
+                  {!fpoReadiness?.ready ? <p className="mt-3 text-xs font-semibold text-amber-700">Complete the readiness requirements above before submitting verification.</p> : null}
+                  </section> : null}
+                  <ProfileControls
+                    saving={saving}
+                    exporting={exporting}
+                    savedAt={savedAt}
+                    onExport={handleExport}
+                    formId="fpo-profile-form"
+                  />
                 </>
               ) : (
                 <FarmerProfileForm

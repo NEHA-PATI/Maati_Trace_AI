@@ -18,6 +18,7 @@ from services.profile_service.app.location_client import (
 )
 from services.profile_service.app.repository import (
     create_fpo_with_membership,
+    ensure_fpo_organization_for_profile,
     ensure_farmer_profile,
     get_farmer_by_id,
     get_farmer_by_user_id,
@@ -30,7 +31,9 @@ from services.profile_service.app.repository import (
     update_fpo_profile,
     update_user_onboarding_status,
     update_user_profile_projection,
+    record_profile_change,
 )
+from services.profile_service.app.profile_change_policy import classify_profile_changes
 from services.profile_service.app.schemas import (
     FarmerProfileResponse,
     FarmerProfileUpdate,
@@ -287,6 +290,9 @@ def _public_fpo_profile(
     )
     public_profile["profile_completion_percentage"] = profile.get("profile_completion_percentage") or 0
     public_profile["verification_readiness_percentage"] = profile.get("verification_readiness_percentage") or 0
+    public_profile["preferred_language"] = profile.get("preferred_language") or "en"
+    public_profile["profile_status"] = profile.get("profile_status") or "DRAFT"
+    public_profile["verification_refresh_required"] = bool(profile.get("verification_refresh_required"))
 
     public_profile["district_name"] = (
         public_location_value(
@@ -949,7 +955,6 @@ async def update_my_farmer_profile(
                 ),
                 ip_address=context.ip_address,
             )
-
         return _farmer_envelope(updated)
 
     except ProfileError:
@@ -1057,6 +1062,20 @@ async def setup_my_fpo_profile(
                 user_id=principal.user_id,
                 values=values,
             )
+            try:
+                ensure_fpo_organization_for_profile(
+                    conn,
+                    user_id=principal.user_id,
+                    profile_fpo_id=profile["fpo_id"],
+                    state_name=values.get("state_name"),
+                )
+            except ValueError as exc:
+                raise ProfileError(
+                    "FPO_PROFILE_LINK_CONFLICT",
+                    "The FPO profile could not be linked to this account.",
+                    409,
+                    internal_message=str(exc),
+                ) from exc
 
             update_user_onboarding_status(
                 conn,
@@ -1082,6 +1101,17 @@ async def setup_my_fpo_profile(
                     context.correlation_id
                 ),
                 ip_address=context.ip_address,
+            )
+            record_profile_change(
+                conn,
+                profile_id=profile["fpo_id"],
+                organization_id=profile.get("organization_id"),
+                actor_user_id=principal.user_id,
+                previous_version=0,
+                new_version=profile.get("profile_version") or 1,
+                changed_fields=list(payload.model_fields_set),
+                classification=classify_profile_changes(list(payload.model_fields_set)),
+                correlation_id=context.correlation_id,
             )
 
         return _fpo_envelope(profile)
@@ -1120,6 +1150,13 @@ async def update_my_fpo_profile(
     changes = payload.model_dump(
         exclude_unset=True,
     )
+
+    if payload.profile_version is None:
+        raise ProfileError(
+            "FPO_PROFILE_VERSION_REQUIRED",
+            "Profile updates must include the latest profile_version.",
+            409,
+        )
 
     try:
         with engine.connect() as conn:
@@ -1160,6 +1197,14 @@ async def update_my_fpo_profile(
                     "The FPO profile was not found.",
                     404,
                 )
+
+        if payload.profile_version != existing.get("profile_version"):
+            raise ProfileError(
+                "FPO_PROFILE_VERSION_CONFLICT",
+                "The profile was updated in another session.",
+                409,
+                internal_message=f"current_version={existing.get('profile_version')}",
+            )
 
         if (
             "registration_number" in changes
@@ -1293,6 +1338,7 @@ async def update_my_fpo_profile(
                 "fpo_name",
                 "registration_number",
                 "registration_type",
+                "registration_authority",
                 "date_of_registration",
                 "promoted_by",
                 "promoting_institution_name",
@@ -1301,6 +1347,7 @@ async def update_my_fpo_profile(
                 "contact_phone",
                 "alternate_phone",
                 "contact_email",
+                "preferred_language",
                 "state_name",
                 "district_name",
                 "district_code",
@@ -1309,21 +1356,31 @@ async def update_my_fpo_profile(
                 "village_name",
                 "gram_panchayat",
                 "pincode",
+                "postal_code",
+                "state_code",
+                "village_code",
+                "gram_panchayat_code",
+                "gram_panchayat_name",
                 "office_address",
                 "main_commodities",
                 "member_count",
                 "active_member_count",
+                "female_member_count",
+                "year_established",
                 "services_provided",
                 "profile_image_url",
             )
         }
 
         with engine.begin() as conn:
+            change_classification = classify_profile_changes(list(changes.keys()))
             updated = update_fpo_profile(
                 conn,
                 fpo_id=membership["fpo_id"],
                 values=repository_values,
                 profile_complete=complete,
+                expected_profile_version=payload.profile_version,
+                change_classification=change_classification,
             )
 
             if updated is None:
@@ -1361,6 +1418,17 @@ async def update_my_fpo_profile(
                     context.correlation_id
                 ),
                 ip_address=context.ip_address,
+            )
+            record_profile_change(
+                conn,
+                profile_id=updated["fpo_id"],
+                organization_id=updated.get("organization_id"),
+                actor_user_id=principal.user_id,
+                previous_version=(updated["profile_version"] - 1),
+                new_version=updated["profile_version"],
+                changed_fields=list(changes.keys()),
+                classification=change_classification,
+                correlation_id=context.correlation_id,
             )
 
         return _fpo_envelope(updated)

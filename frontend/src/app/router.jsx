@@ -35,6 +35,7 @@ import FpoFarmIntelligencePage from "@/features/fpo/farmers/FpoFarmIntelligenceP
 import FpoAlertsPage from "@/features/fpo/dashboard/FpoAlertsPage";
 import FpoReportsPage from "@/features/fpo/dashboard/FpoReportsPage";
 import FpoMonitoringPage from "@/features/fpo/dashboard/FpoMonitoringPage";
+import FpoNaturalDisasterPage from "@/features/fpo/dashboard/FpoNaturalDisasterPage";
 import FpoGeographyPage from "@/features/fpo/dashboard/FpoGeographyPage";
 import FpoCropPerformancePage from "@/features/fpo/dashboard/FpoCropPerformancePage";
 import FpoImportsPage from "@/features/fpo/dashboard/FpoImportsPage";
@@ -62,6 +63,7 @@ import FpoProvisioningPage from "@/features/fpo/access/FpoProvisioningPage";
 
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminFpoRegistryPage from "@/pages/AdminFpoRegistryPage";
+import AdminFpoProfilePage from "@/pages/AdminFpoProfilePage";
 import AdminServiceHealthPage from "@/pages/AdminServiceHealthPage";
 import SystemManagementPage from "@/pages/SystemManagementPage";
 import HistoricalAcquisitionPage from "@/pages/HistoricalAcquisitionPage";
@@ -114,6 +116,7 @@ export const router = createBrowserRouter(
             { path: "/admin/fpo-access", element: <FpoAccessAdminPage /> },
             { path: "/admin/fpo", element: <FpoAdminPage /> },
             { path: "/admin/fpo-registry", element: <AdminFpoRegistryPage /> },
+            { path: "/admin/fpo-profile/:fpoId", element: <AdminFpoProfilePage /> },
             { path: "/admin/service-health", element: <AdminServiceHealthPage /> },
             {
               path: "/admin/fpo/verification",
@@ -194,6 +197,7 @@ export const router = createBrowserRouter(
                 { path: "/fpo/alerts", element: <FpoAlertsPage /> },
                 { path: "/fpo/reports", element: <FpoReportsPage /> },
                 { path: "/fpo/monitoring", element: <FpoMonitoringPage /> },
+                { path: "/fpo/natural-disasters", element: <FpoNaturalDisasterPage /> },
                 { path: "/fpo/geography", element: <FpoGeographyPage /> },
                 { path: "/fpo/crops", element: <FpoCropPerformancePage /> },
                 { path: "/fpo/imports", element: <FpoImportsPage /> },

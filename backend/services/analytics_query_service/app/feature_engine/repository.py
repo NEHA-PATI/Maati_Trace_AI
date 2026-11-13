@@ -690,44 +690,65 @@ def upsert_grid_prediction_rows(rows: list[dict[str, Any]]) -> int:
     return len(rows)
 
 
-def get_latest_grid_calculations(farm_id: UUID | str, result_date: str | None = None) -> list[dict[str, Any]]:
+def get_latest_grid_calculations(
+    farm_id: UUID | str,
+    result_date: str | None = None,
+    prediction_key: str | None = None,
+    compact: bool = False,
+) -> list[dict[str, Any]]:
     date_clause = "gv.result_date = CAST(:result_date AS date)" if result_date else "gv.result_date = (SELECT MAX(result_date) FROM farm_grid_calculated_values WHERE farm_id = :farm_id)"
-    rows = _rows(
-        f"""
-        SELECT
+    prediction_clause = "AND gv.prediction_key = :prediction_key" if prediction_key else ""
+    select_clause = """
             gv.*,
             gc.grid_row, gc.grid_col, gc.grid_size_meters,
             gc.cell_polygon_geojson, gc.cell_centroid_lon, gc.cell_centroid_lat,
             gc.coverage_ratio
+        """ if not compact else """
+            gv.farm_id, gv.grid_cell_id, gv.result_date, gv.crop_code,
+            gv.prediction_key, gv.display_name, gv.score, gv.score_direction,
+            gv.status_label, gv.confidence, gv.formula_version,
+            gv.crop_profile_version, gv.feature_version, gv.value_source,
+            gv.contributing_h3_count, gv.dominant_h3_index,
+            gc.grid_row, gc.grid_col
+        """
+    params = {"farm_id": str(farm_id), "result_date": result_date}
+    if prediction_key:
+        params["prediction_key"] = prediction_key
+    rows = _rows(
+        f"""
+        SELECT
+            {select_clause}
         FROM farm_grid_calculated_values gv
         JOIN farm_grid_cells gc ON gc.grid_cell_id = gv.grid_cell_id
         WHERE gv.farm_id = :farm_id
           AND {date_clause}
+          {prediction_clause}
         ORDER BY gc.grid_row, gc.grid_col, gv.prediction_key;
         """,
-        {"farm_id": str(farm_id), "result_date": result_date},
+        params,
     )
     # Pivot one database row per prediction into one frontend row per display grid cell.
     by_cell: dict[str, dict[str, Any]] = {}
     for row in rows:
         key = str(row["grid_cell_id"])
-        cell = by_cell.setdefault(
-            key,
-            {
+        cell_defaults = {
                 "farm_id": row["farm_id"],
                 "grid_cell_id": row["grid_cell_id"],
                 "grid_row": row["grid_row"],
                 "grid_col": row["grid_col"],
+                "result_date": row["result_date"],
+                "crop_code": row["crop_code"],
+                "calculations": {},
+            }
+        if not compact:
+            cell_defaults.update({
                 "grid_size_meters": row["grid_size_meters"],
                 "cell_polygon_geojson": row["cell_polygon_geojson"],
                 "cell_centroid_lon": row["cell_centroid_lon"],
                 "cell_centroid_lat": row["cell_centroid_lat"],
                 "coverage_ratio": row["coverage_ratio"],
-                "result_date": row["result_date"],
-                "crop_code": row["crop_code"],
-                "calculations": {},
-            },
-        )
+            })
+        cell = by_cell.setdefault(key, cell_defaults)
         prediction = row["prediction_key"]
         payload = {
             "score": row.get("score"),

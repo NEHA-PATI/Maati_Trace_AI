@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
@@ -60,6 +62,33 @@ DEFAULT_FRESHNESS_HALF_LIFE_DAYS: dict[str, float] = {
 SENTINEL2_FEATURE_MAX_AGE_DAYS = 120
 SENTINEL1_FEATURE_MAX_AGE_DAYS = 60
 LANDSAT_FEATURE_MAX_AGE_DAYS = 90
+
+
+@dataclass(frozen=True)
+class _DateIndexedRows:
+    rows: tuple[dict[str, Any], ...]
+    dates: tuple[date, ...]
+    date_key: str
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+
+def _date_index(rows: Iterable[dict[str, Any]], date_key: str) -> _DateIndexedRows:
+    pairs = [
+        (parsed, row)
+        for row in rows
+        if (parsed := _date(row.get(date_key))) is not None
+    ]
+    pairs.sort(key=lambda item: item[0])
+    return _DateIndexedRows(
+        rows=tuple(row for _, row in pairs),
+        dates=tuple(parsed for parsed, _ in pairs),
+        date_key=date_key,
+    )
 
 
 def _date(value: Any) -> date | None:
@@ -154,6 +183,15 @@ def _nearest_before(
     date_key: str,
     max_age_days: int | None = None,
 ) -> dict[str, Any] | None:
+    if isinstance(rows, _DateIndexedRows) and rows.date_key == date_key:
+        index = bisect_right(rows.dates, target) - 1
+        if index < 0:
+            return None
+        candidate_date = rows.dates[index]
+        if max_age_days is not None and (target - candidate_date).days > max_age_days:
+            return None
+        return rows.rows[index]
+
     candidates: list[tuple[int, dict[str, Any]]] = []
     for row in rows:
         d = _date(row.get(date_key))
@@ -503,6 +541,17 @@ def _static_for_h3(rows: list[dict[str, Any]], h3_index: int) -> dict[str, Any] 
     return matches[-1] if matches else None
 
 
+def _index_by_h3(rows: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    """Index H3-backed source rows once for large-farm feature processing."""
+    indexed: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        h3_index = row.get("h3_index")
+        if h3_index is None:
+            continue
+        indexed[int(h3_index)].append(row)
+    return indexed
+
+
 def _source_quality(
     source: str,
     *,
@@ -598,12 +647,16 @@ def build_feature_rows(
 
     s1_by_h3 = _by_h3(s1_rows)
     landsat_by_h3 = _by_h3(landsat_rows)
-    gpm = _dedupe_daily(bundle.get("gpm") or [], "observation_date")
-    era5 = _dedupe_daily(bundle.get("era5") or [], "observation_date")
-    smap = list(bundle.get("smap") or [])
+    gpm = _date_index(_dedupe_daily(bundle.get("gpm") or [], "observation_date"), "observation_date")
+    era5 = _date_index(_dedupe_daily(bundle.get("era5") or [], "observation_date"), "observation_date")
+    smap = _date_index(bundle.get("smap") or [], "observed_at")
     modis_et = list(bundle.get("modis_et") or [])
     modis_veg = list(bundle.get("modis_vegetation") or [])
     forecast = list(bundle.get("forecast") or [])
+    terrain_by_h3 = _index_by_h3(bundle.get("terrain") or [])
+    landcover_by_h3 = _index_by_h3(bundle.get("landcover") or [])
+    jrc_water_by_h3 = _index_by_h3(bundle.get("jrc_water") or [])
+    soilgrids_by_h3 = _index_by_h3(bundle.get("soilgrids") or [])
 
     windows = [int(v) for v in (profile.get("temporal_windows") or {}).get("rainfall", []) if int(v) > 0]
     results: list[dict[str, Any]] = []
@@ -685,12 +738,12 @@ def build_feature_rows(
         forecast_features, forecast_current = _forecast_features(forecast, target)
         features.update(forecast_features)
 
-        terrain = _static_for_h3(bundle.get("terrain") or [], h3_index)
+        terrain = (terrain_by_h3.get(h3_index) or [None])[-1]
         if terrain:
             for key in ["mean_elevation_m", "min_elevation_m", "max_elevation_m", "mean_slope_deg", "max_slope_deg", "mean_aspect_deg"]:
                 features[key] = _num(terrain.get(key))
 
-        landcover = _static_for_h3(bundle.get("landcover") or [], h3_index)
+        landcover = (landcover_by_h3.get(h3_index) or [None])[-1]
         if landcover:
             for key in [
                 "dominant_class", "dominant_fraction", "tree_cover_fraction", "shrubland_fraction",
@@ -700,7 +753,7 @@ def build_feature_rows(
             ]:
                 features[key] = _num(landcover.get(key))
 
-        jrc = _static_for_h3(bundle.get("jrc_water") or [], h3_index)
+        jrc = (jrc_water_by_h3.get(h3_index) or [None])[-1]
         if jrc:
             features.update({
                 "water_occurrence_pct": _num(jrc.get("water_occurrence_pct")),
@@ -710,7 +763,7 @@ def build_feature_rows(
                 "historic_extent_fraction": _num(jrc.get("historic_extent_fraction")),
             })
 
-        soil_rows = [row for row in (bundle.get("soilgrids") or []) if int(row.get("h3_index") or -1) == h3_index]
+        soil_rows = soilgrids_by_h3.get(h3_index, [])
         soil_features, soil_quality = _soil_features(soil_rows, profile)
         features.update(soil_features)
 

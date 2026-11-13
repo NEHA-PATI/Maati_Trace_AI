@@ -14,6 +14,7 @@ export function ProfileControls({
   exporting,
   savedAt,
   onExport,
+  formId,
 }) {
   const [justSaved, setJustSaved] =
     useState(false);
@@ -41,7 +42,7 @@ export function ProfileControls({
         duration: 0.4,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="relative z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 lg:sticky lg:bottom-4 lg:flex-row lg:items-center lg:justify-between"
+      className="relative z-20 flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition-shadow duration-300 lg:flex-row lg:items-center lg:justify-between"
     >
       <div className="flex items-center gap-3">
         {justSaved ? (
@@ -90,6 +91,7 @@ export function ProfileControls({
         </button>
         <button
           type="submit"
+          form={formId}
           disabled={saving}
           className="relative inline-flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-[color:var(--mt-forest-deep)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(16,185,129,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color:var(--mt-forest)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-70 lg:w-auto"
         >
