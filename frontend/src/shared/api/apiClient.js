@@ -120,7 +120,14 @@ async function execute(path, options = {}) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = performance.now();
-  const url = joinUrl(serviceBaseUrl(serviceName), servicePath(path));
+  // The browser app is served from the same HTTPS origin as the API gateway.
+  // Resolve gateway routes against the current page origin so a stale or
+  // malformed absolute environment value can never downgrade a request to
+  // HTTP and trigger mixed-content blocking.
+  const url = new URL(
+    servicePath(path),
+    window.location.origin,
+  ).toString();
 
   const loggedPath = safePathForLog(path);
   logger.debug("api_request_started", { serviceName, method, path: loggedPath, authMode, correlationId: requestCorrelationId });
