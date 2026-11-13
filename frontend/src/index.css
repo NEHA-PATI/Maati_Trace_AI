@@ -559,6 +559,16 @@ div.divide-y.divide-slate-100 > p.p-8.text-center::before {
   white-space: nowrap;
 }
 
+/* FPO routes are rendered outside the optional typography wrapper as well. */
+a[href*="/fpo/farmers/"][href*="/intelligence"] {
+  display: inline-flex;
+  min-width: max-content;
+  width: max-content;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap !important;
+}
+
 /* Report panels need to account for the fixed FPO sidebar at desktop widths. */
 @media (min-width: 1024px) {
   .fpo-shell main > .space-y-6.pb-10 > section.grid.gap-6 {
