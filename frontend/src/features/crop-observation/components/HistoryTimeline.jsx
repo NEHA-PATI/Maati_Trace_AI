@@ -4,7 +4,7 @@ import { Camera, ChevronDown, Loader2, Mic, Play } from "lucide-react";
 import { fetchAuthedMediaBlob } from "@/features/crop-observation/api/cropObservationApi";
 import Bilingual from "@/features/crop-observation/components/Bilingual";
 import { iconForPractice } from "@/features/crop-observation/components/fieldIcons";
-import { STATUS_STRINGS, STRINGS, practiceLabel, primary } from "@/features/crop-observation/i18n";
+import { STATUS_STRINGS, STRINGS, formatDate as formatLocalizedDate, practiceLabel, primary } from "@/features/crop-observation/i18n";
 import { cn } from "@/lib/utils";
 
 const STATUS_DOT = {
@@ -15,7 +15,7 @@ const STATUS_DOT = {
 
 function formatDate(value, locale) {
   try {
-    return new Date(value).toLocaleDateString(locale === "or-IN" ? "or-IN" : "en-IN", {
+    return formatLocalizedDate(value, locale, {
       day: "numeric",
       month: "short",
       year: "numeric",

@@ -43,3 +43,34 @@ export function persistLocale(locale) {
   }
   return next;
 }
+
+export const LANGUAGE_STRINGS = Object.freeze({
+  switchToEnglish: { en: "English", or: "ଇଂରାଜୀ" },
+  switchToOdia: { en: "ଓଡ଼ିଆ", or: "ଓଡ଼ିଆ" },
+  language: { en: "Language", or: "ଭାଷା" },
+  notifications: { en: "Notifications", or: "ବିଜ୍ଞପ୍ତି" },
+  logout: { en: "Log out", or: "ଲଗ୍ ଆଉଟ୍" },
+  loggingOut: { en: "Logging out…", or: "ଲଗ୍ ଆଉଟ୍ ହେଉଛି…" },
+  home: { en: "Home", or: "ମୁଖ୍ୟ ପୃଷ୍ଠା" },
+  ourMethod: { en: "Our Method", or: "ଆମ ପଦ୍ଧତି" },
+  useCases: { en: "Use Cases", or: "ବ୍ୟବହାର କ୍ଷେତ୍ର" },
+  plans: { en: "Plans", or: "ଯୋଜନା" },
+  dashboard: { en: "Dashboard", or: "ଡ୍ୟାସବୋର୍ଡ" },
+  myCrop: { en: "My Crop", or: "ମୋ ଫସଲ" },
+  fpos: { en: "FPOs", or: "ଏଫପିଓ" },
+  profile: { en: "Profile", or: "ପ୍ରୋଫାଇଲ" },
+  register: { en: "Register", or: "ପଞ୍ଜୀକରଣ" },
+  fpoWorkspace: { en: "FPO Workspace", or: "ଏଫପିଓ କାର୍ଯ୍ୟକ୍ଷେତ୍ର" },
+  farmers: { en: "Farmers", or: "ଚାଷୀ" },
+  monitoring: { en: "Monitoring", or: "ନିରୀକ୍ଷଣ" },
+  reports: { en: "Reports", or: "ରିପୋର୍ଟ" },
+  adminDashboard: { en: "Admin Dashboard", or: "ଆଡମିନ ଡ୍ୟାସବୋର୍ଡ" },
+  login: { en: "Login", or: "ଲଗଇନ" },
+  getStarted: { en: "Get Started", or: "ଆରମ୍ଭ କରନ୍ତୁ" },
+});
+
+export function languageString(key, locale) {
+  const value = LANGUAGE_STRINGS[key];
+  if (!value) return key;
+  return (normalizeLocale(locale) === LOCALES.OR ? value.or : value.en) || value.en;
+}

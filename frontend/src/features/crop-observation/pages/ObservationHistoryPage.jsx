@@ -29,11 +29,11 @@ export default function ObservationHistoryPage() {
       setItems(page.items);
       setNextCursor(page.next_cursor);
     } catch (err) {
-      setError(err?.message || "Could not load history.");
+      setError(err?.message || primary(STRINGS.couldNotLoadHistory, locale));
     } finally {
       setLoading(false);
     }
-  }, [cropCycleId]);
+  }, [cropCycleId, locale]);
 
   useEffect(() => {
     loadFirstPage();
@@ -47,7 +47,7 @@ export default function ObservationHistoryPage() {
       setItems((prev) => [...prev, ...page.items]);
       setNextCursor(page.next_cursor);
     } catch (err) {
-      setError(err?.message || "Could not load more.");
+      setError(err?.message || primary(STRINGS.couldNotLoadMore, locale));
     } finally {
       setLoadingMore(false);
     }

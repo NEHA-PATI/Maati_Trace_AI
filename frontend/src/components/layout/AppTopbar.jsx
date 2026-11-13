@@ -3,9 +3,10 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Bell, LogOut } from "lucide-react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
-import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
-import { LanguageToggle } from "@/features/language";
 import { useTranslation } from "@/features/i18n";
+import { getAuthenticatedNavigation, isNavigationItemActive } from "@/shared/navigation/roleNavigation";
+import { LanguageToggle, useLanguage } from "@/features/language";
+import { languageString } from "@/features/language/language";
 import LogoutConfirmModal from "@/features/auth/components/LogoutConfirmModal";
 
 function MaatiLogo() {
@@ -27,7 +28,7 @@ export default function AppTopbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
-  const { t } = useTranslation();
+  const { locale } = useLanguage();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -70,7 +71,7 @@ export default function AppTopbar() {
                     : "text-[var(--mt-ink-soft)] hover:bg-[var(--mt-paper-warm)]"
                 }`}
               >
-                {t(item.labelKey || item.label)}
+                {languageString(item.labelKey, locale)}
               </NavLink>
             );
           })}
@@ -80,8 +81,8 @@ export default function AppTopbar() {
           <LanguageToggle />
           <Link
             to="/notifications"
-            aria-label={t("notifications")}
-            title={t("notifications")}
+            aria-label={languageString("notifications", locale)}
+            title={languageString("notifications", locale)}
             className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors ${
               location.pathname === "/notifications"
                 ? "border-[var(--mt-leaf)] bg-[var(--mt-leaf-tint)] text-[var(--mt-leaf-deep)]"

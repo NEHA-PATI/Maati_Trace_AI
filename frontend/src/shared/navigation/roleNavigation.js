@@ -1,29 +1,29 @@
 import { ROLES } from "@/shared/rbac/permissions";
 
 const PUBLIC_ITEMS = [
-  { to: "/", labelKey: "home", label: "Home", end: true },
-  { to: "/our-method", labelKey: "ourMethod", label: "Our Method" },
-  { to: "/use-cases", labelKey: "useCases", label: "Use Cases" },
-  { to: "/plans", labelKey: "plans", label: "Plans" },
+  { to: "/", label: "Home", labelKey: "home", end: true },
+  { to: "/our-method", label: "Our Method", labelKey: "ourMethod" },
+  { to: "/use-cases", label: "Use Cases", labelKey: "useCases" },
+  { to: "/plans", label: "Plans", labelKey: "plans" },
 ];
 
 const ROLE_ITEMS = {
   [ROLES.FARMER]: [
-    { to: "/farmer/me", labelKey: "dashboard", label: "Dashboard", end: true },
-    { to: "/my-crops/language", labelKey: "myCrop", label: "My Crop" },
-    { to: "/farmer/fpo", labelKey: "fpos", label: "FPOs" },
-    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
-    { to: "/farm-register", labelKey: "register", label: "Register" },
+    { to: "/farmer/me", label: "Dashboard", labelKey: "dashboard", end: true },
+    { to: "/my-crops/language", label: "My Crop", labelKey: "myCrop" },
+    { to: "/farmer/fpo", label: "FPOs", labelKey: "fpos" },
+    { to: "/settings", label: "Profile", labelKey: "profile", end: true },
+    { to: "/farm-register", label: "Register", labelKey: "register" },
   ],
   [ROLES.FPO]: [
-    { to: "/fpo/overview", labelKey: "fpoWorkspace", label: "FPO Workspace" },
-    { to: "/fpo/farmers", labelKey: "farmers", label: "Farmers" },
-    { to: "/fpo/monitoring", labelKey: "monitoring", label: "Monitoring" },
-    { to: "/fpo/reports", labelKey: "reports", label: "Reports" },
-    { to: "/settings", labelKey: "profile", label: "Profile", end: true },
+    { to: "/fpo/overview", label: "FPO Workspace", labelKey: "fpoWorkspace" },
+    { to: "/fpo/farmers", label: "Farmers", labelKey: "farmers" },
+    { to: "/fpo/monitoring", label: "Monitoring", labelKey: "monitoring" },
+    { to: "/fpo/reports", label: "Reports", labelKey: "reports" },
+    { to: "/settings", label: "Profile", labelKey: "profile", end: true },
   ],
   [ROLES.ADMIN]: [
-    { to: "/admin", label: "Admin Dashboard", end: true },
+    { to: "/admin", label: "Admin Dashboard", labelKey: "adminDashboard", end: true },
   ],
 };
 

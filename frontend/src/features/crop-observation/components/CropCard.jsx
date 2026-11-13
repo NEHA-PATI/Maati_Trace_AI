@@ -31,7 +31,7 @@ function CropCard({ crop, attached, onSelect, onPrefetch, disabled, locale }) {
       </div>
       <div className="min-w-0 flex-1">
         <Bilingual as="div" className="truncate text-[16px] font-black tracking-[-0.01em] text-[#1D2117]" primaryText={crop.name} />
-        <p className="mt-1 truncate text-[13px] font-medium text-[#687064]">{crop.lifecycle_type === "PERENNIAL" ? (locale === "or-IN" ? "ବହୁବର୍ଷୀୟ ଫସଲ" : "Perennial crop") : (locale === "or-IN" ? "ଋତୁକାଳୀନ ଫସଲ" : "Seasonal crop")}</p>
+          <p className="mt-1 truncate text-[13px] font-medium text-[#687064]">{crop.lifecycle_type === "PERENNIAL" ? primary(STRINGS.perennialCrop, locale) : primary(STRINGS.seasonalCrop, locale)}</p>
         {attached ? (
           <span className="mt-2 inline-flex rounded-full bg-[#E8F3E0] px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-[#426333]">
             {primary(STRINGS.active, locale)}

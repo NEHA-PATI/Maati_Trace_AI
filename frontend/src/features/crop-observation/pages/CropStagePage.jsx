@@ -16,7 +16,7 @@ import { systemMediaUrl } from "@/features/crop-observation/api/cropObservationA
 import { iconForPractice } from "@/features/crop-observation/components/fieldIcons";
 import { useCropScreen } from "@/features/crop-observation/hooks/useCropScreen";
 import { useLocale } from "@/features/crop-observation/hooks/useLocale";
-import { PRACTICE_META, STRINGS, primary } from "@/features/crop-observation/i18n";
+import { PRACTICE_META, STRINGS, formatDate, primary } from "@/features/crop-observation/i18n";
 import { cn } from "@/lib/utils";
 
 function newClientEntryId() {
@@ -41,7 +41,7 @@ export default function CropStagePage() {
 
   const currentStatus = screen.today.observation?.crop_status || null;
   const todayAnswersByPractice = new Map((screen.today.observation?.practices || []).map((p) => [p.practice_code, p]));
-  const todayLabel = new Date(screen.today.date).toLocaleDateString(locale === "or-IN" ? "or-IN" : "en-IN", { weekday: "short", day: "numeric", month: "short" });
+  const todayLabel = formatDate(screen.today.date, locale, { weekday: "short", day: "numeric", month: "short" });
 
   const history = screen.recent_history?.length ? (
     <section className="rounded-[20px] border border-[#E3E8DE] bg-[#FBFCF8] p-4">
