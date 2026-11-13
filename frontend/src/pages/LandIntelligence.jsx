@@ -166,6 +166,8 @@ export default function LandIntelligence() {
   const [pipelineDetails, setPipelineDetails] = useState([]);
   const [analysisStatus, setAnalysisStatus] = useState(null);
   const manualRunRef = useRef(false);
+  const analysisWasActiveRef = useRef(false);
+  const loadRequestRef = useRef(0);
 
   function updatePipelineStage(stage, status, details = []) {
     setPipelineStage(stage);
@@ -174,25 +176,29 @@ export default function LandIntelligence() {
   }
 
   async function loadLandIntelligence(statusSnapshot = analysisStatus) {
+    const requestId = ++loadRequestRef.current;
     const completedResultDate = statusSnapshot?.latest_completed_run?.result_date
       ? String(statusSnapshot.latest_completed_run.result_date).slice(0, 10)
       : "";
-    const needsRawGridValues = !CALCULATED_METRICS.some((metric) => metric.key === selectedParameter);
     const [farmPayload, gridCellsPayload, gridValuesPayload, h3Payload, gridCalculationsPayload, farmCalculationsPayload] = await Promise.all([
       getFarm(farmId),
       getFarmGridCells(farmId).catch(() => []),
-      needsRawGridValues ? getLatestGridValues(farmId).catch(() => []) : Promise.resolve([]),
+      // Load raw values once so switching between calculated and source
+      // parameters is a local map update, not another page load.
+      getLatestGridValues(farmId).catch(() => []),
       getFarmH3Cells(farmId).catch(() => []),
-      getLatestGridCalculations(farmId, completedResultDate, selectedParameter).catch(() => []),
+      // Fetch the complete latest calculation set once. The map already has
+      // every parameter it needs and can select a metric without refetching.
+      getLatestGridCalculations(farmId, completedResultDate, "").catch(() => []),
       getLatestFarmCalculations(farmId, "farm", completedResultDate).catch(() => []),
     ]);
 
-    console.log("FARM", farmPayload);
-    console.log("GRID_CELLS", gridCellsPayload);
-    console.log("H3_CELLS", h3Payload);
+    if (requestId !== loadRequestRef.current) return;
 
     setFarm(farmPayload);
-    setMetricContent(await getMetricContent(farmPayload?.crop_code || "").catch(() => []));
+    const content = await getMetricContent(farmPayload?.crop_code || "").catch(() => []);
+    if (requestId !== loadRequestRef.current) return;
+    setMetricContent(content);
     setGridCells(normalizeList(gridCellsPayload));
     setGridValues(normalizeList(gridValuesPayload));
     setGridCalculations(normalizeList(gridCalculationsPayload));
@@ -222,7 +228,7 @@ export default function LandIntelligence() {
     return () => {
       cancelled = true;
     };
-  }, [farmId, selectedParameter]);
+  }, [farmId]);
 
   useEffect(() => {
     if (user?.role !== "farmer") return;
@@ -262,10 +268,19 @@ export default function LandIntelligence() {
         setPipelineWarning("");
         setPipelineOpen(false);
         await loadLandIntelligence(status).catch(() => null);
+        // The analysis writes to several backend tables. Reload once after an
+        // active run finishes so the browser reconstructs the page from the
+        // newly materialized data. Do not reload when merely opening a farm
+        // whose last run was already terminal, otherwise this would loop.
+        if (analysisWasActiveRef.current && ["completed", "completed_with_warnings", "succeeded"].includes(status.status)) {
+          analysisWasActiveRef.current = false;
+          window.location.reload();
+        }
         return;
       }
 
       if (status.status === "running" || status.status === "queued") {
+        analysisWasActiveRef.current = true;
         setRefreshing(true);
         setPipelineOpen(true);
         setPipelineStatus(`Analysis ${status.status}`);
@@ -391,6 +406,9 @@ export default function LandIntelligence() {
       } catch (refreshErr) {
         console.warn("Land intelligence refresh warning", refreshErr);
         setError(refreshErr?.message || "Analysis completed, but the page refresh failed. Please retry.");
+      }
+      if (["completed", "completed_with_warnings", "succeeded"].includes(status?.status)) {
+        window.location.reload();
       }
     } catch (err) {
       const message = err?.payload?.detail?.message || err?.message || "Analysis failed.";
@@ -687,7 +705,7 @@ export default function LandIntelligence() {
                   }`}
                 >
                   <Layers className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  Detailed grid {h3Enabled ? "on" : "off"}
+                  Detailed view {h3Enabled ? "on" : "off"}
                 </button>
               )}
             </div>

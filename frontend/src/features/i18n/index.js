@@ -3,6 +3,7 @@ import { translate } from "./catalogue";
 import { LOCALES, normalizeLocale } from "@/features/language/language";
 
 export { UI_STRINGS, translate, useLocaleText } from "./catalogue";
+export { translateLiteral } from "./literalTranslations";
 
 export function useTranslation() {
   const { locale } = useLanguage();

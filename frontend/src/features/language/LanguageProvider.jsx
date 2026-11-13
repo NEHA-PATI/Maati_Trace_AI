@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/features/auth/context/useAuth";
+import { LocalizedContent } from "@/features/i18n/LocalizedContent";
 import {
   LANGUAGE_STORAGE_KEY,
   LEGACY_LANGUAGE_STORAGE_KEY,
@@ -67,7 +68,7 @@ export function LanguageProvider({ children }) {
     isOdia: locale === LOCALES.OR,
   }), [locale, setLocale]);
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+  return <LanguageContext.Provider value={value}><LocalizedContent locale={locale}>{children}</LocalizedContent></LanguageContext.Provider>;
 }
 
 export function useLanguage() {

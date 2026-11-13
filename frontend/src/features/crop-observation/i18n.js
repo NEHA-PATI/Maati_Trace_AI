@@ -83,7 +83,14 @@ export const STRINGS = {
   couldNotLoadMore: { en: "Could not load more.", or: "ଆହୁରି ତଥ୍ୟ ଖୋଲିହେଲା ନାହିଁ।" },
 };
 
-STRINGS.submit = { en: "Submit", or: "Submit" };
+STRINGS.submit = { en: "Submit", or: "ଦାଖଲ କରନ୍ତୁ" };
+STRINGS.currentStage = { en: "Current Stage", or: "ବର୍ତ୍ତମାନ ପର୍ଯ୍ୟାୟ" };
+STRINGS.keyActivity = { en: "Key Activity", or: "ମୁଖ୍ୟ କାର୍ଯ୍ୟ" };
+STRINGS.keyActivityText = { en: "Monitor crop growth and field health", or: "ଫସଲ ବୃଦ୍ଧି ଏବଂ କ୍ଷେତ୍ର ସ୍ୱାସ୍ଥ୍ୟ ନିରୀକ୍ଷଣ କରନ୍ତୁ" };
+STRINGS.idealConditions = { en: "Ideal Conditions", or: "ଆଦର୍ଶ ସ୍ଥିତି" };
+STRINGS.idealConditionsText = { en: "Healthy soil, light and moisture", or: "ସୁସ୍ଥ ମାଟି, ଆଲୋକ ଏବଂ ଆର୍ଦ୍ରତା" };
+STRINGS.expectedDuration = { en: "Expected Duration", or: "ଆଶା କରାଯାଇଥିବା ସମୟ" };
+STRINGS.expectedDurationText = { en: "Monitor through this stage", or: "ଏହି ପର୍ଯ୍ୟାୟରେ ନିରୀକ୍ଷଣ କରନ୍ତୁ" };
 
 export const STATUS_STRINGS = {
   GOOD: { en: "Good", or: "ଭଲ ଅଛି" },

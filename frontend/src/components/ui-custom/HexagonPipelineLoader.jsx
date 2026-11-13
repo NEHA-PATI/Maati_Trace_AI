@@ -2,9 +2,21 @@ import * as React from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
 const STAGE_DURATION = 1900;
+const MESSAGE_DURATION = 15000;
 const IDLE_TIMEOUT = 1000;
 const GRADIENT_FROM = [13, 148, 136];
 const GRADIENT_TO = [74, 222, 128];
+
+const FRIENDLY_PROGRESS_MESSAGES = [
+  "Watching your land from above",
+  "Reading the health of your crops",
+  "Testing your soil conditions",
+  "Checking moisture across your field",
+  "Looking for signs of crop stress",
+  "Comparing sunlight, water and growth",
+  "Learning what your land needs next",
+  "Turning field signals into useful advice",
+];
 
 function lerpColor(amount) {
   const red = Math.round(
@@ -134,7 +146,6 @@ export default function HexagonPipelineLoader({
   steps = [],
   currentStep = 0,
   status = "",
-  details = [],
   failure = null,
   warning = null,
   actions = [],
@@ -146,6 +157,7 @@ export default function HexagonPipelineLoader({
   const mouseRef = React.useRef({ x: -9999, y: -9999 });
   const lastInteractionRef = React.useRef(0);
   const [visualStep, setVisualStep] = React.useState(0);
+  const [messageIndex, setMessageIndex] = React.useState(0);
 
   const safeCurrentStep = Math.min(
     Math.max(0, currentStep),
@@ -155,6 +167,7 @@ export default function HexagonPipelineLoader({
   React.useEffect(() => {
     if (!open) {
       setVisualStep(0);
+      setMessageIndex(0);
       return undefined;
     }
 
@@ -171,6 +184,18 @@ export default function HexagonPipelineLoader({
     }, STAGE_DURATION);
     return () => clearInterval(timer);
   }, [open, safeCurrentStep, status, steps.length]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+
+    const timer = setInterval(() => {
+      setMessageIndex((index) => (
+        (index + 1) % FRIENDLY_PROGRESS_MESSAGES.length
+      ));
+    }, MESSAGE_DURATION);
+
+    return () => clearInterval(timer);
+  }, [open]);
 
   const measure = React.useCallback(() => {
     const root = rootRef.current;
@@ -239,8 +264,9 @@ export default function HexagonPipelineLoader({
     ? "Pipeline could not be completed"
     : warning
       ? "Analysis completed with warnings"
-      : steps[visualStep] || status || "Processing land data";
-  const completedSteps = steps.slice(0, visualStep).slice(-2);
+      : done
+        ? "Your land insights are ready"
+        : FRIENDLY_PROGRESS_MESSAGES[messageIndex];
   const progress = done
     ? 100
     : Math.round(((visualStep + 1) / Math.max(steps.length, 1)) * 100);
@@ -279,24 +305,8 @@ export default function HexagonPipelineLoader({
                   {title}
                 </p>
 
-                <div className="min-h-12">
-                  {completedSteps.map((step) => (
-                    <Motion.div
-                      key={step}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="mb-1 flex items-center justify-center gap-2 text-[22px] text-slate-400"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                        <path d="M4 12.5l5 5L20 6" stroke="#14b8a6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span>{step}</span>
-                    </Motion.div>
-                  ))}
-                </div>
-
                 <Motion.div
-                  key={`${visualStep}-${stageLabel}`}
+                  key={`${messageIndex}-${stageLabel}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={`mt-3 flex items-center justify-center gap-3 ${
@@ -322,10 +332,6 @@ export default function HexagonPipelineLoader({
                   <span>{stageLabel}</span>
                 </Motion.div>
 
-                {status && status !== stageLabel && !done ? (
-                  <p className="mt-2 text-[22px] text-slate-400">{status}</p>
-                ) : null}
-
                 <p className="mt-3 text-[21px] tracking-wide text-slate-400">
                   {warning ? "Completed with warnings" : done ? "Processing complete" : `${progress}% complete`}
                 </p>
@@ -333,18 +339,6 @@ export default function HexagonPipelineLoader({
                   Task {done ? steps.length : Math.min(visualStep + 1, steps.length)} of {steps.length}
                 </p>
 
-                {details.length ? (
-                  <div className="mt-8 flex flex-wrap justify-center gap-2">
-                    {details.map((detail) => (
-                      <span
-                        key={detail}
-                        className="rounded-full border border-teal-800/10 bg-white/60 px-3 py-1 text-[20px] font-medium text-slate-500 shadow-sm"
-                      >
-                        {detail}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
                 {actions.length ? (
                   <div className="pointer-events-auto mt-6 flex flex-wrap justify-center gap-2">
                     {actions.map((action) => (

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { LoaderCircle, Sprout } from "lucide-react";
+import { useTranslation } from "@/features/i18n";
 
 function Bar({ className }) {
   return <div className={cn("animate-pulse rounded-lg bg-slate-200/80", className)} />;
@@ -7,8 +8,10 @@ function Bar({ className }) {
 
 /** Crop list placeholder — matches CropCard height so there is no layout shift. */
 export function CropListSkeleton({ rows = 3 }) {
+  const { t } = useTranslation();
+
   return (
-    <div className="space-y-4" aria-live="polite" aria-label="Loading your crops">
+    <div className="space-y-4" aria-live="polite" aria-label={t("loadingYourCrops")}>
       <div className="relative overflow-hidden rounded-[24px] border border-[#DCE8D6] bg-[#F1F7ED] px-5 py-5 text-center shadow-sm sm:px-8 sm:py-6">
         <div className="absolute inset-0 animate-pulse bg-[#E5F0DF]/40" />
         <div className="relative flex flex-col items-center justify-center">
@@ -16,8 +19,8 @@ export function CropListSkeleton({ rows = 3 }) {
             <span className="absolute inset-0 animate-ping rounded-full border border-[#71985C]/50" />
             <Sprout className="h-7 w-7 animate-[bounce_1.8s_ease-in-out_infinite]" />
           </div>
-          <p className="mt-3 text-sm font-black text-[#33492A]">Preparing your crop space</p>
-          <p className="mt-1 text-xs font-medium text-[#687A60]">Fetching your farms and crop updates…</p>
+          <p className="mt-3 text-sm font-black text-[#33492A]">{t("preparingCropSpace")}</p>
+          <p className="mt-1 text-xs font-medium text-[#687A60]">{t("fetchingFarmsCropUpdates")}</p>
           <div className="mt-4 flex items-center gap-1.5" aria-hidden="true">
             {[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#4B6B3A]" style={{ animationDelay: `${dot * 160}ms` }} />)}
           </div>

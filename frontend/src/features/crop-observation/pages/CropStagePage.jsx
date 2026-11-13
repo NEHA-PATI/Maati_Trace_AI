@@ -74,13 +74,13 @@ export default function CropStagePage() {
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,55,25,0.92)_0%,rgba(26,66,29,0.76)_37%,rgba(25,67,29,0.12)_72%,rgba(25,67,29,0.04)_100%)]" />
             <div className="absolute right-4 top-4"><StageInstructionAudio src={systemMediaUrl(screen.stage.instruction_audio_url)} locale={locale} /></div>
             <div className="relative flex min-h-[205px] flex-col justify-end lg:min-h-[260px]">
-              <span className="mb-3 inline-flex w-fit items-center gap-2 rounded-full bg-[#4D9A48] px-4 py-2 text-xs font-black text-white shadow-sm"><Flower2 className="h-4 w-4" /> Current Stage</span>
+              <span className="mb-3 inline-flex w-fit items-center gap-2 rounded-full bg-[#4D9A48] px-4 py-2 text-xs font-black text-white shadow-sm"><Flower2 className="h-4 w-4" /> {primary(STRINGS.currentStage, locale)}</span>
               <Bilingual as="div" className="text-[30px] font-black leading-tight sm:text-4xl" primaryText={screen.stage.name} />
               {screen.stage.short_description ? <p className="mt-2 max-w-[640px] text-sm font-medium leading-6 text-white/90 sm:text-base">{screen.stage.short_description}</p> : null}
               <div className="mt-4 grid max-w-[760px] grid-cols-1 gap-2 sm:grid-cols-3">
-                <HeroInfo icon={Sprout} label="Key Activity" text="Monitor crop growth and field health" />
-                <HeroInfo icon={CloudSun} label="Ideal Conditions" text="Healthy soil, light and moisture" />
-                <HeroInfo icon={CalendarDays} label="Expected Duration" text="Monitor through this stage" />
+                <HeroInfo icon={Sprout} label={primary(STRINGS.keyActivity, locale)} text={primary(STRINGS.keyActivityText, locale)} />
+                <HeroInfo icon={CloudSun} label={primary(STRINGS.idealConditions, locale)} text={primary(STRINGS.idealConditionsText, locale)} />
+                <HeroInfo icon={CalendarDays} label={primary(STRINGS.expectedDuration, locale)} text={primary(STRINGS.expectedDurationText, locale)} />
               </div>
             </div>
           </div>

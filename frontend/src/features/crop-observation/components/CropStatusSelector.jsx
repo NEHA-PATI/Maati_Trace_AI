@@ -3,6 +3,10 @@ import { AlertTriangle, Check, Loader2, OctagonAlert } from "lucide-react";
 
 import Bilingual from "@/features/crop-observation/components/Bilingual";
 import { STATUS_STRINGS } from "@/features/crop-observation/i18n";
+// Import the leaf module directly. The i18n barrel also exports the language
+// provider, which creates a circular module path during Vite HMR and can make
+// useAuth see a different AuthContext instance from AuthProvider.
+import { translateLiteral } from "@/features/i18n/literalTranslations";
 import { cn } from "@/lib/utils";
 
 const STATUS_META = {
@@ -54,7 +58,9 @@ function CropStatusSelector({ options, value, onChange, locale, pending }) {
             </span>
             <span className="min-w-0">
               <Bilingual pair={STATUS_STRINGS[option.code]} locale={locale} className="block max-w-full break-words text-sm font-bold sm:text-base" />
-              <span className="mt-1 block text-xs font-medium leading-4 text-[#687064]">{STATUS_DESCRIPTIONS[option.code]}</span>
+              <span className="mt-1 block text-xs font-medium leading-4 text-[#687064]">
+                {translateLiteral(STATUS_DESCRIPTIONS[option.code], locale)}
+              </span>
             </span>
           </button>
         );

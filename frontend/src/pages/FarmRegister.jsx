@@ -106,7 +106,7 @@ export default function FarmRegister() {
   const [locationResolving, setLocationResolving] = useState(false);
   const [locationResolutionError, setLocationResolutionError] = useState("");
   const [boundaryConfirmed, setBoundaryConfirmed] = useState(false);
-  const [h3Preview, setH3Preview] = useState(null);
+  const [, setH3Preview] = useState(null);
   const [validationWarning, setValidationWarning] = useState("");
   const [backendErrorDetail, setBackendErrorDetail] = useState("");
 
@@ -422,7 +422,7 @@ export default function FarmRegister() {
         );
       }
 
-      setPipelineStatus("Generating H3 preview...");
+      setPipelineStatus("Checking farm details...");
       try {
         const preview = await previewH3({
           polygon: farmGeometry,
@@ -434,7 +434,7 @@ export default function FarmRegister() {
       } catch (previewErr) {
         setValidationWarning(
           previewErr?.message ||
-            "H3 preview pending, continuing with farm registration.",
+            "Farm detail check pending, continuing with farm registration.",
         );
       }
 
@@ -534,13 +534,13 @@ export default function FarmRegister() {
           className="mb-8"
         >
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-500">
-            Farm Registration
+            {t("farmRegistration")}
           </span>
           <h1 className="mt-1 text-3xl font-black text-gray-900">
-            Register a Land Parcel
+            {t("registerFarmTitle")}
           </h1>
           <p className="mt-1 text-sm text-gray-400">
-            Enter into the MaatiTrace satellite intelligence pipeline
+            {t("satellitePipeline")}
           </p>
         </MotionDiv>
 
@@ -582,8 +582,7 @@ export default function FarmRegister() {
         {locationResolutionError && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
             <span>
-              {locationResolutionError} You can continue and use your current
-              location.
+              {locationResolutionError} {t("continueCurrentLocation")}
             </span>
             <Button
               type="button"
@@ -595,7 +594,7 @@ export default function FarmRegister() {
               }}
               className="h-9 rounded-xl border-amber-300 text-amber-800"
             >
-              Continue manually
+              {t("continueManually")}
             </Button>
           </div>
         )}
@@ -779,7 +778,7 @@ export default function FarmRegister() {
                     </Button>
                     {resolvedMapLocation ? (
                       <span className="text-sm font-semibold text-emerald-700">
-                        Location found ({resolvedMapLocation.precision}).
+                        {t("locationFoundVillage")} ({resolvedMapLocation.precision})
                       </span>
                     ) : null}
                   </div>
@@ -879,16 +878,13 @@ export default function FarmRegister() {
                           </SelectContent>
                         </Select>
                         <p className="text-[10px] leading-4 text-slate-500">
-                          The crop selects this farm's active feature profile,
-                          temporal windows, formula versions, weights and
-                          thresholds. Admin-published crops appear here
-                          automatically.
+                          {t("cropProfileDescription")}
                         </p>
                       </div>
                       <div className="space-y-1.5">
                         <Label className={labelClass}>
-                          Variety{" "}
-                          <span className="text-slate-400">(optional)</span>
+                          {t("variety")} {" "}
+                          <span className="text-slate-400">{t("optional")}</span>
                         </Label>
                         <Input
                           placeholder={t("localCultivar")}
@@ -901,8 +897,8 @@ export default function FarmRegister() {
                       </div>
                       <div className="space-y-1.5">
                         <Label className={labelClass}>
-                          Growth stage{" "}
-                          <span className="text-slate-400">(optional)</span>
+                          {t("growthStageLabel")} {" "}
+                          <span className="text-slate-400">{t("optional")}</span>
                         </Label>
                         <Input
                           placeholder={t("growthStage")}
@@ -913,8 +909,8 @@ export default function FarmRegister() {
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label className={labelClass}>
-                          Planting date{" "}
-                          <span className="text-slate-400">(optional)</span>
+                          {t("plantingDate")} {" "}
+                          <span className="text-slate-400">{t("optional")}</span>
                         </Label>
                         <Input
                           type="date"
@@ -940,7 +936,7 @@ export default function FarmRegister() {
                       />
                     </div>
                     <span className="font-bold text-gray-800">
-                      Draw Boundary
+                      {t("drawBoundary")}
                     </span>
                   </div>
                   {resolvedMapLocation?.precision &&
@@ -1039,18 +1035,6 @@ export default function FarmRegister() {
                       </div>
                     ))}
                   </div>
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
-                    The polygon drawn in the previous step will be submitted
-                    exactly as GeoJSON.
-                  </div>
-                  {h3Preview && (
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4 text-sm text-violet-700">
-                      H3 preview ready. Estimated cells:{" "}
-                      {h3Preview.cell_count ||
-                        h3Preview.returned_cell_count ||
-                        "pending"}
-                    </div>
-                  )}
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">
                     Complete analysis is automatically included with every new
                     farm registration. The results will open after processing
@@ -1102,10 +1086,6 @@ export default function FarmRegister() {
                       {
                         labelKey: "surveyNumber",
                         value: registeredFarm.survey_number || t("pending"),
-                      },
-                      {
-                        labelKey: "h3Cells",
-                        value: `${registeredFarm.h3_cell_count || 0} ${t("generated")}`,
                       },
                     ].map((item) => (
                       <div
@@ -1173,7 +1153,7 @@ export default function FarmRegister() {
               className="h-10 rounded-2xl px-5 text-sm font-semibold text-gray-500 hover:text-gray-800"
             >
               <ChevronLeft className="mr-1 h-4 w-4" />
-              Back
+              {t("back")}
             </Button>
             {step < 3 && (
               <Button
@@ -1181,7 +1161,7 @@ export default function FarmRegister() {
                 disabled={!canNext || loading || locationResolving}
                 className="h-10 rounded-2xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-600 disabled:opacity-40"
               >
-                Continue
+                {t("continue")}
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}

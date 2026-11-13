@@ -189,23 +189,22 @@ export default function FarmerFpoPage() {
         <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6E8A5D]">
-              Farmer workspace
+              {t("farmerWorkspace")}
             </p>
-            <h1 className="mt-2 text-3xl font-black text-[#1D2117]">Connect with an FPO</h1>
+            <h1 className="mt-2 text-3xl font-black text-[#1D2117]">{t("connectWithFpo")}</h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[#687064]">
-              Connect individual farms with approved FPOs. Each connection is
-              farm-specific; your other farms remain private.
+              {t("connectFpoDescription")}
             </p>
           </div>
           <Button variant="outline" onClick={() => setTicketOpen(true)}>
-            <LifeBuoy className="mr-2 h-4 w-4" /> Raise a concern
+            <LifeBuoy className="mr-2 h-4 w-4" /> {t("raiseConcern")}
           </Button>
         </div>
         <Link
           to="/farmer/imported-onboarding"
           className="mt-4 inline-flex items-center rounded-xl border border-[#CFE2C4] bg-[#EEF6E9] px-4 py-2.5 text-sm font-black text-[#4B6B3A] hover:bg-[#E1F1D6]"
         >
-          Review imported onboarding information
+          {t("reviewImported")}
         </Link>
       </header>
       {error ? (
@@ -220,13 +219,13 @@ export default function FarmerFpoPage() {
       <section className="rounded-[24px] border border-[#E3E8DE] bg-white p-5 shadow-[0_10px_30px_rgba(43,61,35,0.05)] md:p-6">
         <div className="flex items-center gap-2">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#E1F1D6] text-[#4B6B3A]"><Sprout className="h-5 w-5" /></span>
-          <div><h2 className="text-lg font-black text-[#1D2117]">Choose a farm</h2><p className="text-xs font-medium text-[#8A9684]">One farm per connection</p></div>
+          <div><h2 className="text-lg font-black text-[#1D2117]">{t("chooseFarm")}</h2><p className="text-xs font-medium text-[#8A9684]">{t("oneFarmPerConnection")}</p></div>
         </div>
           <p className="mt-3 text-sm text-[#687064]">
-          The selected farm is the only land that an FPO request can cover.
+          {t("selectedFarmOnly")}
         </p>
         {loading ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2" aria-label="Loading farms">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2" aria-label={t("loadingFarms")}>
             {[1, 2].map((item) => <div key={item} className="animate-pulse rounded-2xl border border-[#E3E8DE] bg-[#F8FAF6] p-4"><div className="h-4 w-2/3 rounded bg-[#DDE8D8]" /><div className="mt-3 h-3 w-1/2 rounded bg-[#E7EEE3]" /><div className="mt-5 h-9 w-full rounded-xl bg-[#E7EEE3]" /></div>)}
           </div>
         ) : (
@@ -243,7 +242,7 @@ export default function FarmerFpoPage() {
               </>
             ) : (
               <p className="text-sm text-slate-500">
-                Register a farm before connecting it to an FPO.
+                {t("registerBeforeFpo")}
               </p>
             )}
           </div>
@@ -254,7 +253,7 @@ export default function FarmerFpoPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6E8A5D]">
-                Selected farm
+                {t("selectedFarm")}
               </p>
               <h2 className="mt-1 text-xl font-black text-[#1D2117]">
                 {selected.farm_name || "Unnamed farm"}
@@ -266,7 +265,7 @@ export default function FarmerFpoPage() {
               </p>
             </div>
             <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#4B6B3A]">
-              Farm-only sharing
+              {t("farmOnlySharing")}
             </span>
           </div>
           <div className="mt-4 flex items-start gap-3 rounded-2xl border border-[#DCE8D5] bg-white p-4 text-sm text-[#687064]">
@@ -282,10 +281,10 @@ export default function FarmerFpoPage() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-black text-slate-950">
-              Connections for this farm
+              {t("connectionsForFarm")}
             </h2>
             <p className="text-sm text-slate-500">
-              You may connect different farms to different FPOs.
+              {t("differentFarmsFpos")}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-500">
@@ -325,7 +324,7 @@ export default function FarmerFpoPage() {
                       onClick={() => revoke(item)}
                       disabled={working === item.relationship_id}
                     >
-                      Revoke access
+                      {t("revokeAccess")}
                     </Button>
                   ) : null}
                   {item.status === "PENDING_FPO_ACCEPTANCE" ? <Button variant="outline" size="sm" onClick={() => cancel(item)} disabled={working === item.relationship_id}>Cancel request</Button> : null}
@@ -334,7 +333,7 @@ export default function FarmerFpoPage() {
             ))
           ) : (
             <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-600">
-              No FPO is connected to this farm yet.
+              {t("noFpoConnected")}
             </p>
           )}
         </div>
@@ -346,7 +345,7 @@ export default function FarmerFpoPage() {
               {t("findApprovedFpo")}
             </h2>
             <p className="text-sm text-slate-500">
-              Requests are created for{" "}
+              {t("requestsCreatedFor")}{" "}
               <strong>{selected?.farm_name || "the selected farm"}</strong>.
             </p>
           </div>
@@ -398,13 +397,13 @@ export default function FarmerFpoPage() {
                 >
                   {activeOrPending.has(String(fpo.fpo_id))
                     ? farmRelationships.some((item) => String(item.fpo_id) === String(fpo.fpo_id) && item.status === "ACTIVE") ? "Connected" : "Request pending"
-                    : "Connect this farm"}
+                    : t("connectThisFarm")}
                 </Button>
               </article>
             ))
           ) : (
             <p className="text-sm text-slate-500">
-              No approved FPOs match your search.
+              {t("noApprovedFpos")}
             </p>
           )}
         </div>

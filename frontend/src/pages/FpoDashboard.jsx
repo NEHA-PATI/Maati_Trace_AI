@@ -463,7 +463,7 @@ export default function FpoDashboard() {
             "Location",
             "Farmer",
             "Boundary",
-            "H3 Grid",
+            "Field Grid",
             "Satellite",
             "Raster",
             "Intelligence",

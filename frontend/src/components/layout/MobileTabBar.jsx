@@ -7,11 +7,11 @@ import { ROLES } from "@/shared/rbac/permissions";
 import { useTranslation } from "@/features/i18n";
 
 const FARMER_TABS = [
-  { to: "/farmer/me", label: "Dashboard", icon: LayoutGrid, color: "#6B7280", activeColor: "#374151", tint: "#F3F4F6" },
-  { to: "/my-crops/language", label: "My Crop", icon: Sprout, color: "#65A30D", activeColor: "#3F6212", tint: "#ECFCCB" },
+  { to: "/farmer/me", labelKey: "dashboard", label: "Dashboard", icon: LayoutGrid, color: "#6B7280", activeColor: "#374151", tint: "#F3F4F6" },
+  { to: "/my-crops/language", labelKey: "myCrop", label: "My Crop", icon: Sprout, color: "#65A30D", activeColor: "#3F6212", tint: "#ECFCCB" },
   { to: "/farm-register", labelKey: "addFarm", label: "Add Farm", icon: MapPinPlus, color: "#0284C7", activeColor: "#075985", tint: "#E0F2FE" },
   { to: "/notifications", labelKey: "alerts", label: "Alerts", icon: Bell, color: "#EA580C", activeColor: "#9A3412", tint: "#FFEDD5" },
-  { to: "/farmer/fpo", label: "FPOs", icon: Link2, color: "#047857", activeColor: "#065F46", tint: "#D1FAE5" },
+  { to: "/farmer/fpo", labelKey: "fpos", label: "FPOs", icon: Link2, color: "#047857", activeColor: "#065F46", tint: "#D1FAE5" },
 ];
 
 export default function MobileTabBar() {

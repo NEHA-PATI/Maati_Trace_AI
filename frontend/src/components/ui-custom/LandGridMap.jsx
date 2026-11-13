@@ -17,9 +17,19 @@ import {
 
 function normalizeRing(geometry) {
   if (!geometry) return [];
-  if (geometry.type === "Polygon") return geometry.coordinates?.[0] || [];
-  if (geometry.type === "MultiPolygon") return geometry.coordinates?.[0]?.[0] || [];
-  return [];
+  const ring = geometry.type === "Polygon"
+    ? geometry.coordinates?.[0]
+    : geometry.type === "MultiPolygon"
+      ? geometry.coordinates?.[0]?.[0]
+      : [];
+  return (ring || []).map((point) => {
+    if (Array.isArray(point)) return [Number(point[0]), Number(point[1])];
+    if (typeof point === "string") {
+      const parts = point.trim().split(/[\s,]+/).map(Number);
+      return [parts[0], parts[1]];
+    }
+    return [NaN, NaN];
+  }).filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
 }
 
 function toLatLng(ring) {

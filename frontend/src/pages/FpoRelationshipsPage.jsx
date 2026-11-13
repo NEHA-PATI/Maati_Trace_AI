@@ -39,7 +39,7 @@ function BoundaryPreview({ value }) {
     return rings.map((ring) => ring.map(([x, y]) => `${15 + (Number(x) - minX) * scale},${155 - (Number(y) - minY) * scale}`).join(" "));
   }, [geometry]);
   return <div className="overflow-hidden rounded-xl border border-slate-200 bg-[#f1f5ed]">
-    {paths.length ? <svg viewBox="0 0 300 170" role="img" aria-label="Shared farm boundary preview" className="h-36 w-full"><rect width="300" height="170" fill="#eef4e8" />{paths.map((points, index) => <polygon key={index} points={points} fill="#72b77b66" stroke="#167447" strokeWidth="2.5" strokeLinejoin="round" />)}</svg> : <div className="grid h-24 place-items-center text-xs font-semibold text-slate-500">{value ? "Boundary data is not a supported GeoJSON polygon" : "No farm boundary recorded"}</div>}
+    {paths.length ? <svg viewBox="0 0 300 170" role="img" aria-label="Shared farm boundary preview" className="h-36 w-full"><rect width="300" height="170" fill="#eef4e8" />{paths.map((points, index) => <polygon key={index} points={points} fill="#72b77b66" stroke="#167447" strokeWidth="2.5" strokeLinejoin="round" />)}</svg> : <div className="grid h-24 place-items-center text-xs font-semibold text-slate-500">{value ? "Boundary data is not available in a supported format" : "No farm boundary recorded"}</div>}
   </div>;
 }
 

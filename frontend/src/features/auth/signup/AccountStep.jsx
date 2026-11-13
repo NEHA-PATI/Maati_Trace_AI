@@ -1,9 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import PasswordField from "@/features/auth/components/PasswordField";
 import { signupAccountSchema } from "@/features/auth/authValidation";
+import { useProfileLocations } from "@/features/profile/hooks/useProfileLocations";
 
 const EMPTY = {
   account_type: "farmer",
@@ -43,6 +45,24 @@ export default function AccountStep({
 
   const password = watch("password");
   const accountType = watch("account_type");
+  const [location, setLocation] = useState({ stateName: "", districtName: "" });
+  const { states, districts, loading: locationLoading, optionName } = useProfileLocations({
+    stateName: location.stateName,
+    enabled: accountType === "fpo",
+  });
+
+  const selectState = (stateName) => {
+    const selectedState = states.find((item) => optionName(item) === stateName);
+    setLocation({ stateName, districtName: "" });
+    setValue("state_code", selectedState?.state_code ? String(selectedState.state_code) : "", { shouldValidate: true });
+    setValue("district_code", "", { shouldValidate: true });
+  };
+
+  const selectDistrict = (districtName) => {
+    const selectedDistrict = districts.find((item) => optionName(item) === districtName);
+    setLocation((current) => ({ ...current, districtName }));
+    setValue("district_code", selectedDistrict?.district_code ? String(selectedDistrict.district_code) : "", { shouldValidate: true });
+  };
 
   return (
     <form
@@ -88,8 +108,22 @@ export default function AccountStep({
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div><label htmlFor="signup-state-code" className="text-sm font-semibold text-slate-700">State code</label><input id="signup-state-code" type="number" {...register("state_code")} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" />{errors.state_code ? <p className="mt-1 text-xs text-rose-600">{errors.state_code.message}</p> : null}</div>
-            <div><label htmlFor="signup-district-code" className="text-sm font-semibold text-slate-700">District code</label><input id="signup-district-code" type="number" {...register("district_code")} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" />{errors.district_code ? <p className="mt-1 text-xs text-rose-600">{errors.district_code.message}</p> : null}</div>
+            <div>
+              <label htmlFor="signup-state-code" className="text-sm font-semibold text-slate-700">State</label>
+              <select id="signup-state-code" value={location.stateName} onChange={(event) => selectState(event.target.value)} disabled={locationLoading.states} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5">
+                <option value="">{locationLoading.states ? "Loading states..." : "Select state"}</option>
+                {states.map((item) => <option key={item.state_code} value={optionName(item)}>{optionName(item)}</option>)}
+              </select>
+              {errors.state_code ? <p className="mt-1 text-xs text-rose-600">{errors.state_code.message}</p> : null}
+            </div>
+            <div>
+              <label htmlFor="signup-district-code" className="text-sm font-semibold text-slate-700">District</label>
+              <select id="signup-district-code" value={location.districtName} onChange={(event) => selectDistrict(event.target.value)} disabled={!location.stateName || locationLoading.districts} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5">
+                <option value="">{locationLoading.districts ? "Loading districts..." : "Select district"}</option>
+                {districts.map((item) => <option key={item.district_code} value={optionName(item)}>{optionName(item)}</option>)}
+              </select>
+              {errors.district_code ? <p className="mt-1 text-xs text-rose-600">{errors.district_code.message}</p> : null}
+            </div>
           </div>
           <label className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-white p-3"><input {...register("authorised_fpo_representative")} type="checkbox" className="mt-1 h-4 w-4 accent-emerald-700" /><span className="text-sm leading-6 text-slate-600">I am authorised to register this FPO and will provide accurate information.</span></label>
           {errors.authorised_fpo_representative ? <p className="text-xs text-rose-600">{errors.authorised_fpo_representative.message}</p> : null}

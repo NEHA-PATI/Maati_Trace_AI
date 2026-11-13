@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useLocale } from "@/features/crop-observation/hooks/useLocale";
 import { LOCALES } from "@/features/crop-observation/i18n";
+import { useTranslation } from "@/features/i18n";
 
 const OPTIONS = [
   {
@@ -31,6 +32,7 @@ const OPTIONS = [
 export default function CropLanguagePage() {
   const navigate = useNavigate();
   const [, setLocale] = useLocale();
+  const { t } = useTranslation();
 
   function choose(locale) {
     setLocale(locale);
@@ -47,13 +49,13 @@ export default function CropLanguagePage() {
 
           <div className="mt-3 text-center">
             <h1 className="text-xl font-black text-[#1D2117] sm:text-2xl">
-              Choose Language
+              {t("chooseLanguageTitle")}
             </h1>
             <p className="mt-1 text-lg font-bold text-[#4B6B3A] sm:text-xl">
               ଭାଷା ବାଛନ୍ତୁ
             </p>
             <p className="mx-auto mt-2 max-w-[520px] text-sm font-medium leading-5 text-[#5B6055]">
-              Select the language you want to use for crop updates.
+              {t("chooseLanguageHelp")}
             </p>
           </div>
 

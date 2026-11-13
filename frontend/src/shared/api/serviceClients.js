@@ -13,6 +13,7 @@ export function createServiceClient(serviceName) {
         path.startsWith("/health")
         || path.startsWith("/api/health/")
         || serviceName === "auth"
+        || serviceName === "location"
         || serviceName === "gateway"
           ? "public"
           : "required";

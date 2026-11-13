@@ -120,13 +120,12 @@ async function execute(path, options = {}) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = performance.now();
-  // The browser app is served from the same HTTPS origin as the API gateway.
-  // Resolve gateway routes against the current page origin so a stale or
-  // malformed absolute environment value can never downgrade a request to
-  // HTTP and trigger mixed-content blocking.
+  // In local development Vite serves the UI on :5173 while the API gateway
+  // listens on :8000. Use the configured gateway origin instead of silently
+  // sending /api requests back to the Vite dev server.
   const url = new URL(
     servicePath(path),
-    window.location.origin,
+    serviceBaseUrl(),
   ).toString();
 
   const loggedPath = safePathForLog(path);
@@ -189,6 +188,19 @@ async function execute(path, options = {}) {
 async function performRefresh({ timeoutMs = environment.requestTimeoutMs } = {}) {
   const generation = refreshGeneration;
   const requestCorrelationId = correlationId();
+  const csrfToken = getCookie(environment.csrfCookieName);
+
+  // A guest browser has no refresh cookie or CSRF cookie yet. Avoid sending
+  // an invalid refresh request that the API correctly rejects with 403.
+  if (!csrfToken) {
+    clearSession();
+    throw new ApiError("No refresh session is available.", {
+      status: 401,
+      code: "REFRESH_REQUIRED",
+      correlationId: requestCorrelationId,
+    });
+  }
+
   const headers = buildHeaders({
     headers: {},
     authMode: "public",

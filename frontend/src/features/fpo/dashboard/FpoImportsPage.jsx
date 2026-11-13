@@ -43,7 +43,7 @@ function BoundaryPreview({ geometry }) {
   const xs = points.map(([x]) => Number(x)); const ys = points.map(([, y]) => Number(y));
   const minX = Math.min(...xs); const maxX = Math.max(...xs); const minY = Math.min(...ys); const maxY = Math.max(...ys);
   const coords = points.map(([x, y]) => `${12 + ((Number(x) - minX) / (maxX - minX || 1)) * 176},${188 - ((Number(y) - minY) / (maxY - minY || 1)) * 176}`).join(" ");
-  return <div className="relative h-44 overflow-hidden rounded-2xl border border-emerald-100 bg-[linear-gradient(#e7f5ed_1px,transparent_1px),linear-gradient(90deg,#e7f5ed_1px,transparent_1px)] bg-[size:22px_22px]"><svg viewBox="0 0 200 200" className="h-full w-full"><polygon points={coords} fill="#34d399" fillOpacity=".3" stroke="#047857" strokeWidth="2.5" /></svg><span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-emerald-800">GeoJSON boundary preview</span></div>;
+  return <div className="relative h-44 overflow-hidden rounded-2xl border border-emerald-100 bg-[linear-gradient(#e7f5ed_1px,transparent_1px),linear-gradient(90deg,#e7f5ed_1px,transparent_1px)] bg-[size:22px_22px]"><svg viewBox="0 0 200 200" className="h-full w-full"><polygon points={coords} fill="#34d399" fillOpacity=".3" stroke="#047857" strokeWidth="2.5" /></svg><span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-emerald-800">Boundary preview</span></div>;
 }
 
 export default function FpoImportsPage() {

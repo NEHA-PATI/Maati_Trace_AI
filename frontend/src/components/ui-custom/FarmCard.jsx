@@ -2,22 +2,24 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Grid2x2, Leaf, Droplets, Wheat, Check, Clock, ChevronRight } from "lucide-react";
 import FarmGridSnapshot from "@/components/ui-custom/FarmGridSnapshot";
+import { useTranslation } from "@/features/i18n";
 
-function vegetationLabel(ndvi) {
-  if (!ndvi || ndvi <= 0) return "Checking";
-  if (ndvi > 0.5) return "Healthy";
-  if (ndvi > 0.3) return "Okay";
-  return "Needs care";
+function vegetationLabel(ndvi, t) {
+  if (!ndvi || ndvi <= 0) return t("checking");
+  if (ndvi > 0.5) return t("healthy");
+  if (ndvi > 0.3) return t("okay");
+  return t("needsCare");
 }
 
-function moistureLabel(value) {
-  if (!value || value <= 0) return "Checking";
-  if (value > 0.4) return "Good";
-  if (value > 0.2) return "Okay";
-  return "Low";
+function moistureLabel(value, t) {
+  if (!value || value <= 0) return t("checking");
+  if (value > 0.4) return t("good");
+  if (value > 0.2) return t("okay");
+  return t("low");
 }
 
 export default function FarmCard({ farm }) {
+  const { t } = useTranslation();
   const {
     id = "MF-0042",
     village = "Baliguali",
@@ -34,7 +36,7 @@ export default function FarmCard({ farm }) {
   } = farm || {};
 
   const verified = status === "verified";
-  const cropLabel = !crop || crop === "Crop data pending" ? "Add now" : crop;
+  const cropLabel = !crop || crop === "Crop data pending" ? t("addNow") : crop;
   const location = [village, block, district].filter(Boolean).join(", ");
 
   return (
@@ -57,12 +59,12 @@ export default function FarmCard({ farm }) {
             {verified ? (
               <>
                 <Check className="h-3 w-3 text-[var(--mt-leaf-deep)]" strokeWidth={3} />
-                <span className="text-[var(--mt-leaf-deep)]">Verified</span>
+                <span className="text-[var(--mt-leaf-deep)]">{t("verified")}</span>
               </>
             ) : (
               <>
                 <Clock className="h-3 w-3 text-[var(--mt-gold-text)]" strokeWidth={2.6} />
-                <span className="text-[var(--mt-gold-text)]">Checking</span>
+                <span className="text-[var(--mt-gold-text)]">{t("checking")}</span>
               </>
             )}
           </span>
@@ -87,28 +89,28 @@ export default function FarmCard({ farm }) {
             <div className="flex flex-1 flex-col gap-1 rounded-[10px] bg-[var(--mt-leaf-tint)] px-2 py-2">
               <span className="flex items-center gap-1 text-[10px] font-extrabold text-[var(--mt-leaf-deep)]">
                 <Leaf className="h-3 w-3" strokeWidth={2.4} />
-                Health
+                {t("health")}
               </span>
-              <span className="text-[11.5px] font-extrabold text-[var(--mt-ink)]">{vegetationLabel(ndvi)}</span>
+              <span className="text-[11.5px] font-extrabold text-[var(--mt-ink)]">{vegetationLabel(ndvi, t)}</span>
             </div>
             <div className="flex flex-1 flex-col gap-1 rounded-[10px] bg-[var(--mt-sky-tint)] px-2 py-2">
               <span className="flex items-center gap-1 text-[10px] font-extrabold text-[var(--mt-sky-text)]">
                 <Droplets className="h-3 w-3" strokeWidth={2.4} />
-                Water
+                {t("water")}
               </span>
-              <span className="text-[11.5px] font-extrabold text-[var(--mt-ink)]">{moistureLabel(moisture)}</span>
+              <span className="text-[11.5px] font-extrabold text-[var(--mt-ink)]">{moistureLabel(moisture, t)}</span>
             </div>
             <div className="flex flex-1 flex-col gap-1 rounded-[10px] bg-[var(--mt-gold-tint)] px-2 py-2">
               <span className="flex items-center gap-1 text-[10px] font-extrabold text-[var(--mt-gold-text)]">
                 <Wheat className="h-3 w-3" strokeWidth={2.4} />
-                Crop
+                {t("crop")}
               </span>
               <span className="truncate text-[11.5px] font-extrabold text-[var(--mt-ink)]">{cropLabel}</span>
             </div>
           </div>
 
           <span className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-full border-[1.5px] border-[var(--mt-leaf)]/25 text-[13.5px] font-bold text-[var(--mt-leaf-deep)]">
-            View Farm
+            {t("viewFarm")}
             <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
           </span>
         </div>

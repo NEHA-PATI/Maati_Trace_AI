@@ -3,12 +3,11 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import {
   User, MapPin, Phone, Hexagon, Plus, Calendar,
   Leaf, Droplets, Camera, X, Upload, CheckCircle2,
-  BadgeCheck, Pencil, Map as MapIcon, Bell,
+  BadgeCheck, Pencil, Map as MapIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import StatStrip from "@/components/ui-custom/StatStrip";
 import FarmCard from "@/components/ui-custom/FarmCard";
-import NotificationStack from "@/components/ui-custom/NotificationStack";
 import FarmerLandMap from "@/components/ui-custom/FarmerLandMap";
 import FarmPointerMap from "@/components/ui-custom/FarmPointerMap";
 import {
@@ -322,13 +321,13 @@ export default function FarmerProfile() {
   const firstName = (farmer.name || "").trim().split(/\s+/)[0] || "there";
   const healthLabel =
     !avgNdvi || avgNdvi <= 0
-      ? "Checking"
+      ? t("checking")
       : avgNdvi > 0.5
-        ? "Healthy"
+        ? t("healthy")
         : avgNdvi > 0.3
-          ? "Okay"
-          : "Needs care";
-  const lastCheck = summary?.latest_observation_date || "Waiting";
+          ? t("okay")
+          : t("needsCare");
+  const lastCheck = summary?.latest_observation_date || t("waiting");
 
   const callablePhoneHref = useMemo(() => {
     const raw = farmer.phone;
@@ -607,16 +606,7 @@ export default function FarmerProfile() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 pt-2">
-        <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-[var(--mt-ink)]">
-          <Bell className="h-[18px] w-[18px]" strokeWidth={2.1} />
-          Updates For You
-        </h2>
-        <span className="pulse-live h-2 w-2 rounded-full bg-[var(--mt-clay)]" />
-      </div>
-      <div className="rounded-[var(--mt-radius-md)] border border-[var(--mt-line)] bg-white p-1.5">
-        <NotificationStack limit={3} />
-      </div>
+      {/* Updates For You is temporarily hidden from the dashboard. */}
     </div>
   );
 }

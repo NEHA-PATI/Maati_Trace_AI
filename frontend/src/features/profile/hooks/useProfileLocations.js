@@ -18,6 +18,7 @@ function optionName(item) {
 export function useProfileLocations({
   stateName = "Odisha",
   districtName = "",
+  enabled = true,
 } = {}) {
   const [states, setStates] =
     useState([]);
@@ -36,6 +37,13 @@ export function useProfileLocations({
 
   useEffect(() => {
     let active = true;
+
+    if (!enabled) {
+      setStates([]);
+      return () => {
+        active = false;
+      };
+    }
 
     setLoading((current) => ({
       ...current,
@@ -66,12 +74,12 @@ export function useProfileLocations({
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     let active = true;
 
-    if (!stateName) {
+    if (!enabled || !stateName) {
       setDistricts([]);
       setBlocks([]);
       return () => {
@@ -109,12 +117,12 @@ export function useProfileLocations({
     return () => {
       active = false;
     };
-  }, [stateName]);
+  }, [enabled, stateName]);
 
   useEffect(() => {
     let active = true;
 
-    if (!districtName) {
+    if (!enabled || !districtName) {
       setBlocks([]);
       return () => {
         active = false;
@@ -154,7 +162,7 @@ export function useProfileLocations({
     return () => {
       active = false;
     };
-  }, [stateName, districtName]);
+  }, [districtName, enabled, stateName]);
 
   return {
     states,
