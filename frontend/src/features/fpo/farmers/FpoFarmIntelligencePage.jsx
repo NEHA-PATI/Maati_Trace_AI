@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ArrowLeft, ChevronRight, MapPin, TrendingDown, TrendingUp, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, TrendingDown, TrendingUp, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import LandGridMap from "@/components/ui-custom/LandGridMap";
 import { CALCULATED_METRICS, calculatedValueFromCell, interpretCalculatedMetric } from "@/features/land-intelligence/calculatedMetrics";
@@ -9,6 +9,10 @@ import "./fpoFarmIntelligence.css";
 
 const formatDate = (value) => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Not available";
 const scoreOf = (row, metric = null) => metric ? calculatedValueFromCell(row, metric.key) : row?.score ?? row?.value ?? null;
+const finiteScore = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : null;
+};
 const recommendationFor = (key) => ({ water_stress: "Schedule an irrigation inspection for this farm.", heat_stress: "Check field moisture and heat exposure during the next field visit.", waterlogging_risk: "Inspect drainage and standing-water areas.", nutrient_stress_risk: "Arrange a field and soil review before applying inputs.", erosion_risk: "Inspect slopes, drainage paths, and exposed soil.", growth_anomaly: "Schedule a field inspection to confirm the growth change." }[key] || "Review the crop condition during the next field visit.");
 
 const statusTones = {
@@ -55,8 +59,7 @@ function priorityFor(rows) {
 }
 
 function SignalCard({ metric, row, index, onClick }) {
-  const raw = scoreOf(row, metric);
-  const value = raw === null || raw === undefined ? null : Math.max(0, Math.min(100, Number(raw)));
+  const value = finiteScore(scoreOf(row, metric));
   const tone = toneFor(metric, value);
   return <button type="button" className="fpo-signal-card" style={{ "--card-delay": `${160 + index * 60}ms`, "--signal-score": `${value ?? 0}%`, "--signal-bar": tone.color, backgroundColor: tone.surfaceColor }} onClick={onClick}>
     <span className="fpo-signal-title"><span>{metric.name}</span><ChevronRight className="fpo-chevron" /></span>
@@ -67,12 +70,14 @@ function SignalCard({ metric, row, index, onClick }) {
 
 function HistoryModal({ metric, currentRow, history, onClose }) {
   const interpretation = interpretCalculatedMetric(metric.key, scoreOf(currentRow, metric));
-  const points = useMemo(() => history.filter((row) => row.prediction_key === metric.key && scoreOf(row, metric) !== null).sort((a, b) => new Date(a.result_date) - new Date(b.result_date)), [history, metric]);
-  const first = points[0] ? Number(scoreOf(points[0], metric)) : null;
-  const last = points.at(-1) ? Number(scoreOf(points.at(-1), metric)) : null;
+  const points = useMemo(() => history
+    .filter((row) => row.prediction_key === metric.key && finiteScore(scoreOf(row, metric)) !== null)
+    .sort((a, b) => new Date(a.result_date) - new Date(b.result_date)), [history, metric]);
+  const first = points[0] ? finiteScore(scoreOf(points[0], metric)) : null;
+  const last = points.at(-1) ? finiteScore(scoreOf(points.at(-1), metric)) : null;
   const trend = first !== null && last !== null && last !== first ? last > first ? "Increasing" : "Decreasing" : "Stable";
   useEffect(() => { const onKey = (event) => event.key === "Escape" && onClose(); window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, [onClose]);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Parameter history</p><h2 className="mt-2 text-2xl font-black text-slate-950">{metric.name}</h2></div><button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className={`mt-5 rounded-2xl border p-4 ${interpretation.surfaceClass}`}><div className="flex items-center justify-between"><strong className="text-3xl text-slate-950">{scoreOf(currentRow, metric) === null ? "-" : Math.round(Number(scoreOf(currentRow, metric)))}/100</strong><span className={`rounded-full border px-3 py-1 text-xs font-bold ${interpretation.badgeClass}`}>{interpretation.label}</span></div><p className="mt-3 text-sm text-slate-700">{interpretation.paragraph || interpretation.signalMeaning}</p></div><div className="mt-6 flex items-center justify-between"><h3 className="font-black text-slate-950">Historical movement</h3>{points.length > 1 && <span className="flex items-center gap-1 text-xs font-bold text-slate-500">{trend === "Increasing" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}{trend}</span>}</div>{points.length < 2 ? <p className="mt-4 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Historical data is not available yet.</p> : <div className="mt-4 space-y-3">{points.slice().reverse().map((point) => { const pointScore = Number(scoreOf(point, metric)); const pointColor = interpretCalculatedMetric(metric.key, pointScore).color; return <div key={`${point.result_date}-${point.prediction_key}`} className="flex items-center gap-3"><span className="w-24 text-xs text-slate-500">{formatDate(point.result_date)}</span><div className="h-8 flex-1 rounded-lg bg-slate-100"><div className="h-full rounded-lg" style={{ width: `${pointScore}%`, backgroundColor: pointColor }} /></div><strong className="w-10 text-right text-sm">{Math.round(pointScore)}</strong></div>; })}</div>}</div></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Parameter history</p><h2 className="mt-2 text-2xl font-black text-slate-950">{metric.name}</h2></div><button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className={`mt-5 rounded-2xl border p-4 ${interpretation.surfaceClass}`}><div className="flex items-center justify-between"><strong className="text-3xl text-slate-950">{finiteScore(scoreOf(currentRow, metric)) === null ? "-" : Math.round(finiteScore(scoreOf(currentRow, metric)))}/100</strong><span className={`rounded-full border px-3 py-1 text-xs font-bold ${interpretation.badgeClass}`}>{interpretation.label}</span></div><p className="mt-3 text-sm text-slate-700">{interpretation.paragraph || interpretation.signalMeaning}</p></div><div className="mt-6 flex items-center justify-between"><h3 className="font-black text-slate-950">Historical movement</h3>{points.length > 1 && <span className="flex items-center gap-1 text-xs font-bold text-slate-500">{trend === "Increasing" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}{trend}</span>}</div>{points.length < 2 ? <p className="mt-4 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Historical data is not available yet.</p> : <div className="mt-4 space-y-3">{points.slice().reverse().map((point) => { const pointScore = finiteScore(scoreOf(point, metric)); const pointColor = interpretCalculatedMetric(metric.key, pointScore).color; return <div key={`${point.result_date}-${point.prediction_key}`} className="flex items-center gap-3"><span className="w-24 text-xs text-slate-500">{formatDate(point.result_date)}</span><div className="h-8 flex-1 rounded-lg bg-slate-100"><div className="h-full rounded-lg" style={{ width: `${pointScore}%`, backgroundColor: pointColor }} /></div><strong className="w-10 text-right text-sm">{Math.round(pointScore)}</strong></div>; })}</div>}</div></div>;
 }
 
 export default function FpoFarmIntelligencePage() {
