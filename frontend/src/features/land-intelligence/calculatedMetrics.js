@@ -22,19 +22,21 @@ export function getCalculatedMetric(key) {
 export function calculatedValueFromCell(cell, key) {
   const metric = getCalculatedMetric(key);
   if (!metric || !cell) return null;
-  return cell[metric.scoreKey] ?? cell?.calculations?.[key]?.score ?? null;
+  return cell[metric.scoreKey]
+    ?? cell?.calculations?.[key]?.score
+    ?? (cell?.prediction_key === key ? cell.score ?? cell.value : null);
 }
 
 const STATUS_STYLES = {
-  good: { color: "#16a34a", className: "bg-emerald-50 text-emerald-700 border-emerald-200", textClass: "text-emerald-700", badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700", surfaceClass: "border-emerald-200 bg-emerald-50/70" },
-  fair: { color: "#84cc16", className: "bg-lime-50 text-lime-700 border-lime-200", textClass: "text-lime-700", badgeClass: "border-lime-200 bg-lime-50 text-lime-700", surfaceClass: "border-lime-200 bg-lime-50/70" },
-  normal: { color: "#16a34a", className: "bg-emerald-50 text-emerald-700 border-emerald-200", textClass: "text-emerald-700", badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700", surfaceClass: "border-emerald-200 bg-emerald-50/70" },
-  watch: { color: "#84cc16", className: "bg-lime-50 text-lime-700 border-lime-200", textClass: "text-lime-700", badgeClass: "border-lime-200 bg-lime-50 text-lime-700", surfaceClass: "border-lime-200 bg-lime-50/70" },
-  attention: { color: "#eab308", className: "bg-yellow-50 text-yellow-700 border-yellow-200", textClass: "text-yellow-700", badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700", surfaceClass: "border-yellow-200 bg-yellow-50/70" },
-  poor: { color: "#f97316", className: "bg-orange-50 text-orange-700 border-orange-200", textClass: "text-orange-700", badgeClass: "border-orange-200 bg-orange-50 text-orange-700", surfaceClass: "border-orange-200 bg-orange-50/70" },
-  high: { color: "#f97316", className: "bg-orange-50 text-orange-700 border-orange-200", textClass: "text-orange-700", badgeClass: "border-orange-200 bg-orange-50 text-orange-700", surfaceClass: "border-orange-200 bg-orange-50/70" },
-  critical: { color: "#dc2626", className: "bg-rose-50 text-rose-700 border-rose-200", textClass: "text-rose-700", badgeClass: "border-rose-200 bg-rose-50 text-rose-700", surfaceClass: "border-rose-200 bg-rose-50/70" },
-  unavailable: { color: "#94a3b8", className: "bg-slate-100 text-slate-600 border-slate-200", textClass: "text-slate-600", badgeClass: "border-slate-200 bg-slate-100 text-slate-600", surfaceClass: "border-slate-200 bg-slate-100" },
+  good: { color: "#16a34a", surfaceColor: "#ecfdf5", className: "bg-emerald-50 text-emerald-700 border-emerald-200", textClass: "text-emerald-700", badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700", surfaceClass: "border-emerald-200 bg-emerald-50/70" },
+  fair: { color: "#84cc16", surfaceColor: "#f7fee7", className: "bg-lime-50 text-lime-700 border-lime-200", textClass: "text-lime-700", badgeClass: "border-lime-200 bg-lime-50 text-lime-700", surfaceClass: "border-lime-200 bg-lime-50/70" },
+  normal: { color: "#16a34a", surfaceColor: "#ecfdf5", className: "bg-emerald-50 text-emerald-700 border-emerald-200", textClass: "text-emerald-700", badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700", surfaceClass: "border-emerald-200 bg-emerald-50/70" },
+  watch: { color: "#84cc16", surfaceColor: "#f7fee7", className: "bg-lime-50 text-lime-700 border-lime-200", textClass: "text-lime-700", badgeClass: "border-lime-200 bg-lime-50 text-lime-700", surfaceClass: "border-lime-200 bg-lime-50/70" },
+  attention: { color: "#eab308", surfaceColor: "#fefce8", className: "bg-yellow-50 text-yellow-700 border-yellow-200", textClass: "text-yellow-700", badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700", surfaceClass: "border-yellow-200 bg-yellow-50/70" },
+  poor: { color: "#f97316", surfaceColor: "#fff7ed", className: "bg-orange-50 text-orange-700 border-orange-200", textClass: "text-orange-700", badgeClass: "border-orange-200 bg-orange-50 text-orange-700", surfaceClass: "border-orange-200 bg-orange-50/70" },
+  high: { color: "#f97316", surfaceColor: "#fff7ed", className: "bg-orange-50 text-orange-700 border-orange-200", textClass: "text-orange-700", badgeClass: "border-orange-200 bg-orange-50 text-orange-700", surfaceClass: "border-orange-200 bg-orange-50/70" },
+  critical: { color: "#dc2626", surfaceColor: "#fff1f2", className: "bg-rose-50 text-rose-700 border-rose-200", textClass: "text-rose-700", badgeClass: "border-rose-200 bg-rose-50 text-rose-700", surfaceClass: "border-rose-200 bg-rose-50/70" },
+  unavailable: { color: "#94a3b8", surfaceColor: "#f1f5f9", className: "bg-slate-100 text-slate-600 border-slate-200", textClass: "text-slate-600", badgeClass: "border-slate-200 bg-slate-100 text-slate-600", surfaceClass: "border-slate-200 bg-slate-100" },
 };
 
 function contentFor(key, overrides) {

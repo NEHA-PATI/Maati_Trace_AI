@@ -737,6 +737,7 @@ export default function LandIntelligence() {
                 selectedGridCellId={displaySelected?.grid_cell_id}
                 showH3Layer={h3Enabled}
                 userRole={user?.role}
+                maxZoom={19}
               />
             </div>
 

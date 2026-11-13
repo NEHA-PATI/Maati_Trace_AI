@@ -2647,9 +2647,10 @@ def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: st
                      'prediction_key', prediction_key, 'display_name', display_name,
                      'score', score, 'status_label', status_label, 'result_date', result_date
                    ) ORDER BY prediction_key) AS predictions,
-                   CASE WHEN bool_or(status_label='critical') THEN 'CRITICAL'
-                        WHEN bool_or(status_label IN ('high','attention','poor')) THEN 'NEEDS_ATTENTION'
-                        WHEN bool_or(status_label IN ('watch','fair')) THEN 'WATCH'
+                   COUNT(*) FILTER (WHERE lower(COALESCE(status_label, '')) IN ('critical','high','attention','poor'))::integer AS risk_signal_count,
+                   CASE WHEN bool_or(lower(COALESCE(status_label, ''))='critical') THEN 'CRITICAL'
+                        WHEN bool_or(lower(COALESCE(status_label, '')) IN ('high','attention','poor')) THEN 'NEEDS_ATTENTION'
+                        WHEN bool_or(lower(COALESCE(status_label, '')) IN ('watch','fair')) THEN 'WATCH'
                         WHEN COUNT(*) > 0 THEN 'NORMAL' ELSE 'NO_DATA' END AS overall_status
             FROM latest_predictions GROUP BY farm_id
         ), alert_rollup AS (
@@ -2667,6 +2668,7 @@ def list_fpo_farm_monitoring(conn: Connection, *, user_id: UUID | str, query: st
                p.area_acres, p.polygon_geojson, p.updated_at, pr.latest_analysis_date, o.latest_observation_date,
                COALESCE(pr.overall_status, 'NO_DATA') AS overall_status,
                COALESCE(ar.open_alert_count, 0) AS open_alert_count,
+               COALESCE(pr.risk_signal_count, 0) AS risk_signal_count,
                ar.highest_alert_severity, COALESCE(pr.predictions, '[]'::jsonb) AS predictions
         FROM permitted p
         LEFT JOIN public.fpo_farmer_portfolio fp ON fp.fpo_id=:fpo_id AND fp.farmer_id=p.farmer_id

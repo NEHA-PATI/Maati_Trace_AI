@@ -3,7 +3,6 @@ import { MapContainer, Marker, Polygon, TileLayer, useMap } from "react-leaflet"
 import { Satellite } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import {
-  getLandMetric,
   interpretLandMetric,
   LAND_METRIC_KEYS,
   METRIC_STATUSES,
@@ -63,11 +62,11 @@ function colorFor(value, parameter) {
   return `rgba(${Math.round(220 - normalized * 120)}, ${Math.round(180 + normalized * 55)}, ${Math.round(90 + normalized * 50)}, 0.62)`;
 }
 
-function FitBounds({ bounds }) {
+function FitBounds({ bounds, maxZoom }) {
   const map = useMap();
   useEffect(() => {
-    if (bounds) map.fitBounds(bounds, { padding: [20, 20], animate: true });
-  }, [bounds, map]);
+    if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom, animate: false });
+  }, [bounds, map, maxZoom]);
   return null;
 }
 
@@ -90,6 +89,8 @@ export default function LandGridMap({
   selectedGridCellId,
   showH3Layer = false,
   onGridCellHover,
+  locked = false,
+  maxZoom = 19,
 }) {
   const [ready, setReady] = useState(false);
   const polygon = normalizeRing(farm?.polygon_geojson);
@@ -102,8 +103,6 @@ export default function LandGridMap({
     ...cell,
     ring: toLatLng(normalizeRing(cell.geometry || cell.cell_polygon_geojson)),
   })), [h3Cells]);
-  const selectedMetric = getLandMetric(selectedParameter);
-
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setReady(true));
     return () => window.cancelAnimationFrame(id);
@@ -136,17 +135,23 @@ export default function LandGridMap({
         <MapContainer
           center={bounds[0]}
           zoom={17}
+          maxZoom={maxZoom}
           className="h-[640px] w-full"
-          scrollWheelZoom
+          scrollWheelZoom={!locked}
           zoomControl
+          dragging
+          doubleClickZoom
+          boxZoom
+          keyboard
+          touchZoom
           attributionControl={false}
         >
           <TileLayer
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             attribution='Tiles &copy; Esri'
-            maxZoom={19}
+            maxZoom={maxZoom}
           />
-          <FitBounds bounds={bounds} />
+          <FitBounds bounds={bounds} maxZoom={maxZoom} />
           <MapClickClear onClick={() => {}} />
           {polygon.length >= 3 && (
             <Polygon positions={toLatLng(polygon)} pathOptions={{ color: "#ff3b30", weight: 3, fillColor: "#ff3b30", fillOpacity: 0.15 }} />

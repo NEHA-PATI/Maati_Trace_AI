@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Bell, AlertTriangle, Info, CheckCircle, ChevronRight,
   Leaf, Droplets, Satellite, MapPin, User
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/features/i18n";
+import { getMyFarmerProfile, getFarmerFarms } from "@/lib/api/farmer";
+import { getLatestFarmCalculations } from "@/lib/api/analytics";
+
+void motion;
 
 // Farm map snapshot thumbnail (real satellite/field imagery)
 const FARM_THUMBNAILS = {
@@ -113,9 +118,35 @@ export default function Notifications() {
   const [filter, setFilter] = useState("all");
   const { t } = useTranslation();
 
+  const analyticsAlerts = useQuery({
+    queryKey: ["farmer-analytics-alerts"],
+    queryFn: async () => {
+      const profile = await getMyFarmerProfile();
+      const farmsPayload = await getFarmerFarms(profile.farmer_id);
+      const farms = Array.isArray(farmsPayload) ? farmsPayload : farmsPayload?.items || farmsPayload?.farms || [];
+      const results = await Promise.all(farms.map(async (farm) => {
+        const calculations = await getLatestFarmCalculations(farm.farm_id, "farm").catch(() => []);
+        return { farm, calculations };
+      }));
+      return results.flatMap(({ farm, calculations }) => calculations.filter((row) => ["critical", "high", "attention", "poor"].includes(String(row.status_label || "").toLowerCase())).map((row) => ({
+        id: `analytics-${farm.farm_id}-${row.prediction_key}`,
+        priority: ["critical", "high"].includes(String(row.status_label || "").toLowerCase()) ? "high" : "medium",
+        icon: row.prediction_key.includes("water") ? Droplets : AlertTriangle,
+        title: `${row.display_name || row.prediction_key} alert`,
+        detail: `${farm.farm_name || "Your farm"} is showing ${String(row.status_label || "needs attention").toLowerCase()} (${Math.round(Number(row.score || 0))}/100).`,
+        time: row.result_date || "Latest analysis",
+        farmId: farm.farm_id,
+        notifType: "farmer",
+      })));
+    },
+    staleTime: 60_000,
+  });
+
+  const notifications = useMemo(() => [...(analyticsAlerts.data || []), ...ALL_NOTIFICATIONS], [analyticsAlerts.data]);
+
   const filtered = filter === "all"
-    ? ALL_NOTIFICATIONS
-    : ALL_NOTIFICATIONS.filter(n => n.priority === filter);
+    ? notifications
+    : notifications.filter(n => n.priority === filter);
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5" style={{ fontFamily: "'Poppins', sans-serif" }}>

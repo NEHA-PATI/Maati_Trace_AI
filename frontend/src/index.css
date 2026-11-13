@@ -551,6 +551,21 @@ div.divide-y.divide-slate-100 > p.p-8.text-center::before {
   animation: fpo-content-enter 220ms ease-out both;
 }
 
+.fpo-shell a[href*="/fpo/farmers/"][href*="/intelligence"] {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Report panels need to account for the fixed FPO sidebar at desktop widths. */
+@media (min-width: 1024px) {
+  .fpo-shell main > .space-y-6.pb-10 > section.grid.gap-6 {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
+
 @keyframes fpo-content-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
